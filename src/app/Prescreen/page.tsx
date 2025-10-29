@@ -1,8 +1,10 @@
 // FILE: src/app/Prescreen/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+
+export const dynamic = "force-dynamic";
 
 type ControlType = "TEXT" | "RADIO" | "DROPDOWN" | "CHECKBOX";
 type TextType = "EMAIL" | "CONTACTNO" | "ZIPCODE" | "CUSTOM";
@@ -12,17 +14,13 @@ type PrescreenQuestion = {
   title: string;
   question: string;
   controlType: ControlType;
-
-  // TEXT-only
   textMinLength?: number | null;
   textMaxLength?: number | null;
   textType?: TextType | null;
-
-  // options (for RADIO / DROPDOWN / CHECKBOX)
   options?: Array<{ id: string; label: string; value: string }>;
 };
 
-export default function PrescreenPage() {
+function PrescreenInner() {
   const params = useSearchParams();
   const router = useRouter();
 
@@ -36,12 +34,10 @@ export default function PrescreenPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Guard: if required params are missing, bounce to survey-live to avoid loops
   useEffect(() => {
     if (!projectId || !supplierId || !rid) return;
   }, [projectId, supplierId, rid]);
 
-  // Load only *pending* questions for this respondent (supplier-scoped)
   useEffect(() => {
     let cancelled = false;
 
@@ -75,9 +71,8 @@ export default function PrescreenPage() {
     return () => {
       cancelled = true;
     };
-  }, [projectId, rid, supplierId]); // ← include supplierId so the list is supplier-scoped
+  }, [projectId, rid, supplierId]);
 
-  // Basic requiredness/length checks
   const canSubmit = useMemo(() => {
     if (questions.length === 0) return true;
     return questions.every((q) => {
@@ -100,12 +95,10 @@ export default function PrescreenPage() {
     });
   }, [questions, answers]);
 
-  // Submit answers then jump to live survey
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!projectId || !rid || submitting) return;
 
-    // If nothing to ask (defensive), skip straight to live
     if (questions.length === 0) {
       router.replace(
         `/api/projects/${encodeURIComponent(projectId)}/survey-live?supplierId=${encodeURIComponent(
@@ -119,7 +112,6 @@ export default function PrescreenPage() {
     setError(null);
 
     try {
-      // Convert answers map → array the API expects
       const flatAnswers = questions.map((q) => {
         const v = answers[q.id];
         return {
@@ -140,7 +132,6 @@ export default function PrescreenPage() {
         }
       );
 
-      // After recording, continue to live survey
       window.location.href = `/api/projects/${encodeURIComponent(
         projectId
       )}/survey-live?supplierId=${encodeURIComponent(supplierId)}&id=${encodeURIComponent(rid)}`;
@@ -150,7 +141,6 @@ export default function PrescreenPage() {
     }
   }
 
-  // If there are no pending questions, skip to live survey
   useEffect(() => {
     if (!loading && questions.length === 0 && projectId && rid) {
       router.replace(
@@ -164,7 +154,7 @@ export default function PrescreenPage() {
 
   if (loading) return <div className="p-6 text-sm text-slate-600">Loading prescreen…</div>;
   if (error) return <div className="p-6 text-sm text-rose-600">{error}</div>;
-  if (!questions.length) return null; // redirect effect will run
+  if (!questions.length) return null;
 
   return (
     <div className="max-w-3xl p-6 mx-auto">
@@ -177,7 +167,6 @@ export default function PrescreenPage() {
               {idx + 1}.{q.question}
             </div>
 
-            {/* TEXT */}
             {q.controlType === "TEXT" && (
               <input
                 type="text"
@@ -187,7 +176,6 @@ export default function PrescreenPage() {
               />
             )}
 
-            {/* RADIO */}
             {q.controlType === "RADIO" && (
               <div className="space-y-2">
                 {(q.options || []).map((o) => (
@@ -205,7 +193,6 @@ export default function PrescreenPage() {
               </div>
             )}
 
-            {/* DROPDOWN */}
             {q.controlType === "DROPDOWN" && (
               <select
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -221,7 +208,6 @@ export default function PrescreenPage() {
               </select>
             )}
 
-            {/* CHECKBOX */}
             {q.controlType === "CHECKBOX" && (
               <div className="space-y-2">
                 {(q.options || []).map((o) => {
@@ -266,5 +252,13 @@ export default function PrescreenPage() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function PrescreenPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-slate-600">Loading…</div>}>
+      <PrescreenInner />
+    </Suspense>
   );
 }

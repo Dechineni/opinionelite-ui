@@ -1,7 +1,6 @@
 // FILE: src/app/api/client/[id]/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 
 // Build a `where` that can target by id (default) or by code (?by=code)
 function whereFrom(req: Request, id: string) {
@@ -12,8 +11,12 @@ function whereFrom(req: Request, id: string) {
 /* ------------------------------- GET /:id ------------------------------- */
 // GET /api/client/:id
 // GET /api/client/:code?by=code
-export async function GET(req: Request, { params }: { params: { id: string } }) {
-  const where = whereFrom(req, params.id);
+export async function GET(
+  req: Request,
+  ctx: { params: Promise<{ id: string }> } // ⬅️ params is a Promise in Next 15
+) {
+  const { id } = await ctx.params;          // ⬅️ await it
+  const where = whereFrom(req, id);
 
   const item = await prisma.client.findUnique({ where });
   if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -22,14 +25,18 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 }
 
 /* ------------------------------ PATCH /:id ------------------------------ */
-// PATCH /api/client/:id          (JSON body with fields to update)
+// PATCH /api/client/:id
 // PATCH /api/client/:code?by=code
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const where = whereFrom(req, params.id);
+export async function PATCH(
+  req: Request,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  const { id } = await ctx.params;          // ⬅️ await it
+  const where = whereFrom(req, id);
   const b = await req.json();
 
-  // Map incoming fields -> Prisma update input (undefined fields are ignored)
-  const data: Prisma.ClientUpdateInput = {
+  // Build data without importing Prisma types (avoids the Prisma import error)
+  const data: any = {
     code: b.code, // optional: allow changing client code
     name: b.name ?? b.clientName,
     contactPerson: b.contactPerson,
@@ -53,8 +60,12 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 /* ----------------------------- DELETE /:id ------------------------------ */
 // DELETE /api/client/:id
 // DELETE /api/client/:code?by=code
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
-  const where = whereFrom(req, params.id);
+export async function DELETE(
+  req: Request,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  const { id } = await ctx.params;          // ⬅️ await it
+  const where = whereFrom(req, id);
 
   try {
     await prisma.client.delete({ where });

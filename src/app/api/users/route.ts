@@ -2,8 +2,9 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-function ensureAdmin() {
-  const role = cookies().get("OE_ROLE")?.value;
+async function ensureAdmin() {
+  const jar = await cookies();                 // ✅ await in Next 15
+  const role = jar.get("OE_ROLE")?.value;
   if (role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -11,7 +12,7 @@ function ensureAdmin() {
 }
 
 export async function GET() {
-  const forbid = ensureAdmin();
+  const forbid = await ensureAdmin();          // ✅ await the check
   if (forbid) return forbid;
 
   // ...fetch & return users...
@@ -19,7 +20,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const forbid = ensureAdmin();
+  const forbid = await ensureAdmin();          // ✅ await the check
   if (forbid) return forbid;
 
   const body = await req.json();

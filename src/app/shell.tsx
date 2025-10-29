@@ -7,7 +7,6 @@ import Sidebar, { type Role } from "@/app/components/Sidebar";
 
 type ShellProps = {
   children: React.ReactNode;
-
   /** Role controls whether the "User" menu shows up (admin only). */
   role?: Role; // "admin" | "manager"
   /** Shown at the right side of the top bar */
@@ -27,20 +26,10 @@ export default function Shell({
     return <div className="min-h-screen w-full">{children}</div>;
   }
 
-  const handleLogout = async () => {
-    try {
-      await fetch("/api/logout", { method: "POST" });
-    } catch {
-      /* ignore */
-    } finally {
-      router.replace("/login");
-      router.refresh();
-    }
-  };
-
   return (
     <div className="min-h-screen w-full">
-      <Topbar userName={userName} onLogout={handleLogout} />
+      {/* ⬇️ Remove onLogout prop; Topbar handles logout internally */}
+      <Topbar userName={userName} />
       <div className="flex">
         <Sidebar
           role={role}

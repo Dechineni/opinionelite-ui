@@ -1,3 +1,4 @@
+// FILE: src/app/api/projects/[projectId]/prescreen/[identifier]/answers/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
@@ -20,47 +21,66 @@ export async function POST(
 
   try {
     const body = await req.json();
-    const supplierId: string | null = body?.supplierId ?? null;
-    const answers: AnswerPayload[] = Array.isArray(body?.answers) ? body.answers : [];
 
-    if (!answers.length) {
+    // Normalize supplierId to string|null
+    const supplierId: string | null =
+      typeof body?.supplierId === "string" && body.supplierId.trim() !== ""
+        ? body.supplierId
+        : null;
+
+    const answers: AnswerPayload[] = Array.isArray(body?.answers) ? body.answers : [];
+    if (answers.length === 0) {
       return NextResponse.json({ ok: true, saved: 0 });
     }
 
     const projId = await resolveProjectId(projectId);
 
-    // Ensure respondent (scoped by supplier)
+    // Create / get respondent
     let respondent;
-    try {
+    if (supplierId === null) {
+      // ❗ Cannot use upsert with a NULL in a composite unique.
+      const existing = await prisma.respondent.findFirst({
+        where: { projectId: projId, externalId: identifier, supplierId: null },
+      });
+      respondent =
+        existing ??
+        (await prisma.respondent.create({
+          data: {
+            projectId: projId,
+            externalId: identifier,
+            supplierId: null,
+          },
+        }));
+      // If you want to ensure null stays null, nothing more to update here
+    } else {
+      // ✅ Non-null supplierId → safe to use composite unique upsert
       respondent = await prisma.respondent.upsert({
         where: {
           projectId_externalId_supplierId: {
             projectId: projId,
             externalId: identifier,
-            supplierId: supplierId,
+            supplierId, // string
           },
         },
         create: {
           projectId: projId,
           externalId: identifier,
-          supplierId: supplierId,
+          supplierId,
         },
-        update: { supplierId: supplierId },
-      });
-    } catch {
-      respondent = await prisma.respondent.findFirst({
-        where: { projectId: projId, externalId: identifier, supplierId: supplierId },
+        update: {
+          supplierId,
+        },
       });
     }
+
     if (!respondent) throw new Error("Respondent not found/created");
 
     // Upsert each answer
     let saved = 0;
-
-    for (const a of answers as AnswerPayload[]) {
+    for (const a of answers) {
       const isArray = Array.isArray(a.value);
-      const answerText = !isArray ? String(a.value ?? "") : null;
-      const answerValue = !isArray ? String(a.value ?? "") : null;
+      const answerText = isArray ? null : String(a.value ?? "");
+      const answerValue = isArray ? null : String(a.value ?? "");
       const selectedValues = isArray ? (a.value as string[]) : [];
 
       await prisma.prescreenAnswer.upsert({
@@ -74,14 +94,14 @@ export async function POST(
           projectId: projId,
           respondentId: respondent.id,
           questionId: a.questionId,
-          answerText: isArray ? null : answerText,
-          answerValue: isArray ? null : answerValue,
-          selectedValues: isArray ? selectedValues : [],
+          answerText,
+          answerValue,
+          selectedValues,
         },
         update: {
-          answerText: isArray ? null : answerText,
-          answerValue: isArray ? null : answerValue,
-          selectedValues: isArray ? selectedValues : [],
+          answerText,
+          answerValue,
+          selectedValues,
           answeredAt: new Date(),
         },
       });

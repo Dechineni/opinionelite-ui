@@ -2,7 +2,13 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { ProjectStatus } from "@prisma/client";
+// Mirror of your schema enum (keep in sync with Prisma schema)
+export type ProjectStatus =
+  | "ACTIVE"
+  | "INACTIVE"
+  | "CLOSED"
+  | "INVOICED"
+  | "BID";
 
 type ApiProject = {
   id: string;

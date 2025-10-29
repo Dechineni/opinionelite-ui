@@ -1,10 +1,13 @@
 // FILE: src/app/Survey/page.tsx
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function SurveyLanding() {
+// Avoid static prerendering for this page (it depends on client-side URL params)
+export const dynamic = "force-dynamic";
+
+function SurveyLandingInner() {
   const sp = useSearchParams();
   const router = useRouter();
 
@@ -17,7 +20,7 @@ export default function SurveyLanding() {
 
     (async () => {
       try {
-        // Ask API for *pending* prescreen questions for this respondent (supplier-scoped)
+        // Ask API for pending prescreen questions for this respondent (supplier-scoped)
         const pendingRes = await fetch(
           `/api/projects/${encodeURIComponent(projectId)}/prescreen/${encodeURIComponent(
             id
@@ -49,11 +52,20 @@ export default function SurveyLanding() {
       } catch {
         // On any failure, default to live link
         window.location.href = `/api/projects/${encodeURIComponent(
-          projectId
-        )}/survey-live?supplierId=${encodeURIComponent(supplierId)}&id=${encodeURIComponent(id)}`;
+          projectId!
+        )}/survey-live?supplierId=${encodeURIComponent(supplierId)}&id=${encodeURIComponent(id!)}`;
       }
     })();
   }, [sp, router]);
 
+  // No UI needed; we redirect
   return null;
+}
+
+export default function SurveyLandingPage() {
+  return (
+    <Suspense fallback={null}>
+      <SurveyLandingInner />
+    </Suspense>
+  );
 }

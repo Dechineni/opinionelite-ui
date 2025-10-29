@@ -1,10 +1,12 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function LoginPage() {
+export const dynamic = "force-dynamic";
+
+function LoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -87,5 +89,13 @@ export default function LoginPage() {
         </button>
       </form>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginInner />
+    </Suspense>
   );
 }

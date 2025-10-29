@@ -4,13 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build --turbopack",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "gen:countries": "node scripts/generate-countries.mjs"
+    "gen:countries": "node scripts/generate-countries.mjs",
+    "cf:build": "pnpm dlx opennext@latest build --platform=cloudflare",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
-    "@prisma/client": "^6.18.0",
+    "@prisma/client": "6.18.0",
     "@prisma/extension-accelerate": "^2.0.2",
     "lucide-react": "^0.542.0",
     "next": "15.5.2",
@@ -27,9 +29,10 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.5.2",
-    "prisma": "^6.15.0",
+    "prisma": "^6.18.0",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "world-countries": "^5.1.0"
+    "world-countries": "^5.1.0",
+    "wrangler": "^4.45.1"
   }
 }
