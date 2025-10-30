@@ -1,3 +1,4 @@
+// FILE: src/app/api/projects/[projectId]/prescreen/[identifier]/pending/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
@@ -19,42 +20,58 @@ export async function GET(
   try {
     const projId = await resolveProjectId(projectId);
 
-    // supplierId from querystring
+    // Normalize supplierId from querystring to string | null
     const url = new URL(req.url);
-    const supplierId = url.searchParams.get("supplierId") || undefined;
+    const supplierIdRaw = url.searchParams.get("supplierId");
+    const supplierId: string | null =
+      supplierIdRaw && supplierIdRaw.trim() !== "" ? supplierIdRaw : null;
 
     // Ensure a respondent row exists (scoped by project + externalId + supplierId)
     let respondent;
-    try {
+    if (supplierId === null) {
+      // ❗ Cannot use upsert with NULL in composite unique selector.
+      const existing = await prisma.respondent.findFirst({
+        where: { projectId: projId, externalId: identifier, supplierId: null },
+      });
+
+      respondent =
+        existing ??
+        (await prisma.respondent.create({
+          data: {
+            projectId: projId,
+            externalId: identifier,
+            supplierId: null,
+          },
+        }));
+    } else {
+      // ✅ Non-null supplierId → safe to use composite unique upsert
       respondent = await prisma.respondent.upsert({
         where: {
           projectId_externalId_supplierId: {
             projectId: projId,
             externalId: identifier,
-            supplierId: supplierId ?? null,
+            supplierId, // string
           },
         },
         create: {
           projectId: projId,
           externalId: identifier,
-          supplierId: supplierId ?? null,
+          supplierId,
         },
-        update: { supplierId: supplierId ?? null },
-      });
-    } catch {
-      respondent = await prisma.respondent.findFirst({
-        where: { projectId: projId, externalId: identifier, supplierId: supplierId ?? null },
+        update: {
+          supplierId,
+        },
       });
     }
 
     // Already-answered question ids for this respondent
     const existing = await prisma.prescreenAnswer.findMany({
-      where: { respondentId: respondent!.id },
+      where: { respondentId: respondent.id },
       select: { questionId: true },
     });
     const answered = new Set(existing.map((a) => a.questionId));
 
-    // All project questions
+    // All project questions (ordered + include options ordered)
     const questions = await prisma.prescreenQuestion.findMany({
       where: { projectId: projId },
       orderBy: { sortOrder: "asc" },

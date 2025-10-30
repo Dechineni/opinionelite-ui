@@ -63,7 +63,11 @@ export async function GET(req: Request) {
   );
   for (const g of grouped) statusCounts[g.status as ProjectStatus] = g._count._all;
 
-  return NextResponse.json({ items, total, statusCounts });
+  const flatItems = items.map((p: any) => ({
+  ...p,
+  clientName: (p as any).client?.name ?? null,
+}));
+return NextResponse.json({ items: flatItems, total, statusCounts });
 }
 
 /* ---------- POST /api/projects (unchanged) ---------- */
