@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "gen:countries": "node scripts/generate-countries.mjs",
-    "cf:build": "pnpm dlx opennext@latest build --platform=cloudflare",
+    "cf:build": "pnpm dlx @opennextjs/opennext@latest build --platform=cloudflare",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -33,6 +33,7 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "world-countries": "^5.1.0",
-    "wrangler": "^4.45.1"
+    "wrangler": "^4.45.1",
+    "@opennextjs/cloudflare": "^3"
   }
 }
