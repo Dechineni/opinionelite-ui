@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "gen:countries": "node scripts/generate-countries.mjs",
-    "cf:build": "pnpm dlx opennext@latest build --platform=cloudflare",
+    "cf:build": "pnpm dlx opennext@2.4.2 build --platform=cloudflare",
     "postinstall": "prisma generate"
   },
   "dependencies": {
