@@ -27,13 +27,13 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@opennextjs/cloudflare": "^3",
     "eslint": "^9",
     "eslint-config-next": "15.5.2",
     "prisma": "^6.18.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "world-countries": "^5.1.0",
-    "wrangler": "^4.45.1",
-    "@opennextjs/cloudflare": "^3"
+    "wrangler": "^4.45.1"
   }
 }
