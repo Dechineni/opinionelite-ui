@@ -1,7 +1,6 @@
 // FILE: src/app/components/Sidebar.tsx
-export const runtime = 'edge';
-
 "use client";
+export const runtime = 'edge';
 
 import React, { useMemo, useState } from "react";
 import {

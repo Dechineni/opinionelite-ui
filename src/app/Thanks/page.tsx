@@ -1,7 +1,6 @@
 // FILE: src/app/Thanks/page.tsx
-export const runtime = 'edge';
-
 "use client";
+export const runtime = 'edge';
 
 import { useEffect } from "react";
 
