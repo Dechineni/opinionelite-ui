@@ -5,6 +5,7 @@
 // Install deps:
 //   pnpm add recharts
 
+export const runtime = 'edge';
 
 "use client";
 

@@ -1,4 +1,6 @@
 // src/app/api/users/route.ts
+export const runtime = 'edge';
+export const preferredRegion = 'auto';
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 

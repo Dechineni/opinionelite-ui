@@ -1,4 +1,5 @@
 // src/app/(app)/projects/edit/single/page.tsx
+export const runtime = 'edge';
 
 "use client";
 

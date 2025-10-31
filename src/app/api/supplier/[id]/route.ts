@@ -1,4 +1,6 @@
 // FILE: src/app/api/supplier/[id]/route.ts
+export const runtime = 'edge';
+export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";

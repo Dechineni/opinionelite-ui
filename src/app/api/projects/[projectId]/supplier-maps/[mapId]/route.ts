@@ -1,4 +1,6 @@
 // FILE: src/app/api/projects/[projectId]/supplier-maps/[mapId]/route.ts
+export const runtime = 'edge';
+export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";

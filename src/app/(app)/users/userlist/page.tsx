@@ -1,4 +1,6 @@
 // FILE: src/app/(app)/users/userlist/page.tsx  (User List)
+export const runtime = 'edge';
+
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 

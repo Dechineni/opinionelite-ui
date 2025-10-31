@@ -1,4 +1,6 @@
 // FILE: src/app/api/login/route.ts
+export const runtime = 'edge';
+export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import crypto from "crypto";

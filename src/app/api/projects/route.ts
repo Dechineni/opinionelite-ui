@@ -1,4 +1,6 @@
 // src/app/api/projects/route.ts
+export const runtime = 'edge';
+export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma, ProjectStatus } from "@prisma/client";

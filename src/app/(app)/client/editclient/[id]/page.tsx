@@ -1,4 +1,6 @@
 // FILE: src/app/(app)/client/editclient/[id]/page.tsx
+export const runtime = 'edge';
+
 import EditClient from "../../EditClient";
 
 type Params = { id: string };

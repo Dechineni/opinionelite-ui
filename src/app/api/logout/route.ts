@@ -1,4 +1,6 @@
 // src/app/api/logout/route.ts
+export const runtime = 'edge';
+export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
 
 export async function POST() {

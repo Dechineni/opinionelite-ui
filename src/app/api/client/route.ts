@@ -1,4 +1,6 @@
 // src/app/api/client/route.ts
+export const runtime = 'edge';
+export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";          // adjust path if needed
 import { Prisma } from "@prisma/client";        // <-- for types and QueryMode enum

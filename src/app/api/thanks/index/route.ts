@@ -1,4 +1,6 @@
 // FILE: src/app/api/thanks/index/route.ts
+export const runtime = 'edge';
+export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
 
 export async function GET(req: Request) {
