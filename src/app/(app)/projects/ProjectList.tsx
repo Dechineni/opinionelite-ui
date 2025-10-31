@@ -1,7 +1,6 @@
 // src/app/(app)/projects/ProjectList.tsx
-export const runtime = 'edge';
-
 "use client";
+export const runtime = 'edge';
 
 import React, { useEffect, useState } from "react";
 // Mirror of your schema enum (keep in sync with Prisma schema)

@@ -1,7 +1,6 @@
 // FILE: src/app/(app)/client/AddClient.tsx
-export const runtime = 'edge';
-
 "use client";
+export const runtime = 'edge';
 
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";

@@ -5,9 +5,8 @@
 // Install deps:
 //   pnpm add recharts
 
-export const runtime = 'edge';
-
 "use client";
+export const runtime = 'edge';
 
 import React from "react";
 // import { Search } from "lucide-react";

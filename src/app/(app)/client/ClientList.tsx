@@ -1,6 +1,5 @@
-export const runtime = 'edge';
-
 "use client";
+export const runtime = 'edge';
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Edit3 } from "lucide-react";

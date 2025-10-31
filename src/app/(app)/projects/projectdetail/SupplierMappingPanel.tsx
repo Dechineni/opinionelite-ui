@@ -1,7 +1,6 @@
 // FILE: src/app/(app)/projects/projectdetail/SupplierMappingPanel.tsx
-export const runtime = 'edge';
-
 "use client";
+export const runtime = 'edge';
 
 import React, { useEffect, useMemo, useState } from "react";
 

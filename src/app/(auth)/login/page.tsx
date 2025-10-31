@@ -1,6 +1,5 @@
-export const runtime = 'edge';
-
 "use client";
+export const runtime = 'edge';
 
 import Image from "next/image";
 import { Suspense, useState } from "react";

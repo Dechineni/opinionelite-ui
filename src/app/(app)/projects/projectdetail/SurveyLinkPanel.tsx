@@ -1,8 +1,6 @@
 // src/app/(app)/projects/projectdetail/SurveyLinkPanel.tsx
-
-export const runtime = 'edge';
-
 "use client";
+export const runtime = 'edge';
 
 import React, { useEffect, useMemo, useState } from "react";
 import { ExternalLink, Copy, RotateCcw, Edit3, Save } from "lucide-react";

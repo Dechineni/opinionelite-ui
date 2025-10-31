@@ -1,6 +1,5 @@
-export const runtime = 'edge';
-
 "use client";
+export const runtime = 'edge';
 
 import React, { useMemo, useState, useEffect } from "react";
 import { COUNTRIES, getLanguagesForCountry } from "@/data/countries";
