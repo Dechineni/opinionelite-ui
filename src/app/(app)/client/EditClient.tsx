@@ -1,4 +1,6 @@
 // FILE: src/app/(app)/client/EditClient.tsx
+export const runtime = 'edge';
+
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";

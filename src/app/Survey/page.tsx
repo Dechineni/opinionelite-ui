@@ -1,4 +1,6 @@
 // FILE: src/app/Survey/page.tsx
+export const runtime = 'edge';
+
 "use client";
 
 import { Suspense, useEffect } from "react";

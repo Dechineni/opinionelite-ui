@@ -1,4 +1,6 @@
 // FILE: src/app/(app)/supplier/AddSupplier.tsx
+export const runtime = 'edge';
+
 "use client";
 
 import React, { useMemo, useState } from "react";

@@ -1,5 +1,7 @@
 // src/app/(app)/projects/projectdetail/SurveyLinkPanel.tsx
 
+export const runtime = 'edge';
+
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";

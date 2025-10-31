@@ -1,4 +1,6 @@
 // FILE: src/app/Prescreen/page.tsx
+export const runtime = 'edge';
+
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";

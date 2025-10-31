@@ -1,4 +1,6 @@
 // src/app/(app)/projects/ProjectList.tsx
+export const runtime = 'edge';
+
 "use client";
 
 import React, { useEffect, useState } from "react";
