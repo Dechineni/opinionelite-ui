@@ -2,7 +2,9 @@
 export const runtime = 'edge';
 export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
+
+const prisma = getPrisma();
 
 // Build a `where` that can target by id (default) or by code (?by=code)
 function whereFrom(req: Request, id: string) {

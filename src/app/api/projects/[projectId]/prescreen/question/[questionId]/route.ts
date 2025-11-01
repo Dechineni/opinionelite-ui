@@ -2,11 +2,14 @@
 export const runtime = 'edge';
 export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 
 /**
  * GET one prescreen question (with options)
  */
+
+const prisma = getPrisma();
+
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ projectId: string; questionId: string }> }

@@ -2,8 +2,10 @@
 export const runtime = 'edge';
 export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 import { Prisma, ProjectStatus } from "@prisma/client";
+
+const prisma = getPrisma();
 
 function whereFrom(req: Request, id: string) {
   const by = new URL(req.url).searchParams.get("by");

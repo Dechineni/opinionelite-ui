@@ -2,8 +2,10 @@
 export const runtime = 'edge';
 export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 import { z } from "zod";
+
+const prisma = getPrisma();
 
 // Must match your Prisma enum
 const RedirectionType = z.enum([

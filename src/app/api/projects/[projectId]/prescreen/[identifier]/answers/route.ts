@@ -2,7 +2,9 @@
 export const runtime = 'edge';
 export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
+
+const prisma = getPrisma();
 
 async function resolveProjectId(projectIdOrCode: string) {
   const p = await prisma.project.findFirst({

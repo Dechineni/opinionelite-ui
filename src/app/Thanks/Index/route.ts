@@ -2,9 +2,12 @@
 export const runtime = 'edge';
 export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 
 // Map auth → status (accept numeric and short codes)
+
+const prisma = getPrisma();
+
 function authToStatus(authRaw: string | null | undefined) {
   const a = (authRaw || "").toLowerCase().trim();
   // short codes

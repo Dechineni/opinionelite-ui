@@ -2,12 +2,13 @@ export const runtime = 'edge';
 
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 import SurveyLinkPanel from "./SurveyLinkPanel";
 import SupplierMappingPanel from "./SupplierMappingPanel";
 import PrescreenPanel from "./PrescreenPanel";
 import SupplierMappedSummary from "./SupplierMappedSummary"; // ✅ new import
 
+const prisma = getPrisma();
 /* helpers */
 function fmt(n: number | null | undefined, d = 2) {
   if (n === null || n === undefined) return "—";

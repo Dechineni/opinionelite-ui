@@ -1,19 +1,23 @@
 // src/lib/prisma.ts
 import { PrismaClient } from "@prisma/client";
 import { PrismaNeonHTTP } from "@prisma/adapter-neon";
+import { neonConfig } from "@neondatabase/serverless"; // optional, for caching
 
-// Fail fast if missing
-const connectionString = process.env.DATABASE_URL!;
-if (!connectionString) throw new Error("DATABASE_URL is missing");
+neonConfig.fetchConnectionCache = true; // optional, helps on serverless/edge
 
-// Adapter for Neon HTTP (Edge/Workers safe)
-const adapter = new PrismaNeonHTTP(connectionString, {});
+type Global = { prisma?: PrismaClient };
+const globalForPrisma = globalThis as unknown as Global;
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+export function getPrisma(): PrismaClient {
+  if (globalForPrisma.prisma) return globalForPrisma.prisma;
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL is not set.");
+
+  // ✅ v6.18 expects (connectionString: string, options: object)
+  const adapter = new PrismaNeonHTTP(url, {});
+
+  globalForPrisma.prisma = new PrismaClient({
     adapter,
     log:
       process.env.NODE_ENV === "development"
@@ -21,4 +25,5 @@ export const prisma =
         : ["warn", "error"],
   });
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+  return globalForPrisma.prisma;
+}

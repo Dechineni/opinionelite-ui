@@ -2,8 +2,10 @@
 export const runtime = 'edge';
 export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";          // adjust path if needed
+import { getPrisma } from "@/lib/prisma";          // adjust path if needed
 import { Prisma } from "@prisma/client";        // <-- for types and QueryMode enum
+
+const prisma = getPrisma();
 
 const toInt = (v: string | null, d: number) =>
   v ? Math.max(1, parseInt(v, 10) || d) : d;

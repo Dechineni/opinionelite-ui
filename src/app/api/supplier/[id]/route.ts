@@ -2,10 +2,12 @@
 export const runtime = 'edge';
 export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
 /* ------------------------------- GET /:id ------------------------------- */
+const prisma = getPrisma();
+
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ id: string }> }

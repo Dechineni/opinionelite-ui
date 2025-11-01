@@ -2,12 +2,14 @@
 export const runtime = 'edge';
 export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 import { PrescreenControlType, PrescreenTextType } from "@prisma/client";
 
 /**
  * GET: list prescreen questions for a project (projectId in URL can be DB id or code like "SR0004")
  */
+const prisma = getPrisma();
+
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ projectId: string }> }
