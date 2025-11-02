@@ -50,8 +50,8 @@ function fillIdentifier(rawUrl: string, supplierIdentifier: string) {
 }
 
 export async function GET(req: Request) {
+  const prisma = getPrisma();
   try {
-    const prisma = getPrisma();
     const url = new URL(req.url);
     const auth = url.searchParams.get("auth");
     const rid  = url.searchParams.get("rid"); // your 20-char pid
