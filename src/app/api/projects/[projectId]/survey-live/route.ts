@@ -5,7 +5,6 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 
 // Generate a 20-char id with a URL-safe alphabet (no deps)
-const prisma = getPrisma();
 
 function id20() {
   const alphabet =
@@ -28,6 +27,7 @@ export async function GET(
   req: Request,
   ctx: { params: Promise<{ projectId: string }> }
 ) {
+  const prisma = getPrisma();
   const { projectId } = await ctx.params;
 
   const url = new URL(req.url);

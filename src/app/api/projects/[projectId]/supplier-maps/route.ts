@@ -5,8 +5,6 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { z } from "zod";
 
-const prisma = getPrisma();
-
 // Must match your Prisma enum
 const RedirectionType = z.enum([
   "STATIC_REDIRECT",
@@ -73,6 +71,7 @@ export async function GET(
   _req: Request,
   ctx: { params: Promise<{ projectId: string }> }
 ) {
+  const prisma = getPrisma();
   const { projectId } = await ctx.params;
   if (!projectId) return bad("projectId missing", 400);
 
@@ -148,6 +147,7 @@ export async function POST(
   req: Request,
   ctx: { params: Promise<{ projectId: string }> }
 ) {
+  const prisma = getPrisma();
   const { projectId } = await ctx.params;
   if (!projectId) return bad("projectId missing", 400);
 

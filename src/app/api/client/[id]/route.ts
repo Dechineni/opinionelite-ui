@@ -4,8 +4,6 @@ export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 
-const prisma = getPrisma();
-
 // Build a `where` that can target by id (default) or by code (?by=code)
 function whereFrom(req: Request, id: string) {
   const by = new URL(req.url).searchParams.get("by");
@@ -19,6 +17,7 @@ export async function GET(
   req: Request,
   ctx: { params: Promise<{ id: string }> } // ⬅️ params is a Promise in Next 15
 ) {
+  const prisma = getPrisma();
   const { id } = await ctx.params;          // ⬅️ await it
   const where = whereFrom(req, id);
 
@@ -35,6 +34,7 @@ export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ id: string }> }
 ) {
+  const prisma = getPrisma();
   const { id } = await ctx.params;          // ⬅️ await it
   const where = whereFrom(req, id);
   const b = await req.json();
@@ -68,6 +68,7 @@ export async function DELETE(
   req: Request,
   ctx: { params: Promise<{ id: string }> }
 ) {
+  const prisma = getPrisma();
   const { id } = await ctx.params;          // ⬅️ await it
   const where = whereFrom(req, id);
 

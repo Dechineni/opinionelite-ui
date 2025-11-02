@@ -5,8 +5,6 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { Prisma, ProjectStatus } from "@prisma/client";
 
-const prisma = getPrisma();
-
 function whereFrom(req: Request, id: string) {
   const by = new URL(req.url).searchParams.get("by");
   return by === "code" ? { code: id } : { id };
@@ -20,6 +18,7 @@ export async function GET(
   req: Request,
   ctx: { params: Promise<{ projectId: string }> }
 ) {
+  const prisma = getPrisma();
   const { projectId } = await ctx.params;     // ← await it
   const where = whereFrom(req, projectId);
   const item = await prisma.project.findUnique({ where });
@@ -32,6 +31,7 @@ export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ projectId: string }> }
 ) {
+  const prisma = getPrisma();
   const { projectId } = await ctx.params;     // ← await it
   const where = whereFrom(req, projectId);
   const b = await req.json();
@@ -103,6 +103,7 @@ export async function DELETE(
   _req: Request,
   ctx: { params: Promise<{ projectId: string }> }
 ) {
+  const prisma = getPrisma();
   const { projectId } = await ctx.params;     // ← await it
   try {
     await prisma.project.delete({ where: { id: projectId } });

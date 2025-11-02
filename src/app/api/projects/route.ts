@@ -6,13 +6,13 @@ import { getPrisma } from "@/lib/prisma";
 import { Prisma, ProjectStatus } from "@prisma/client";
 
 /* ---------- helpers for GET (unchanged) ---------- */
-const prisma = getPrisma();
 
 const pageInt = (v: string | null, d: number) =>
   v ? Math.max(1, parseInt(v, 10) || d) : d;
 
 /* ---------- GET /api/projects (updated: adds clientName) ---------- */
 export async function GET(req: Request) {
+  const prisma = getPrisma();
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") ?? "").trim();
   const statusParam = searchParams.get("status");
@@ -76,6 +76,7 @@ return NextResponse.json({ items: flatItems, total, statusCounts });
 
 /* ---------- POST /api/projects (unchanged) ---------- */
 export async function POST(req: Request) {
+  const prisma = getPrisma();
   const raw = await req.json();
 
   // strip accidental `code` so DB default is used

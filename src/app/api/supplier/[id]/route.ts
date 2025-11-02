@@ -6,12 +6,11 @@ import { getPrisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
 /* ------------------------------- GET /:id ------------------------------- */
-const prisma = getPrisma();
-
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ id: string }> }
 ) {
+  const prisma = getPrisma();
   const { id } = await ctx.params;
 
   const item = await prisma.supplier.findUnique({
@@ -50,6 +49,7 @@ export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ id: string }> }
 ) {
+  const prisma = getPrisma();
   const { id } = await ctx.params;
   const b = await req.json();
 
@@ -97,6 +97,7 @@ export async function DELETE(
   _req: Request,
   ctx: { params: Promise<{ id: string }> }
 ) {
+  const prisma = getPrisma();
   const { id } = await ctx.params;
   try {
     await prisma.supplier.delete({ where: { id } });

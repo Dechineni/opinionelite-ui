@@ -4,9 +4,8 @@ export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 
-const prisma = getPrisma();
-
 export async function GET() {
+  const prisma = getPrisma();
   const items = await prisma.supplier.findMany({
     select: { id: true, code: true, name: true },
     orderBy: { name: "asc" },

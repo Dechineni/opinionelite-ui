@@ -5,12 +5,11 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 
 /* ------------------------------ GET ------------------------------ */
-const prisma = getPrisma();
-
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ projectId: string }> }
 ) {
+  const prisma = getPrisma();
   const { projectId } = await ctx.params;     // ← await it
   const p = await prisma.project.findUnique({
     where: { id: projectId },
@@ -34,6 +33,7 @@ export async function PUT(
   req: Request,
   ctx: { params: Promise<{ projectId: string }> }
 ) {
+  const prisma = getPrisma();
   const { projectId } = await ctx.params;     // ← await it
   const { type, liveUrl, testUrl } = await req.json();
 

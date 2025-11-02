@@ -6,8 +6,6 @@ import { getPrisma } from "@/lib/prisma";
 
 // Map auth → status (accept numeric and short codes)
 
-const prisma = getPrisma();
-
 function authToStatus(authRaw: string | null | undefined) {
   const a = (authRaw || "").toLowerCase().trim();
   // short codes
@@ -53,6 +51,7 @@ function fillIdentifier(rawUrl: string, supplierIdentifier: string) {
 
 export async function GET(req: Request) {
   try {
+    const prisma = getPrisma();
     const url = new URL(req.url);
     const auth = url.searchParams.get("auth");
     const rid  = url.searchParams.get("rid"); // your 20-char pid

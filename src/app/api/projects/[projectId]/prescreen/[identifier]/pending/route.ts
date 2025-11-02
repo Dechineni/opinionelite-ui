@@ -4,9 +4,8 @@ export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 
-const prisma = getPrisma();
-
 async function resolveProjectId(projectIdOrCode: string) {
+  const prisma = getPrisma();
   const p = await prisma.project.findFirst({
     where: { OR: [{ id: projectIdOrCode }, { code: projectIdOrCode }] },
     select: { id: true },
@@ -19,6 +18,7 @@ export async function GET(
   req: Request,
   ctx: { params: Promise<{ projectId: string; identifier: string }> }
 ) {
+  const prisma = getPrisma();
   const { projectId, identifier } = await ctx.params;
 
   try {

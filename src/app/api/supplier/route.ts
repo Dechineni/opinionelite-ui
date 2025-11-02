@@ -6,8 +6,6 @@ import { getPrisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
 /* ------------------------------ small helpers ------------------------------ */
-const prisma = getPrisma();
-
 const toInt = (v: string | null, d: number) =>
   v ? Math.max(1, parseInt(v, 10) || d) : d;
 
@@ -19,6 +17,7 @@ const truthy = (v: string | null) =>
  * GET /api/suppliers?q=&country=&api=&page=&pageSize=
  */
 export async function GET(req: Request) {
+  const prisma = getPrisma();
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") ?? "").trim();
   const country = (searchParams.get("country") ?? "").trim();
@@ -61,6 +60,7 @@ export async function GET(req: Request) {
  * Body: matches the AddSupplier.tsx payload
  */
 export async function POST(req: Request) {
+  const prisma = getPrisma();
   const b = await req.json();
 
   // very light validation (the form already enforces required fields)

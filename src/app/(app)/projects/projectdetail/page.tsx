@@ -8,7 +8,6 @@ import SupplierMappingPanel from "./SupplierMappingPanel";
 import PrescreenPanel from "./PrescreenPanel";
 import SupplierMappedSummary from "./SupplierMappedSummary"; // ✅ new import
 
-const prisma = getPrisma();
 /* helpers */
 function fmt(n: number | null | undefined, d = 2) {
   if (n === null || n === undefined) return "—";
@@ -31,6 +30,7 @@ export default async function ProjectDetail({
 }: {
   searchParams: Promise<{ id?: string; tab?: string }>;
 }) {
+  const prisma = getPrisma();
   const sp = await searchParams;
   const projectId = (sp.id ?? "").trim();
   const tab = (sp.tab ?? "detail").toLowerCase();

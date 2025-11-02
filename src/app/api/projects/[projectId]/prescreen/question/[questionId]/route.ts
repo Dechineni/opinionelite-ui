@@ -8,12 +8,11 @@ import { getPrisma } from "@/lib/prisma";
  * GET one prescreen question (with options)
  */
 
-const prisma = getPrisma();
-
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ projectId: string; questionId: string }> }
 ) {
+  const prisma = getPrisma();
   const { questionId } = await ctx.params;
 
   const q = await prisma.prescreenQuestion.findUnique({
@@ -38,6 +37,7 @@ export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ projectId: string; questionId: string }> }
 ) {
+  const prisma = getPrisma();
   const { questionId } = await ctx.params;
   const b = await req.json();
 
@@ -120,6 +120,7 @@ export async function DELETE(
   _req: Request,
   ctx: { params: Promise<{ projectId: string; questionId: string }> }
 ) {
+  const prisma = getPrisma();
   const { questionId } = await ctx.params;
 
   // Options are deleted via onDelete: Cascade

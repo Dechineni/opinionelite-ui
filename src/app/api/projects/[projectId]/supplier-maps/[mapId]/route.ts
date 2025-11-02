@@ -5,8 +5,6 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { z } from "zod";
 
-const prisma = getPrisma();
-
 const RedirectionType = z.enum([
   "STATIC_REDIRECT",
   "STATIC_POSTBACK",
@@ -40,6 +38,7 @@ export async function PUT(
   req: Request,
   ctx: { params: Promise<{ projectId: string; mapId: string }> }
 ) {
+  const prisma = getPrisma();
   const { projectId, mapId } = await ctx.params;
 
   if (!projectId || !mapId) return bad("projectId/mapId missing", 400);
@@ -115,6 +114,7 @@ export async function DELETE(
   _req: Request,
   ctx: { params: Promise<{ projectId: string; mapId: string }> }
 ) {
+  const prisma = getPrisma();
   const { projectId, mapId } = await ctx.params;
   const row = await prisma.projectSupplierMap.findUnique({
     where: { id: mapId },

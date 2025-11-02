@@ -5,12 +5,11 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";          // adjust path if needed
 import { Prisma } from "@prisma/client";        // <-- for types and QueryMode enum
 
-const prisma = getPrisma();
-
 const toInt = (v: string | null, d: number) =>
   v ? Math.max(1, parseInt(v, 10) || d) : d;
 
 export async function GET(req: Request) {
+  const prisma = getPrisma();
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") ?? "").trim();
   const activeParam = searchParams.get("active"); // "true" | "false" | null
@@ -74,6 +73,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const prisma = getPrisma();
   const b = await req.json();
 
   const created = await prisma.client.create({

@@ -6,7 +6,6 @@ import { getPrisma } from "@/lib/prisma";
 import { Prisma, ProjectStatus } from "@prisma/client";
 
 /* ----------------------------- small helpers ----------------------------- */
-const prisma = getPrisma();
 
 const toInt = (v: string | null, d: number) =>
   v ? Math.max(1, parseInt(v, 10) || d) : d;
@@ -23,6 +22,7 @@ function bad(msg: string, status = 400) {
 /* ---------------------------------- GET ---------------------------------- */
 // GET /api/project-group?q=&clientId=&page=&pageSize=
 export async function GET(req: Request) {
+  const prisma = getPrisma();
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") ?? "").trim();
   const clientId = searchParams.get("clientId");
@@ -65,6 +65,7 @@ export async function GET(req: Request) {
  * }
  */
 export async function POST(req: Request) {
+  const prisma = getPrisma();
   const body = await req.json();
 
   if (!body?.clientId || !body?.name) {

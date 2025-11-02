@@ -8,12 +8,11 @@ import { PrescreenControlType, PrescreenTextType } from "@prisma/client";
 /**
  * GET: list prescreen questions for a project (projectId in URL can be DB id or code like "SR0004")
  */
-const prisma = getPrisma();
-
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ projectId: string }> }
 ) {
+  const prisma = getPrisma();
   const { projectId } = await ctx.params; // can be DB id or code
 
   // Resolve to actual project row
@@ -43,6 +42,7 @@ export async function POST(
   req: Request,
   ctx: { params: Promise<{ projectId: string }> }
 ) {
+  const prisma = getPrisma();
   const { projectId } = await ctx.params;
   const b = await req.json();
 
