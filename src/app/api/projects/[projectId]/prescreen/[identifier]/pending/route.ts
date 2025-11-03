@@ -1,11 +1,10 @@
-// FILE: src/app/api/projects/[projectId]/prescreen/[identifier]/pending/route.ts
-export const runtime = 'edge';
-export const preferredRegion = 'auto';
+export const runtime = "edge";
+export const preferredRegion = "auto";
+
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 
-async function resolveProjectId(projectIdOrCode: string) {
-  const prisma = getPrisma();
+async function resolveProjectId(prisma: ReturnType<typeof getPrisma>, projectIdOrCode: string) {
   const p = await prisma.project.findFirst({
     where: { OR: [{ id: projectIdOrCode }, { code: projectIdOrCode }] },
     select: { id: true },
@@ -22,79 +21,76 @@ export async function GET(
   const { projectId, identifier } = await ctx.params;
 
   try {
-    const projId = await resolveProjectId(projectId);
+    const realProjectId = await resolveProjectId(prisma, projectId);
 
-    // Normalize supplierId from querystring to string | null
+    // supplierId may be absent or empty -> treat as null consistently
     const url = new URL(req.url);
-    const supplierIdRaw = url.searchParams.get("supplierId");
-    const supplierId: string | null =
-      supplierIdRaw && supplierIdRaw.trim() !== "" ? supplierIdRaw : null;
+    const supplierIdQS = (url.searchParams.get("supplierId") || "").trim();
+    const supplierId: string | null = supplierIdQS === "" ? null : supplierIdQS;
 
-    // Ensure a respondent row exists (scoped by project + externalId + supplierId)
-    let respondent;
+    // Ensure a respondent row exists with the specific (project, externalId, supplierId|null)
+    let respondentId: string;
+
     if (supplierId === null) {
-      // ❗ Cannot use upsert with NULL in composite unique selector.
+      // Can't upsert on composite with NULL → find or create
       const existing = await prisma.respondent.findFirst({
-        where: { projectId: projId, externalId: identifier, supplierId: null },
+        where: { projectId: realProjectId, externalId: identifier, supplierId: null },
+        select: { id: true },
       });
-
-      respondent =
-        existing ??
-        (await prisma.respondent.create({
-          data: {
-            projectId: projId,
-            externalId: identifier,
-            supplierId: null,
-          },
-        }));
+      if (existing) {
+        respondentId = existing.id;
+      } else {
+        const created = await prisma.respondent.create({
+          data: { projectId: realProjectId, externalId: identifier, supplierId: null },
+          select: { id: true },
+        });
+        respondentId = created.id;
+      }
     } else {
-      // ✅ Non-null supplierId → safe to use composite unique upsert
-      respondent = await prisma.respondent.upsert({
+      // Non-null supplierId → safe composite upsert
+      const up = await prisma.respondent.upsert({
         where: {
           projectId_externalId_supplierId: {
-            projectId: projId,
+            projectId: realProjectId,
             externalId: identifier,
-            supplierId, // string
+            supplierId,
           },
         },
-        create: {
-          projectId: projId,
-          externalId: identifier,
-          supplierId,
-        },
-        update: {
-          supplierId,
-        },
+        update: {}, // nothing to change; presence is enough
+        create: { projectId: realProjectId, externalId: identifier, supplierId },
+        select: { id: true },
       });
+      respondentId = up.id;
     }
 
-    // Already-answered question ids for this respondent
-    const existing = await prisma.prescreenAnswer.findMany({
-      where: { respondentId: respondent.id },
+    // Pull answered prescreen question ids for this respondent
+    const answeredIds = await prisma.prescreenAnswer.findMany({
+      where: { respondentId },
       select: { questionId: true },
     });
-    const answered = new Set(existing.map((a) => a.questionId));
+    const answeredSet = new Set(answeredIds.map(a => a.questionId));
 
-    // All project questions (ordered + include options ordered)
+    // Fetch questions for the project (ordered) with only fields needed on the client
     const questions = await prisma.prescreenQuestion.findMany({
-      where: { projectId: projId },
+      where: { projectId: realProjectId },
       orderBy: { sortOrder: "asc" },
-      include: { options: { orderBy: { sortOrder: "asc" } } },
+      select: {
+        id: true,
+        title: true,
+        question: true,
+        controlType: true,
+        textMinLength: true,
+        textMaxLength: true,
+        textType: true,
+        options: {
+          orderBy: { sortOrder: "asc" },
+          select: { id: true, label: true, value: true },
+        },
+      },
     });
 
-    // Only pending
-    const pending = questions
-      .filter((q) => !answered.has(q.id))
-      .map((q) => ({
-        id: q.id,
-        title: q.title,
-        question: q.question,
-        controlType: q.controlType,
-        textMinLength: q.textMinLength,
-        textMaxLength: q.textMaxLength,
-        textType: q.textType,
-        options: q.options?.map((o) => ({ id: o.id, label: o.label, value: o.value })),
-      }));
+    // Only pending questions
+    const pending = questions.filter(q => !answeredSet.has(q.id));
 
     return NextResponse.json({ items: pending });
   } catch (err: any) {
