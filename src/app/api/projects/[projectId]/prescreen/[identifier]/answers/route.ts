@@ -1,11 +1,12 @@
 // FILE: src/app/api/projects/[projectId]/prescreen/[identifier]/answers/route.ts
-export const runtime = 'edge';
-export const preferredRegion = 'auto';
+export const runtime = "edge";
+export const preferredRegion = "auto";
+
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
-async function resolveProjectId(projectIdOrCode: string) {
-  const prisma = getPrisma();
+async function resolveProjectId(prisma: PrismaClientLike, projectIdOrCode: string) {
   const p = await prisma.project.findFirst({
     where: { OR: [{ id: projectIdOrCode }, { code: projectIdOrCode }] },
     select: { id: true },
@@ -13,6 +14,9 @@ async function resolveProjectId(projectIdOrCode: string) {
   if (!p) throw new Error("Project not found");
   return p.id;
 }
+
+// A very small interface so we don't pull Prisma types at runtime here
+type PrismaClientLike = ReturnType<typeof getPrisma>;
 
 type AnswerPayload = { questionId: string; value: string | string[] };
 
@@ -26,94 +30,97 @@ export async function POST(
   try {
     const body = await req.json();
 
-    // Normalize supplierId to string|null
+    // supplierId: normalize to string | null
     const supplierId: string | null =
       typeof body?.supplierId === "string" && body.supplierId.trim() !== ""
-        ? body.supplierId
+        ? body.supplierId.trim()
         : null;
 
-    const answers: AnswerPayload[] = Array.isArray(body?.answers) ? body.answers : [];
+    // answers: sanitize + cap to avoid huge payloads burning CPU
+    const raw: unknown = body?.answers;
+    const answers: AnswerPayload[] = Array.isArray(raw)
+      ? (raw as AnswerPayload[]).slice(0, 100) // cap 100 answers per call
+      : [];
+
     if (answers.length === 0) {
       return NextResponse.json({ ok: true, saved: 0 });
     }
 
-    const projId = await resolveProjectId(projectId);
+    const projId = await resolveProjectId(prisma, projectId);
 
-    // Create / get respondent
-    let respondent;
+    // Ensure respondent (NULL cannot participate in composite upsert)
+    let respondentId: string;
+
     if (supplierId === null) {
-      // ❗ Cannot use upsert with a NULL in a composite unique.
       const existing = await prisma.respondent.findFirst({
         where: { projectId: projId, externalId: identifier, supplierId: null },
+        select: { id: true },
       });
-      respondent =
-        existing ??
-        (await prisma.respondent.create({
-          data: {
-            projectId: projId,
-            externalId: identifier,
-            supplierId: null,
-          },
-        }));
-      // If you want to ensure null stays null, nothing more to update here
+
+      if (existing) {
+        respondentId = existing.id;
+      } else {
+        const created = await prisma.respondent.create({
+          data: { projectId: projId, externalId: identifier, supplierId: null },
+          select: { id: true },
+        });
+        respondentId = created.id;
+      }
     } else {
-      // ✅ Non-null supplierId → safe to use composite unique upsert
-      respondent = await prisma.respondent.upsert({
+      const r = await prisma.respondent.upsert({
         where: {
           projectId_externalId_supplierId: {
             projectId: projId,
             externalId: identifier,
-            supplierId, // string
+            supplierId,
           },
         },
-        create: {
-          projectId: projId,
-          externalId: identifier,
-          supplierId,
-        },
-        update: {
-          supplierId,
-        },
+        create: { projectId: projId, externalId: identifier, supplierId },
+        update: { supplierId },
+        select: { id: true },
       });
+      respondentId = r.id;
     }
 
-    if (!respondent) throw new Error("Respondent not found/created");
-
-    // Upsert each answer
-    let saved = 0;
-    for (const a of answers) {
+    // Build all upserts, then do a single transaction
+    const now = new Date();
+    const ops = answers.map((a) => {
       const isArray = Array.isArray(a.value);
+      const selectedValues = isArray
+        ? (a.value as unknown[]).filter((v) => typeof v === "string").slice(0, 50) // cap multi-selects
+        : [];
+
       const answerText = isArray ? null : String(a.value ?? "");
       const answerValue = isArray ? null : String(a.value ?? "");
-      const selectedValues = isArray ? (a.value as string[]) : [];
 
-      await prisma.prescreenAnswer.upsert({
+      return prisma.prescreenAnswer.upsert({
         where: {
           respondentId_questionId: {
-            respondentId: respondent.id,
-            questionId: a.questionId,
+            respondentId,
+            questionId: String(a.questionId),
           },
         },
         create: {
           projectId: projId,
-          respondentId: respondent.id,
-          questionId: a.questionId,
+          respondentId,
+          questionId: String(a.questionId),
           answerText,
           answerValue,
           selectedValues,
+          answeredAt: now,
         },
         update: {
           answerText,
           answerValue,
           selectedValues,
-          answeredAt: new Date(),
+          answeredAt: now,
         },
       });
+    });
 
-      saved += 1;
-    }
+    await prisma.$transaction(ops);
 
-    return NextResponse.json({ ok: true, saved });
+    return NextResponse.json({ ok: true, saved: ops.length });
   } catch (err: any) {
     return NextResponse.json(
       { error: err?.message || "Failed to save answers" },

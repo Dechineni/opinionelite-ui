@@ -1,13 +1,14 @@
-// src/app/api/projects/[projectId]/prescreen/question/[questionId]/route.ts
-export const runtime = 'edge';
-export const preferredRegion = 'auto';
+// FILE: src/app/api/projects/[projectId]/prescreen/[questionId]/route.ts
+export const runtime = "edge";
+export const preferredRegion = "auto";
+
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 /**
- * GET one prescreen question (with options)
+ * GET one prescreen question (with options ordered)
  */
-
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ projectId: string; questionId: string }> }
@@ -17,21 +18,20 @@ export async function GET(
 
   const q = await prisma.prescreenQuestion.findUnique({
     where: { id: questionId },
-    include: { options: true },
+    include: { options: { orderBy: { sortOrder: "asc" } } },
   });
 
   if (!q) return new NextResponse("Not found", { status: 404 });
-
   return NextResponse.json(q);
 }
 
 /**
  * PATCH a prescreen question.
- * - Updates base fields (title, question, controlType, sortOrder) and text config when provided.
+ * - Updates base fields when provided.
  * - If body.options is:
- *   - array with { optionId?, label?, value?, sortOrder? }:
- *       • when optionId present → PATCH existing option
- *       • when no optionId present → REPLACE all options from scratch
+ *   • array with { optionId?, label?, value?, sortOrder? }
+ *     - when optionId present → PATCH existing option(s) (restricted to this question)
+ *     - when no optionId present → REPLACE all options from scratch (createMany)
  */
 export async function PATCH(
   req: Request,
@@ -42,18 +42,25 @@ export async function PATCH(
   const b = await req.json();
 
   // Build base updates only from provided fields
-  const baseData: any = {};
+  const baseData: Prisma.PrescreenQuestionUpdateInput = {};
   if (b.title !== undefined) baseData.title = String(b.title);
   if (b.question !== undefined) baseData.question = String(b.question);
-  if (b.controlType !== undefined) baseData.controlType = b.controlType; // enum validated by Prisma
+  if (b.controlType !== undefined) baseData.controlType = b.controlType;
   if (b.sortOrder !== undefined) baseData.sortOrder = Number(b.sortOrder);
 
-  // TEXT-only config (nullable in schema for non-TEXT)
+  // TEXT-only config (nullable)
   if (b.text) {
-    baseData.textMinLength = b.text.minLength ?? null;
-    baseData.textMaxLength = b.text.maxLength ?? null;
-    baseData.textType = b.text.textType ?? null; // enum validated by Prisma
+    baseData.textMinLength =
+      b.text.minLength === undefined ? null : Number(b.text.minLength);
+    baseData.textMaxLength =
+      b.text.maxLength === undefined ? null : Number(b.text.maxLength);
+    baseData.textType = b.text.textType ?? null;
   }
+
+  // Cap the options array to avoid huge payloads burning CPU
+  const optionsInput: any[] = Array.isArray(b.options)
+    ? (b.options as any[]).slice(0, 200)
+    : [];
 
   await prisma.$transaction(async (tx) => {
     // Update the question base fields if any provided
@@ -64,44 +71,43 @@ export async function PATCH(
       });
     }
 
-    // Update options if provided
-    if (Array.isArray(b.options)) {
+    if (optionsInput.length > 0) {
       const looksLikePatch =
-        b.options.length > 0 &&
-        typeof b.options[0] === "object" &&
-        "optionId" in b.options[0];
+        typeof optionsInput[0] === "object" &&
+        optionsInput[0] !== null &&
+        "optionId" in optionsInput[0];
 
       if (looksLikePatch) {
-        // PATCH mode: update existing options by ID
+        // PATCH mode: update existing options by ID, but scope to this question
         await Promise.all(
-          b.options.map((o: any, i: number) =>
-            tx.prescreenOption.update({
-              where: { id: String(o.optionId) },
+          optionsInput.map((o, i) =>
+            tx.prescreenOption.updateMany({
+              where: { id: String(o.optionId), questionId },
               data: {
-                label: o.label !== undefined ? String(o.label) : undefined,
-                value: o.value !== undefined ? String(o.value) : undefined,
-                sortOrder:
-                  o.sortOrder !== undefined ? Number(o.sortOrder) : undefined,
+                ...(o.label !== undefined ? { label: String(o.label) } : {}),
+                ...(o.value !== undefined ? { value: String(o.value) } : {}),
+                ...(o.sortOrder !== undefined
+                  ? { sortOrder: Number(o.sortOrder) }
+                  : {}),
               },
             })
           )
         );
       } else {
-        // REPLACE mode: delete all existing options and recreate
+        // REPLACE mode: delete all existing, then createMany
         await tx.prescreenOption.deleteMany({ where: { questionId } });
-        if (b.options.length > 0) {
-          await tx.prescreenQuestion.update({
-            where: { id: questionId },
-            data: {
-              options: {
-                create: b.options.map((o: any, i: number) => ({
-                  label: String(o.label ?? o),
-                  value: String(o.value ?? o.label ?? o),
-                  sortOrder: Number(o.sortOrder ?? i),
-                })),
-              },
-            },
-          });
+        // Only keep rows that have at least a label/value
+        const rows = optionsInput
+          .map((o, i) => ({
+            questionId,
+            label: String(o?.label ?? o),
+            value: String(o?.value ?? o?.label ?? o),
+            sortOrder: Number(o?.sortOrder ?? i),
+          }))
+          .slice(0, 500); // hard cap for safety
+
+        if (rows.length > 0) {
+          await tx.prescreenOption.createMany({ data: rows });
         }
       }
     }
@@ -110,7 +116,7 @@ export async function PATCH(
   // Return the updated question
   const updated = await prisma.prescreenQuestion.findUnique({
     where: { id: questionId },
-    include: { options: true },
+    include: { options: { orderBy: { sortOrder: "asc" } } },
   });
 
   return NextResponse.json(updated);
