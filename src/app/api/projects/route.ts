@@ -1,39 +1,46 @@
 // src/app/api/projects/route.ts
 export const runtime = 'edge';
 export const preferredRegion = 'auto';
-import { NextResponse } from "next/server";
-import { getPrisma } from "@/lib/prisma";
-import { Prisma, ProjectStatus } from "@prisma/client";
 
-/* ---------- helpers for GET (unchanged) ---------- */
+import { NextResponse } from 'next/server';
+import { getPrisma } from '@/lib/prisma';
+import { Prisma, ProjectStatus } from '@prisma/client';
+
+/* ----------------------------- helpers ----------------------------- */
 
 const pageInt = (v: string | null, d: number) =>
   v ? Math.max(1, parseInt(v, 10) || d) : d;
 
-/* ---------- GET /api/projects (updated: adds clientName) ---------- */
+const normalizeStatus = (s: string | null): ProjectStatus | undefined => {
+  if (!s) return undefined;
+  const up = s.toUpperCase() as ProjectStatus;
+  return (Object.values(ProjectStatus) as string[]).includes(up) ? up : undefined;
+};
+
+/* ------------------------------- GET ------------------------------- */
+// GET /api/projects?q=&status=&clientId=&groupId=&page=&pageSize=
 export async function GET(req: Request) {
   const prisma = getPrisma();
   const { searchParams } = new URL(req.url);
-  const q = (searchParams.get("q") ?? "").trim();
-  const statusParam = searchParams.get("status");
-  const clientId = searchParams.get("clientId");
-  const groupId = searchParams.get("groupId");
-  const page = pageInt(searchParams.get("page"), 1);
-  const pageSize = pageInt(searchParams.get("pageSize"), 10);
+
+  const q        = (searchParams.get('q') ?? '').trim();
+  const status   = normalizeStatus(searchParams.get('status'));
+  const clientId = searchParams.get('clientId');
+  const groupId  = searchParams.get('groupId');
+  const page     = pageInt(searchParams.get('page'), 1);
+  const pageSize = pageInt(searchParams.get('pageSize'), 10);
 
   const where: Prisma.ProjectWhereInput = {
     ...(q
       ? {
           OR: [
-            { code: { contains: q, mode: Prisma.QueryMode.insensitive } },
-            { name: { contains: q, mode: Prisma.QueryMode.insensitive } },
+            { code:         { contains: q, mode: Prisma.QueryMode.insensitive } },
+            { name:         { contains: q, mode: Prisma.QueryMode.insensitive } },
             { managerEmail: { contains: q, mode: Prisma.QueryMode.insensitive } },
           ],
         }
       : {}),
-    ...(statusParam && (statusParam in ProjectStatus)
-      ? { status: statusParam as ProjectStatus }
-      : {}),
+    ...(status ? { status } : {}),
     ...(clientId ? { clientId } : {}),
     ...(groupId ? { groupId } : {}),
   };
@@ -41,40 +48,41 @@ export async function GET(req: Request) {
   const [itemsRaw, total, grouped] = await Promise.all([
     prisma.project.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
       skip: (page - 1) * pageSize,
       take: pageSize,
-      // ⬇️ Pull the client name so the UI can show it
+      // only pull what UI needs + client.name
       include: { client: { select: { name: true } } },
     }),
     prisma.project.count({ where }),
     prisma.project.groupBy({
-      by: ["status"],
+      by: ['status'],
       _count: { _all: true },
       where,
     }),
   ]);
 
-  // Flatten client.name -> clientName for the UI (and do not expose the nested `client` object)
+  // Flatten client name once
   const items = itemsRaw.map(({ client, ...rest }) => ({
     ...rest,
     clientName: client?.name ?? null,
   }));
 
+  // Build status buckets
   const statusCounts = Object.values(ProjectStatus).reduce<Record<ProjectStatus, number>>(
-    (acc, s) => ({ ...acc, [s]: 0 }),
-    {} as any
+    (acc, s) => {
+      acc[s] = 0;
+      return acc;
+    },
+    {} as Record<ProjectStatus, number>
   );
   for (const g of grouped) statusCounts[g.status as ProjectStatus] = g._count._all;
 
-  const flatItems = items.map((p: any) => ({
-  ...p,
-  clientName: (p as any).client?.name ?? null,
-}));
-return NextResponse.json({ items: flatItems, total, statusCounts });
+  return NextResponse.json({ items, total, statusCounts });
 }
 
-/* ---------- POST /api/projects (unchanged) ---------- */
+/* ------------------------------- POST ------------------------------ */
+// Create project (server validates numbers/decimals/dates)
 export async function POST(req: Request) {
   const prisma = getPrisma();
   const raw = await req.json();
@@ -82,42 +90,41 @@ export async function POST(req: Request) {
   // strip accidental `code` so DB default is used
   const { code: _ignore, ...b } = raw;
 
-  // Validate required numeric fields (avoid number|undefined)
+  // Validate required numeric fields
   const loi = Number(b.loi);
   const ir = Number(b.ir);
   const sampleSize = Number(b.sampleSize);
-
-  if (!Number.isFinite(loi) || !Number.isFinite(ir) || !Number.isFinite(sampleSize)) {
-    return NextResponse.json({ error: "Invalid LOI/IR/Sample Size" }, { status: 400 });
+  if (![loi, ir, sampleSize].every(Number.isFinite)) {
+    return NextResponse.json({ error: 'Invalid LOI/IR/Sample Size' }, { status: 400 });
   }
 
-  // clickQuota is hidden in UI; default to sampleSize (or 0) if not provided
-  const cq =
-    b.clickQuota === undefined || b.clickQuota === null || b.clickQuota === ""
+  // clickQuota defaults to sampleSize when omitted
+  const clickQuota =
+    b.clickQuota === undefined || b.clickQuota === null || b.clickQuota === ''
       ? sampleSize
       : Number(b.clickQuota);
-  if (!Number.isFinite(cq)) {
-    return NextResponse.json({ error: "Invalid Click Quota" }, { status: 400 });
+  if (!Number.isFinite(clickQuota)) {
+    return NextResponse.json({ error: 'Invalid Click Quota' }, { status: 400 });
   }
 
   // Decimals
-  if (b.projectCpi === undefined || b.projectCpi === null || b.projectCpi === "") {
-    return NextResponse.json({ error: "Project CPI is required" }, { status: 400 });
+  if (b.projectCpi === undefined || b.projectCpi === null || b.projectCpi === '') {
+    return NextResponse.json({ error: 'Project CPI is required' }, { status: 400 });
   }
   const projectCpi = new Prisma.Decimal(b.projectCpi);
   const supplierCpi =
-    b.supplierCpi === null || b.supplierCpi === undefined || b.supplierCpi === ""
+    b.supplierCpi === null || b.supplierCpi === undefined || b.supplierCpi === ''
       ? null
       : new Prisma.Decimal(b.supplierCpi);
 
-  // Dates (required by schema)
+  // Dates
   if (!b.startDate || !b.endDate) {
-    return NextResponse.json({ error: "Start and End dates are required" }, { status: 400 });
+    return NextResponse.json({ error: 'Start and End dates are required' }, { status: 400 });
   }
   const startDate = new Date(b.startDate);
   const endDate = new Date(b.endDate);
   if (isNaN(+startDate) || isNaN(+endDate)) {
-    return NextResponse.json({ error: "Invalid dates" }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid dates' }, { status: 400 });
   }
 
   try {
@@ -128,23 +135,21 @@ export async function POST(req: Request) {
 
         name: b.name ?? b.projectName,
         managerEmail: b.manager ?? b.managerEmail,
-        category: b.category ?? "",
+        category: b.category ?? '',
         description: b.description ?? null,
 
         countryCode: b.country ?? b.countryCode,
         languageCode: b.language ?? b.languageCode,
-        currency: b.currency ?? "USD",
+        currency: b.currency ?? 'USD',
 
-        // ✅ pass concrete numbers (no union with undefined)
         loi,
         ir,
         sampleSize,
-        clickQuota: cq,
+        clickQuota,
 
         projectCpi,
         supplierCpi,
 
-        // ✅ pass concrete Date
         startDate,
         endDate,
 
@@ -152,18 +157,18 @@ export async function POST(req: Request) {
         exclude: !!b.exclude,
         geoLocation: !!b.geoLocation,
         dynamicThanksUrl:
-          typeof b.dynamicThanks === "boolean"
+          typeof b.dynamicThanks === 'boolean'
             ? b.dynamicThanks
             : !!b.dynamicThanksUrl,
         uniqueIp: !!b.uniqueIp,
         uniqueIpDepth:
-          b.uniqueIpDepth === "" || b.uniqueIpDepth === null || b.uniqueIpDepth === undefined
+          b.uniqueIpDepth === '' || b.uniqueIpDepth === null || b.uniqueIpDepth === undefined
             ? null
             : Number(b.uniqueIpDepth),
         tSign: !!b.tSign,
         speeder: !!b.speeder,
         speederDepth:
-          b.speederDepth === "" || b.speederDepth === null || b.speederDepth === undefined
+          b.speederDepth === '' || b.speederDepth === null || b.speederDepth === undefined
             ? null
             : Number(b.speederDepth),
 
@@ -177,7 +182,7 @@ export async function POST(req: Request) {
     return NextResponse.json(created, { status: 201 });
   } catch (e: any) {
     return NextResponse.json(
-      { error: "Create failed", detail: String(e?.message ?? e) },
+      { error: 'Create failed', detail: String(e?.message ?? e) },
       { status: 400 }
     );
   }

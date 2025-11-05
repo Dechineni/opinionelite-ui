@@ -1,11 +1,13 @@
 // FILE: src/app/api/projects/[projectId]/supplier-maps/route.ts
-export const runtime = 'edge';
-export const preferredRegion = 'auto';
+export const runtime = "edge";
+export const preferredRegion = "auto";
+
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { z } from "zod";
 
-// Must match your Prisma enum
+/* ----------------------------- helpers ----------------------------- */
+
 const RedirectionType = z.enum([
   "STATIC_REDIRECT",
   "STATIC_POSTBACK",
@@ -13,20 +15,17 @@ const RedirectionType = z.enum([
   "DYNAMIC_POSTBACK",
 ]);
 
-// Shared fields from the client payload
+// Accept "10" or 10, "true"/"false" etc.
 const BaseSchema = z.object({
   supplierId: z.string().min(1, "supplierId required"),
-  supplierQuota: z.number().int().nonnegative(),
-  clickQuota: z.number().int().nonnegative(),
-  cpi: z.number().nonnegative(),
+  supplierQuota: z.coerce.number().int().nonnegative(),
+  clickQuota: z.coerce.number().int().nonnegative(),
+  cpi: z.coerce.number().nonnegative(),
   redirectionType: RedirectionType,
-
-  // optional toggles/metadata stored in DB
-  allowTraffic: z.boolean().optional().default(false),
-  supplierProjectId: z.string().optional().nullable(),
+  allowTraffic: z.coerce.boolean().optional().default(false),
+  supplierProjectId: z.union([z.string().min(1), z.null()]).optional(),
 });
 
-// Redirect variants: require 5 outcome URLs
 const RedirectUrls = z.object({
   completeUrl: z.string().url(),
   terminateUrl: z.string().url(),
@@ -35,21 +34,17 @@ const RedirectUrls = z.object({
   surveyCloseUrl: z.string().url(),
 });
 
-// PostBack variants: require a single postBackUrl
 const PostBackUrl = z.object({
   postBackUrl: z.string().url(),
 });
 
-// Discriminated union by redirectionType
 const CreateSchema = z.discriminatedUnion("redirectionType", [
-  // Redirects
   BaseSchema.merge(RedirectUrls).extend({
     redirectionType: z.literal("STATIC_REDIRECT"),
   }),
   BaseSchema.merge(RedirectUrls).extend({
     redirectionType: z.literal("DYNAMIC_REDIRECT"),
   }),
-  // PostBacks
   BaseSchema.merge(PostBackUrl).extend({
     redirectionType: z.literal("STATIC_POSTBACK"),
   }),
@@ -58,55 +53,69 @@ const CreateSchema = z.discriminatedUnion("redirectionType", [
   }),
 ]);
 
-function bad(msg: string, code = 400) {
-  return new NextResponse(msg, { status: code });
+function badJSON(msg: string, code = 400) {
+  return NextResponse.json({ error: msg }, { status: code });
 }
 
-/**
- * GET: list all supplier maps for a project
- * - Flattens Supplier info into supplierCode / supplierName
- * - Adds zeroed outcome counters (ready to be wired to Thanks/Index logs)
- */
+async function resolveProjectId(projectKey: string) {
+  const prisma = getPrisma();
+  const p = await prisma.project.findFirst({
+    where: { OR: [{ id: projectKey }, { code: projectKey }] },
+    select: { id: true },
+  });
+  return p?.id ?? null;
+}
+
+/* ---------------------------------- GET ---------------------------------- */
+/** List supplier maps with flattened supplier info + counts (CPU-light). */
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ projectId: string }> }
 ) {
   const prisma = getPrisma();
-  const { projectId } = await ctx.params;
-  if (!projectId) return bad("projectId missing", 400);
+  const { projectId: projectKey } = await ctx.params;
 
-  // 1) Base maps + supplier info
+  const projId = await resolveProjectId(projectKey);
+  if (!projId) return badJSON("Project not found", 404);
+
+  // 1) Base maps + supplier info (minimal include)
   const maps = await prisma.projectSupplierMap.findMany({
-    where: { projectId },
+    where: { projectId: projId },
     orderBy: { createdAt: "asc" },
     include: { supplier: { select: { id: true, code: true, name: true } } },
   });
 
-  // 2) Aggregate results per supplier
-  const agg = await prisma.surveyRedirect.groupBy({
-    by: ["supplierId", "result"],
-    where: { projectId, supplierId: { not: null }, result: { not: null } },
-    _count: { _all: true },
-  });
+  // 2) Aggregate results per supplier (single groupBy)
+  let bySupplier: Record<string, Record<string, number>> = {};
+  try {
+    const agg = await prisma.surveyRedirect.groupBy({
+      by: ["supplierId", "result"],
+      where: {
+        projectId: projId,
+        supplierId: { not: null },
+        result: { not: null },
+      },
+      _count: { _all: true },
+    });
 
-  // Build a quick lookup: supplierId -> { COMPLETE, TERMINATE, OVERQUOTA, QUALITYTERM, CLOSE }
-  const bySupplier: Record<
-    string,
-    Partial<Record<NonNullable<(typeof agg)[number]["result"]>, number>>
-  > = {};
-  for (const row of agg) {
-    if (!row.supplierId || !row.result) continue;
-    bySupplier[row.supplierId] ??= {};
-    bySupplier[row.supplierId][row.result] = row._count._all;
+    bySupplier = agg.reduce((acc, row) => {
+      if (!row.supplierId || !row.result) return acc;
+      const sid = row.supplierId;
+      acc[sid] ??= {};
+      acc[sid][row.result] = row._count._all;
+      return acc;
+    }, {} as Record<string, Record<string, number>>);
+  } catch {
+    // ignore aggregation issues; counts will be zeroed
   }
 
   const items = maps.map((m) => {
-    const counts = bySupplier[m.supplierId] ?? {};
-    const complete    = counts.COMPLETE    ?? 0;
-    const terminate   = counts.TERMINATE   ?? 0;
-    const overQuota   = counts.OVERQUOTA   ?? 0;
-    const qualityTerm = counts.QUALITYTERM ?? 0;
-    const close       = counts.CLOSE       ?? 0;
+    const c = bySupplier[m.supplierId] ?? {};
+    const complete = c.COMPLETE ?? 0;
+    const terminate = c.TERMINATE ?? 0;
+    const overQuota = c.OVERQUOTA ?? 0;
+    const qualityTerm = c.QUALITYTERM ?? 0;
+    const close = c.CLOSE ?? 0;
 
     return {
       id: m.id,
@@ -128,13 +137,11 @@ export async function GET(
       supplierProjectId: m.supplierProjectId,
       createdAt: m.createdAt,
       updatedAt: m.updatedAt,
-
-      // Counts shown in the UI
       total: complete + terminate + overQuota + qualityTerm + close,
       complete,
       terminate,
       overQuota,
-      dropOut: 0,          // left as-is per your last note (no special wiring)
+      dropOut: 0, // unchanged per your UI
       qualityTerm,
     };
   });
@@ -142,50 +149,48 @@ export async function GET(
   return NextResponse.json({ items });
 }
 
-/** POST: create a supplier map for a project */
+/* ---------------------------------- POST --------------------------------- */
+/** Create a supplier map (accepts project id or code in the URL). */
 export async function POST(
   req: Request,
   ctx: { params: Promise<{ projectId: string }> }
 ) {
   const prisma = getPrisma();
-  const { projectId } = await ctx.params;
-  if (!projectId) return bad("projectId missing", 400);
+  const { projectId: projectKey } = await ctx.params;
 
-  let json: unknown;
+  const projId = await resolveProjectId(projectKey);
+  if (!projId) return badJSON("Project not found", 404);
+
+  let body: unknown;
   try {
-    json = await req.json();
+    body = await req.json();
   } catch {
-    return bad("Invalid JSON", 400);
+    return badJSON("Invalid JSON", 400);
   }
 
-  const parsed = CreateSchema.safeParse(json);
+  const parsed = CreateSchema.safeParse(body);
   if (!parsed.success) {
-    return bad(
-      parsed.error.flatten().formErrors.join("; ") || "Invalid payload",
-      400
-    );
+    const flat = parsed.error.flatten();
+    const msg =
+      flat.formErrors.join("; ") ||
+      Object.values(flat.fieldErrors).flat().join("; ") ||
+      "Invalid payload";
+    return badJSON(msg, 400);
   }
   const data = parsed.data;
 
-  // verify project & supplier exist
-  const [project, supplier] = await Promise.all([
-    prisma.project.findUnique({
-      where: { id: projectId },
-      select: { id: true },
-    }),
-    prisma.supplier.findUnique({
-      where: { id: data.supplierId },
-      select: { id: true },
-    }),
-  ]);
-  if (!project) return bad("Project not found", 404);
-  if (!supplier) return bad("Supplier not found", 404);
+  // Verify supplier exists (cheap check)
+  const supplier = await prisma.supplier.findUnique({
+    where: { id: data.supplierId },
+    select: { id: true, code: true, name: true },
+  });
+  if (!supplier) return badJSON("Supplier not found", 404);
 
-  // Build Prisma payload
+  // Build prisma payload
   const createData: any = {
-    projectId,
+    projectId: projId,
     supplierId: data.supplierId,
-    quota: data.supplierQuota, // UI -> DB column
+    quota: data.supplierQuota,
     clickQuota: data.clickQuota,
     cpi: data.cpi,
     redirectionType: data.redirectionType,
@@ -203,16 +208,12 @@ export async function POST(
     createData.qualityTermUrl = (data as any).qualityTermUrl;
     createData.surveyCloseUrl = (data as any).surveyCloseUrl;
   } else {
-    // PostBack
     createData.postBackUrl = (data as any).postBackUrl;
   }
 
-  const created = await prisma.projectSupplierMap.create({ data: createData });
-
-  // Return the same flattened shape the GET uses (helps caller update UI optimistically)
-  const sup = await prisma.supplier.findUnique({
-    where: { id: created.supplierId },
-    select: { code: true, name: true },
+  const created = await prisma.projectSupplierMap.create({
+    data: createData,
+    include: { supplier: { select: { code: true, name: true } } },
   });
 
   return NextResponse.json(
@@ -221,8 +222,8 @@ export async function POST(
         id: created.id,
         projectId: created.projectId,
         supplierId: created.supplierId,
-        supplierCode: sup?.code ?? "",
-        supplierName: sup?.name ?? "",
+        supplierCode: created.supplier?.code ?? "",
+        supplierName: created.supplier?.name ?? "",
         supplierQuota: created.quota,
         clickQuota: created.clickQuota,
         cpi: created.cpi?.toString(),

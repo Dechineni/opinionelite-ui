@@ -1,38 +1,64 @@
 // FILE: src/app/api/projects/[projectId]/route.ts
-export const runtime = 'edge';
-export const preferredRegion = 'auto';
+export const runtime = "edge";
+export const preferredRegion = "auto";
+
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { Prisma, ProjectStatus } from "@prisma/client";
+
+/* ------------------------------- helpers ------------------------------- */
 
 function whereFrom(req: Request, id: string) {
   const by = new URL(req.url).searchParams.get("by");
   return by === "code" ? { code: id } : { id };
 }
 
-const toDecimal = (v: any) =>
-  v === undefined || v === null || v === "" ? undefined : new Prisma.Decimal(v);
+// Non-nullable decimal: never returns null
+const decimalSetNN = (
+  v: unknown
+): { set: string | number } | undefined => {
+  if (v === undefined) return undefined;       // don't touch
+  const s = String(v).trim();
+  if (s === "") return undefined;              // treat empty as "no change"
+  return { set: s };                           // string/number OK
+};
 
-/* ------------------------------- GET ------------------------------- */
+// Nullable decimal: may return null
+const decimalSetNullable = (
+  v: unknown
+): { set: string | number | null } | undefined => {
+  if (v === undefined) return undefined;       // don't touch
+  if (v === null) return { set: null };        // explicitly null
+  const s = String(v).trim();
+  if (s === "") return undefined;              // no change
+  return { set: s };
+};
+
+const num = (v: unknown): number | undefined =>
+  v === undefined ? undefined : Number(v);
+
+/* -------------------------------- GET --------------------------------- */
 export async function GET(
   req: Request,
   ctx: { params: Promise<{ projectId: string }> }
 ) {
   const prisma = getPrisma();
-  const { projectId } = await ctx.params;     // ← await it
+  const { projectId } = await ctx.params;
   const where = whereFrom(req, projectId);
+
   const item = await prisma.project.findUnique({ where });
   if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
   return NextResponse.json(item);
 }
 
-/* ------------------------------ PATCH ------------------------------ */
+/* ------------------------------- PATCH -------------------------------- */
 export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ projectId: string }> }
 ) {
   const prisma = getPrisma();
-  const { projectId } = await ctx.params;     // ← await it
+  const { projectId } = await ctx.params;
   const where = whereFrom(req, projectId);
   const b = await req.json();
 
@@ -56,17 +82,20 @@ export async function PATCH(
     languageCode: b.language ?? b.languageCode,
     currency: b.currency,
 
-    loi: b.loi !== undefined ? Number(b.loi) : undefined,
-    ir: b.ir !== undefined ? Number(b.ir) : undefined,
-    sampleSize: b.sampleSize !== undefined ? Number(b.sampleSize) : undefined,
-    clickQuota: b.clickQuota !== undefined ? Number(b.clickQuota) : undefined,
+    loi: num(b.loi),
+    ir: num(b.ir),
+    sampleSize: num(b.sampleSize),
+    clickQuota: num(b.clickQuota),
 
-    projectCpi: toDecimal(b.projectCpi),
-    supplierCpi: b.supplierCpi === null ? null : toDecimal(b.supplierCpi),
+    // 🔑 decimals
+    projectCpi: decimalSetNN(b.projectCpi),          // non-nullable
+    supplierCpi: decimalSetNullable(b.supplierCpi),  // nullable
 
+    // dates
     startDate: b.startDate ? new Date(b.startDate) : undefined,
     endDate: b.endDate ? new Date(b.endDate) : undefined,
 
+    // booleans
     preScreen: typeof b.preScreen === "boolean" ? b.preScreen : undefined,
     exclude: typeof b.exclude === "boolean" ? b.exclude : undefined,
     geoLocation: typeof b.geoLocation === "boolean" ? b.geoLocation : undefined,
@@ -94,17 +123,21 @@ export async function PATCH(
     if (e?.code === "P2025") {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    return NextResponse.json({ error: "Update failed", detail: String(e) }, { status: 400 });
+    return NextResponse.json(
+      { error: "Update failed", detail: String(e) },
+      { status: 400 }
+    );
   }
 }
 
-/* ----------------------------- DELETE ------------------------------ */
+/* ------------------------------ DELETE ------------------------------- */
 export async function DELETE(
   _req: Request,
   ctx: { params: Promise<{ projectId: string }> }
 ) {
   const prisma = getPrisma();
-  const { projectId } = await ctx.params;     // ← await it
+  const { projectId } = await ctx.params;
+
   try {
     await prisma.project.delete({ where: { id: projectId } });
     return NextResponse.json({ ok: true });
@@ -112,6 +145,9 @@ export async function DELETE(
     if (e?.code === "P2025") {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    return NextResponse.json({ error: "Delete failed", detail: String(e) }, { status: 400 });
+    return NextResponse.json(
+      { error: "Delete failed", detail: String(e) },
+      { status: 400 }
+    );
   }
 }

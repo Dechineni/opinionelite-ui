@@ -1,3 +1,4 @@
+// FILE: src/app/api/projects/[projectId]/survey-live/route.ts
 export const runtime = "edge";
 export const preferredRegion = "auto";
 
@@ -19,21 +20,21 @@ function replaceTokens(template: string, map: Record<string, string>) {
   return template.replace(/\[([^\]]+)\]/g, (_, k) => map[k] ?? "");
 }
 
-/**
- * Minimal helper: resolve project by id or code with only what we need.
- */
-async function loadProjectBasics(prisma: ReturnType<typeof getPrisma>, projectIdOrCode: string) {
+/** Resolve project by id or code with only what we need */
+async function loadProjectBasics(prisma: ReturnType<typeof getPrisma>, key: string) {
   return prisma.project.findFirst({
-    where: { OR: [{ id: projectIdOrCode }, { code: projectIdOrCode }] },
+    where: { OR: [{ id: key }, { code: key }] },
     select: { id: true, surveyLiveUrl: true },
   });
 }
 
-/**
- * Env flags so you can tune behavior without code changes:
- * - REDIRECT_LOG: "on" | "off"  (default "on")
- */
+/** Env flag: set REDIRECT_LOG="off" to skip DB log writes */
 const LOG_REDIRECT = (process.env.REDIRECT_LOG || "on").toLowerCase() !== "off";
+
+/** Simple scheme whitelist */
+function isAllowedScheme(u: URL) {
+  return u.protocol === "http:" || u.protocol === "https:";
+}
 
 export async function GET(
   req: Request,
@@ -48,17 +49,21 @@ export async function GET(
 
   // 1) Read only what we need about the project
   const project = await loadProjectBasics(prisma, projectId);
-  if (!project?.surveyLiveUrl) {
+  if (!project) {
+    return NextResponse.json({ error: "Project not found." }, { status: 404 });
+  }
+  const template = (project.surveyLiveUrl || "").trim();
+  if (!template) {
     return NextResponse.json(
-      { error: "Live survey URL not configured for this project." },
+      { error: "Live survey URL is not configured for this project." },
       { status: 400 }
     );
   }
 
   // 2) Prepare redirect URL
   const pid = id20();
-  const replaced = replaceTokens(project.surveyLiveUrl, {
-    projectId: project.id,           // normalize to real id
+  const replaced = replaceTokens(template, {
+    projectId: project.id, // normalize to DB id
     supplierId,
     identifier,
     pid,
@@ -69,14 +74,22 @@ export async function GET(
   try {
     absolute = new URL(replaced);
   } catch {
-    const base = process.env.SURVEY_PROVIDER_BASE_URL;
+    const base = (process.env.SURVEY_PROVIDER_BASE_URL || "").trim();
     if (!base) {
       return NextResponse.json(
-        { error: "SURVEY_PROVIDER_BASE_URL is not set." },
+        { error: "SURVEY_PROVIDER_BASE_URL is not set and live URL is relative." },
         { status: 500 }
       );
     }
     absolute = new URL(replaced, base);
+  }
+
+  // Only allow http/https
+  if (!isAllowedScheme(absolute)) {
+    return NextResponse.json(
+      { error: "Live URL must use http(s) scheme." },
+      { status: 400 }
+    );
   }
 
   // 4) Make sure pid is present even if the template missed it
@@ -84,22 +97,22 @@ export async function GET(
     absolute.searchParams.set("pid", pid);
   }
 
-  // 5) Return the redirect *immediately* to avoid CPU-time overruns
+  // 5) Respond immediately to avoid CPU-time overruns
   const res = NextResponse.redirect(absolute.toString(), { status: 302 });
 
   // 6) Best-effort minimal logging (single insert, no respondent upserts)
   if (LOG_REDIRECT) {
-    // Fire and forget — any failure is ignored
-    // (Edge keeps executing after we create `res`.)
-    prisma.surveyRedirect.create({
-      data: {
-        id: pid,
-        projectId: project.id,
-        supplierId: supplierId || null,
-        externalId: identifier || null,
-        destination: absolute.toString(),
-      },
-    }).catch(() => {});
+    prisma.surveyRedirect
+      .create({
+        data: {
+          id: pid,
+          projectId: project.id,
+          supplierId: supplierId || null,
+          externalId: identifier || null,
+          destination: absolute.toString(),
+        },
+      })
+      .catch(() => {});
   }
 
   return res;
