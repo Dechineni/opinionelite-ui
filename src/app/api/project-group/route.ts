@@ -1,81 +1,14 @@
-// FILE: src/app/api/project-group/route.ts
-export const runtime = "edge";
-export const preferredRegion = "auto";
-
+export const runtime = 'edge';
+export const preferredRegion = 'auto';
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
-import type { Prisma, ProjectStatus } from "@prisma/client";
+import { Prisma, ProjectStatus } from "@prisma/client";
 
-/* ----------------------------- small helpers ----------------------------- */
-
-const toInt = (v: string | null, d: number) =>
-  v ? Math.max(1, parseInt(v, 10) || d) : d;
-
-const clamp = (n: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, n));
-
-// Accept numbers for Decimal columns (Edge-safe)
-const toDecimal = (v: any): number | null =>
-  v === undefined || v === null || v === "" ? null : Number(v);
-
+const toDecimal = (v: any) =>
+  v === undefined || v === null || v === "" ? null : new Prisma.Decimal(v);
 const toDate = (v: any) => (v ? new Date(v) : undefined);
+const bad = (msg: string, status = 400) => NextResponse.json({ error: msg }, { status });
 
-function bad(msg: string, status = 400) {
-  return NextResponse.json({ error: msg }, { status });
-}
-
-/* ---------------------------------- GET ---------------------------------- */
-// GET /api/project-group?q=&clientId=&page=&pageSize=
-export async function GET(req: Request) {
-  try {
-    const prisma = getPrisma();
-    const { searchParams } = new URL(req.url);
-    const q = (searchParams.get("q") ?? "").trim();
-    const clientId = searchParams.get("clientId");
-    const page = toInt(searchParams.get("page"), 1);
-    const pageSize = clamp(toInt(searchParams.get("pageSize"), 10), 1, 100);
-
-    const where: Prisma.ProjectGroupWhereInput = {
-      ...(q
-        ? {
-            OR: [
-              { name: { contains: q, mode: "insensitive" } as any },
-              { description: { contains: q, mode: "insensitive" } as any },
-            ],
-          }
-        : {}),
-      ...(clientId ? { clientId } : {}),
-    };
-
-    const [items, total] = await Promise.all([
-      prisma.projectGroup.findMany({
-        where,
-        orderBy: { createdAt: "desc" },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        include: { _count: { select: { projects: true } } },
-      }),
-      prisma.projectGroup.count({ where }),
-    ]);
-
-    return NextResponse.json({ items, total });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: "Failed to load project groups", detail: String(err?.message ?? err) },
-      { status: 500 }
-    );
-  }
-}
-
-/* ---------------------------------- POST --------------------------------- */
-/**
- * POST /api/project-group
- * Body:
- * {
- *   clientId: string, name: string, description?: string, dynamicThanks?: boolean,
- *   project?: { ...single-project-fields... }   // optional child project
- * }
- */
 export async function POST(req: Request) {
   const prisma = getPrisma();
   const body = await req.json();
@@ -91,40 +24,36 @@ export async function POST(req: Request) {
     client: { connect: { id: String(body.clientId) } },
   };
 
-  // If a child project is included, sanitize the payload and ensure required bits
+  // optional child
   const rawChild = body.project;
   const hasChild = !!rawChild && !!(rawChild.name || rawChild.projectName);
-
-  // Strip out code if present so DB default sequence generates it
-  const { code: _ignoreCode, ...child } = (rawChild ?? {}) as Record<string, any>;
+  const { code: _ignore, ...child } = rawChild || {};
 
   if (hasChild) {
     if (!child.startDate || !child.endDate || child.projectCpi === undefined) {
-      return bad(
-        "Child project requires startDate, endDate and projectCpi when provided."
-      );
+      return bad("Child project requires startDate, endDate and projectCpi when provided.");
     }
   }
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      const group = await tx.projectGroup.create({ data: groupData });
+    // 1) create group
+    const group = await prisma.projectGroup.create({ data: groupData });
 
-      let project: { id: string; code: string } | null = null;
-
-      if (hasChild) {
-        const created = await tx.project.create({
+    // 2) optionally create 1st project (no transaction)
+    let project: { id: string; code: string } | null = null;
+    if (hasChild) {
+      try {
+        const created = await prisma.project.create({
           data: {
-            // DO NOT set "code" – DB default handles SR000x generation
             clientId: String(body.clientId),
             groupId: group.id,
 
             name: child.name ?? child.projectName,
             managerEmail: child.manager ?? child.managerEmail,
             category: child.category ?? "",
-            status: (child.status as ProjectStatus) ?? "ACTIVE",
-
+            status: (child.status as ProjectStatus) ?? ProjectStatus.ACTIVE,
             description: child.description ?? null,
+
             countryCode: child.country ?? child.countryCode,
             languageCode: child.language ?? child.languageCode,
             currency: child.currency ?? "USD",
@@ -134,7 +63,7 @@ export async function POST(req: Request) {
             sampleSize: Number(child.sampleSize ?? 0),
             clickQuota: Number(child.clickQuota ?? 0),
 
-            projectCpi: toDecimal(child.projectCpi)!,    // number OK for Decimal
+            projectCpi: toDecimal(child.projectCpi)!,
             supplierCpi: toDecimal(child.supplierCpi),
 
             startDate: toDate(child.startDate)!,
@@ -149,6 +78,7 @@ export async function POST(req: Request) {
             tSign: !!child.tSign,
             speeder: !!child.speeder,
             speederDepth: child.speederDepth ? Number(child.speederDepth) : null,
+
             mobile: !!child.mobile,
             tablet: !!child.tablet,
             desktop: !!child.desktop,
@@ -157,12 +87,14 @@ export async function POST(req: Request) {
         });
 
         project = created;
+      } catch (e) {
+        // best-effort manual rollback to keep things tidy
+        try { await prisma.projectGroup.delete({ where: { id: group.id } }); } catch {}
+        throw e;
       }
+    }
 
-      return { group, project };
-    });
-
-    return NextResponse.json(result, { status: 201 });
+    return NextResponse.json({ group, project }, { status: 201 });
   } catch (e: any) {
     if (e?.code === "P2002") {
       return NextResponse.json(
@@ -171,8 +103,8 @@ export async function POST(req: Request) {
       );
     }
     return NextResponse.json(
-      { error: "Create project group failed", detail: String(e) },
-      { status: 400 }
+        { error: "Create project group failed", detail: String(e) },
+        { status: 400 }
     );
   }
 }

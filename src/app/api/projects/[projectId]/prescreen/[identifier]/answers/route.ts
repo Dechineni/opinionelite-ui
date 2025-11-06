@@ -4,7 +4,9 @@ export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
-import type { Prisma } from "@prisma/client";
+
+/** A tiny type so we don't import Prisma at runtime */
+type PrismaClientLike = ReturnType<typeof getPrisma>;
 
 async function resolveProjectId(prisma: PrismaClientLike, projectIdOrCode: string) {
   const p = await prisma.project.findFirst({
@@ -15,10 +17,28 @@ async function resolveProjectId(prisma: PrismaClientLike, projectIdOrCode: strin
   return p.id;
 }
 
-// A very small interface so we don't pull Prisma types at runtime here
-type PrismaClientLike = ReturnType<typeof getPrisma>;
-
 type AnswerPayload = { questionId: string; value: string | string[] };
+
+/** Process array items with limited concurrency to avoid CPU spikes on Edge */
+async function mapWithConcurrency<T, R>(
+  arr: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const out: R[] = [];
+  let i = 0;
+
+  async function worker() {
+    while (i < arr.length) {
+      const idx = i++;
+      out[idx] = await fn(arr[idx], idx);
+    }
+  }
+
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, arr.length)) }, worker);
+  await Promise.all(workers);
+  return out;
+}
 
 export async function POST(
   req: Request,
@@ -30,16 +50,16 @@ export async function POST(
   try {
     const body = await req.json();
 
-    // supplierId: normalize to string | null
+    // supplierId → string | null
     const supplierId: string | null =
       typeof body?.supplierId === "string" && body.supplierId.trim() !== ""
         ? body.supplierId.trim()
         : null;
 
-    // answers: sanitize + cap to avoid huge payloads burning CPU
+    // answers → sanitize + cap to protect CPU
     const raw: unknown = body?.answers;
     const answers: AnswerPayload[] = Array.isArray(raw)
-      ? (raw as AnswerPayload[]).slice(0, 100) // cap 100 answers per call
+      ? (raw as AnswerPayload[]).slice(0, 100) // cap 100 per call
       : [];
 
     if (answers.length === 0) {
@@ -48,7 +68,7 @@ export async function POST(
 
     const projId = await resolveProjectId(prisma, projectId);
 
-    // Ensure respondent (NULL cannot participate in composite upsert)
+    // Ensure respondent (NULL cannot be used in composite upserts)
     let respondentId: string;
 
     if (supplierId === null) {
@@ -82,45 +102,54 @@ export async function POST(
       respondentId = r.id;
     }
 
-    // Build all upserts, then do a single transaction
+    // Write answers WITHOUT transactions, using small concurrency
     const now = new Date();
-    const ops = answers.map((a) => {
+
+    const results = await mapWithConcurrency(answers, 10, async (a) => {
       const isArray = Array.isArray(a.value);
       const selectedValues = isArray
-        ? (a.value as unknown[]).filter((v) => typeof v === "string").slice(0, 50) // cap multi-selects
+        ? (a.value as unknown[])
+            .filter((v) => typeof v === "string")
+            .slice(0, 50) // cap multi-selects
+            .map((v) => String(v))
         : [];
 
       const answerText = isArray ? null : String(a.value ?? "");
       const answerValue = isArray ? null : String(a.value ?? "");
 
-      return prisma.prescreenAnswer.upsert({
-        where: {
-          respondentId_questionId: {
+      // Each upsert stands alone; if one fails we skip it
+      try {
+        await prisma.prescreenAnswer.upsert({
+          where: {
+            respondentId_questionId: {
+              respondentId,
+              questionId: String(a.questionId),
+            },
+          },
+          create: {
+            projectId: projId,
             respondentId,
             questionId: String(a.questionId),
+            answerText,
+            answerValue,
+            selectedValues,
+            answeredAt: now,
           },
-        },
-        create: {
-          projectId: projId,
-          respondentId,
-          questionId: String(a.questionId),
-          answerText,
-          answerValue,
-          selectedValues,
-          answeredAt: now,
-        },
-        update: {
-          answerText,
-          answerValue,
-          selectedValues,
-          answeredAt: now,
-        },
-      });
+          update: {
+            answerText,
+            answerValue,
+            selectedValues,
+            answeredAt: now,
+          },
+        });
+        return true;
+      } catch {
+        return false;
+      }
     });
 
-    await prisma.$transaction(ops);
-
-    return NextResponse.json({ ok: true, saved: ops.length });
+    const saved = results.reduce((n, ok) => n + (ok ? 1 : 0), 0);
+    return NextResponse.json({ ok: true, saved });
   } catch (err: any) {
     return NextResponse.json(
       { error: err?.message || "Failed to save answers" },
