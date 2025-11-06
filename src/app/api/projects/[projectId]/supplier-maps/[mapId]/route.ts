@@ -6,8 +6,6 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { z } from "zod";
 
-/* ----------------------------- helpers ----------------------------- */
-
 const RedirectionType = z.enum([
   "STATIC_REDIRECT",
   "STATIC_POSTBACK",
@@ -15,18 +13,13 @@ const RedirectionType = z.enum([
   "DYNAMIC_POSTBACK",
 ]);
 
-// Coerce so the API can accept "10" or 10, "true"/"false" etc.
 const UpdateSchema = z.object({
-  supplierQuota: z.coerce.number().int().nonnegative().optional(),
-  clickQuota: z.coerce.number().int().nonnegative().optional(),
-  cpi: z.coerce.number().nonnegative().optional(),
+  supplierQuota: z.number().int().nonnegative().optional(),
+  clickQuota: z.number().int().nonnegative().optional(),
+  cpi: z.number().nonnegative().optional(),
   redirectionType: RedirectionType.optional(),
-  allowTraffic: z.coerce.boolean().optional(),
-  supplierProjectId: z
-    .union([z.string().min(1), z.null()])
-    .optional(),
-
-  // only relevant for *REDIRECT types
+  allowTraffic: z.boolean().optional(),
+  supplierProjectId: z.string().nullable().optional(),
   completeUrl: z.string().url().optional(),
   terminateUrl: z.string().url().optional(),
   overQuotaUrl: z.string().url().optional(),
@@ -34,91 +27,61 @@ const UpdateSchema = z.object({
   surveyCloseUrl: z.string().url().optional(),
 });
 
-function badJSON(msg: string, code = 400) {
+function bad(msg: string, code = 400) {
   return NextResponse.json({ error: msg }, { status: code });
 }
 
-async function resolveProjectId(projectIdOrCode: string) {
-  const prisma = getPrisma();
-  const p = await prisma.project.findFirst({
-    where: { OR: [{ id: projectIdOrCode }, { code: projectIdOrCode }] },
-    select: { id: true },
-  });
-  return p?.id ?? null;
-}
-
-/* --------------------------------- PUT ---------------------------------- */
-/** Update a supplier map row (scoped to project) */
 export async function PUT(
   req: Request,
   ctx: { params: Promise<{ projectId: string; mapId: string }> }
 ) {
+  // breadcrumb so we can see exactly which handler ran in CF logs
+  console.log("[PUT] /projects/:projectId/supplier-maps/:mapId");
+
   const prisma = getPrisma();
-  const { projectId: projectKey, mapId } = await ctx.params;
+  const { projectId, mapId } = await ctx.params;
 
-  if (!projectKey || !mapId) return badJSON("projectId/mapId missing", 400);
+  // 1) validate path + existence (NO transactions)
+  if (!projectId || !mapId) return bad("projectId/mapId missing");
 
-  // Resolve project (accept id or code)
-  const projId = await resolveProjectId(projectKey);
-  if (!projId) return badJSON("Project not found", 404);
-
-  // Cheap ownership + current type check
-  const existing = await prisma.projectSupplierMap.findFirst({
-    where: { id: mapId, projectId: projId },
-    select: { id: true, redirectionType: true },
+  const existing = await prisma.projectSupplierMap.findUnique({
+    where: { id: mapId },
+    select: { id: true, projectId: true, redirectionType: true },
   });
-  if (!existing) return badJSON("Supplier map not found", 404);
+  if (!existing || existing.projectId !== projectId) {
+    return bad("Supplier map not found", 404);
+  }
 
-  // Parse & validate body
-  let parsedBody: z.infer<typeof UpdateSchema>;
+  // 2) parse body
+  let json: unknown;
   try {
-    const body = await req.json();
-    const parsed = UpdateSchema.safeParse(body);
-    if (!parsed.success) {
-      const flat = parsed.error.flatten();
-      const msg =
-        flat.formErrors.join("; ") ||
-        Object.values(flat.fieldErrors).flat().join("; ") ||
-        "Invalid payload";
-      return badJSON(msg, 400);
-    }
-    parsedBody = parsed.data;
+    json = await req.json();
   } catch {
-    return badJSON("Invalid JSON", 400);
+    return bad("Invalid JSON");
   }
+  const parsed = UpdateSchema.safeParse(json);
+  if (!parsed.success) {
+    return bad(parsed.error.flatten().formErrors.join("; ") || "Invalid payload");
+  }
+  const data = parsed.data;
 
-  // Build update payload
+  // 3) build plain update object (NO nested writes that could hint a tx)
   const updateData: any = {};
-  if (parsedBody.supplierQuota !== undefined)
-    updateData.quota = parsedBody.supplierQuota;
-  if (parsedBody.clickQuota !== undefined)
-    updateData.clickQuota = parsedBody.clickQuota;
-  if (parsedBody.cpi !== undefined) updateData.cpi = parsedBody.cpi;
-  if (parsedBody.allowTraffic !== undefined)
-    updateData.allowTraffic = parsedBody.allowTraffic;
-  if (parsedBody.supplierProjectId !== undefined)
-    updateData.supplierProjectId = parsedBody.supplierProjectId;
+  if (data.supplierQuota !== undefined) updateData.quota = data.supplierQuota;
+  if (data.clickQuota !== undefined) updateData.clickQuota = data.clickQuota;
+  if (data.cpi !== undefined) updateData.cpi = data.cpi;
+  if (data.allowTraffic !== undefined) updateData.allowTraffic = data.allowTraffic;
+  if (data.supplierProjectId !== undefined) updateData.supplierProjectId = data.supplierProjectId;
+  if (data.redirectionType) updateData.redirectionType = data.redirectionType;
 
-  // Handle redirectionType and URLs
-  if (parsedBody.redirectionType) {
-    updateData.redirectionType = parsedBody.redirectionType;
-  }
-  const effectiveType = parsedBody.redirectionType ?? existing.redirectionType;
-
+  const effectiveType = (data.redirectionType ?? existing.redirectionType);
   if (effectiveType === "STATIC_REDIRECT" || effectiveType === "DYNAMIC_REDIRECT") {
-    // Only set provided URLs (leave others unchanged)
-    if (parsedBody.completeUrl !== undefined)
-      updateData.completeUrl = parsedBody.completeUrl;
-    if (parsedBody.terminateUrl !== undefined)
-      updateData.terminateUrl = parsedBody.terminateUrl;
-    if (parsedBody.overQuotaUrl !== undefined)
-      updateData.overQuotaUrl = parsedBody.overQuotaUrl;
-    if (parsedBody.qualityTermUrl !== undefined)
-      updateData.qualityTermUrl = parsedBody.qualityTermUrl;
-    if (parsedBody.surveyCloseUrl !== undefined)
-      updateData.surveyCloseUrl = parsedBody.surveyCloseUrl;
+    if (data.completeUrl !== undefined) updateData.completeUrl = data.completeUrl;
+    if (data.terminateUrl !== undefined) updateData.terminateUrl = data.terminateUrl;
+    if (data.overQuotaUrl !== undefined) updateData.overQuotaUrl = data.overQuotaUrl;
+    if (data.qualityTermUrl !== undefined) updateData.qualityTermUrl = data.qualityTermUrl;
+    if (data.surveyCloseUrl !== undefined) updateData.surveyCloseUrl = data.surveyCloseUrl;
   } else {
-    // POSTBACK types don’t use redirect URLs → clear them
     updateData.completeUrl = null;
     updateData.terminateUrl = null;
     updateData.overQuotaUrl = null;
@@ -126,36 +89,35 @@ export async function PUT(
     updateData.surveyCloseUrl = null;
   }
 
-  // Update (scoped by id + projectId to avoid cross-project edits)
+  // 4) single UPDATE + separate supplier fetch (avoid include just to be extra safe)
   try {
     const updated = await prisma.projectSupplierMap.update({
       where: { id: mapId },
       data: updateData,
-      include: { supplier: { select: { id: true, code: true, name: true } } },
+      select: {
+        id: true, projectId: true, supplierId: true, quota: true, clickQuota: true,
+        cpi: true, redirectionType: true, postBackUrl: true,
+        completeUrl: true, terminateUrl: true, overQuotaUrl: true, qualityTermUrl: true, surveyCloseUrl: true,
+        allowTraffic: true, supplierProjectId: true, createdAt: true, updatedAt: true,
+      },
     });
-    return NextResponse.json(updated);
+
+    const sup = await prisma.supplier.findUnique({
+      where: { id: updated.supplierId },
+      select: { code: true, name: true },
+    });
+
+    return NextResponse.json({
+      ...updated,
+      supplierCode: sup?.code ?? "",
+      supplierName: sup?.name ?? "",
+      supplierQuota: updated.quota,
+    });
   } catch (e: any) {
-    return badJSON(`Update failed: ${String(e?.message ?? e)}`, 400);
+    console.log("prisma:error", e?.message);
+    return NextResponse.json(
+      { error: "Update failed", detail: String(e?.message || e) },
+      { status: 400 }
+    );
   }
-}
-
-/* ------------------------------- DELETE --------------------------------- */
-export async function DELETE(
-  _req: Request,
-  ctx: { params: Promise<{ projectId: string; mapId: string }> }
-) {
-  const prisma = getPrisma();
-  const { projectId: projectKey, mapId } = await ctx.params;
-
-  const projId = await resolveProjectId(projectKey);
-  if (!projId) return badJSON("Project not found", 404);
-
-  const row = await prisma.projectSupplierMap.findFirst({
-    where: { id: mapId, projectId: projId },
-    select: { id: true },
-  });
-  if (!row) return badJSON("Not found", 404);
-
-  await prisma.projectSupplierMap.delete({ where: { id: mapId } });
-  return NextResponse.json({ ok: true });
 }
