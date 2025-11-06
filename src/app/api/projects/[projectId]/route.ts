@@ -6,38 +6,29 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { Prisma, ProjectStatus } from "@prisma/client";
 
-/* ------------------------------- helpers ------------------------------- */
-
+/* ------------------------------ helpers ------------------------------ */
 function whereFrom(req: Request, id: string) {
   const by = new URL(req.url).searchParams.get("by");
   return by === "code" ? { code: id } : { id };
 }
 
-// Non-nullable decimal: never returns null
-const decimalSetNN = (
-  v: unknown
-): { set: string | number } | undefined => {
-  if (v === undefined) return undefined;       // don't touch
-  const s = String(v).trim();
-  if (s === "") return undefined;              // treat empty as "no change"
-  return { set: s };                           // string/number OK
-};
+const num = (v: any) => (v === undefined ? undefined : Number(v));
+const maybeDate = (v: any) => (v ? new Date(v) : undefined);
 
-// Nullable decimal: may return null
-const decimalSetNullable = (
-  v: unknown
-): { set: string | number | null } | undefined => {
-  if (v === undefined) return undefined;       // don't touch
-  if (v === null) return { set: null };        // explicitly null
-  const s = String(v).trim();
-  if (s === "") return undefined;              // no change
-  return { set: s };
-};
+// Non-nullable decimal → string | undefined (never null)
+function decimalStrNN(v: any): string | undefined {
+  if (v === undefined || v === null || v === "") return undefined;
+  return String(v);
+}
 
-const num = (v: unknown): number | undefined =>
-  v === undefined ? undefined : Number(v);
+// Nullable decimal → string | null | undefined
+function decimalStrNullable(v: any): string | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null || v === "") return null;
+  return String(v);
+}
 
-/* -------------------------------- GET --------------------------------- */
+/* -------------------------------- GET -------------------------------- */
 export async function GET(
   req: Request,
   ctx: { params: Promise<{ projectId: string }> }
@@ -48,15 +39,19 @@ export async function GET(
 
   const item = await prisma.project.findUnique({ where });
   if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
   return NextResponse.json(item);
 }
 
-/* ------------------------------- PATCH -------------------------------- */
+/* ------------------------------- PATCH ------------------------------- */
+/**
+ * Scalar-only update (no nested relation writes) so HTTP mode won't try
+ * interactive transactions under the hood.
+ */
 export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ projectId: string }> }
 ) {
+  console.log("[PATCH] /api/projects/:projectId (scalar update only)");
   const prisma = getPrisma();
   const { projectId } = await ctx.params;
   const where = whereFrom(req, projectId);
@@ -64,19 +59,25 @@ export async function PATCH(
 
   const data: Prisma.ProjectUpdateInput = {
     code: b.code,
+
     name: b.name ?? b.projectName,
     managerEmail: b.manager ?? b.managerEmail,
     category: b.category,
-    status: b.status as ProjectStatus | undefined,
+    status: (b.status as ProjectStatus) ?? undefined,
     description: b.description,
 
-    client: b.clientId ? { connect: { id: String(b.clientId) } } : undefined,
+    // set FK columns directly (no connect/disconnect)
+    client:
+    b.clientId === undefined
+    ? undefined
+    : { connect: { id: String(b.clientId) } },
+
     group:
-      b.groupId === null
-        ? { disconnect: true }
-        : b.groupId
-        ? { connect: { id: String(b.groupId) } }
-        : undefined,
+    b.groupId === undefined
+    ? undefined
+    : b.groupId === null
+    ? { disconnect: true }
+    : { connect: { id: String(b.groupId) } },
 
     countryCode: b.country ?? b.countryCode,
     languageCode: b.language ?? b.languageCode,
@@ -87,13 +88,13 @@ export async function PATCH(
     sampleSize: num(b.sampleSize),
     clickQuota: num(b.clickQuota),
 
-    // 🔑 decimals
-    projectCpi: decimalSetNN(b.projectCpi),          // non-nullable
-    supplierCpi: decimalSetNullable(b.supplierCpi),  // nullable
+    // decimals (projectCpi NOT NULL, supplierCpi nullable)
+  projectCpi: decimalStrNN(b.projectCpi),          // NOT NULL in schema
+  supplierCpi: decimalStrNullable(b.supplierCpi),  // NULLABLE in schema
 
     // dates
-    startDate: b.startDate ? new Date(b.startDate) : undefined,
-    endDate: b.endDate ? new Date(b.endDate) : undefined,
+    startDate: maybeDate(b.startDate),
+    endDate: maybeDate(b.endDate),
 
     // booleans
     preScreen: typeof b.preScreen === "boolean" ? b.preScreen : undefined,
@@ -106,10 +107,10 @@ export async function PATCH(
         ? b.dynamicThanksUrl
         : undefined,
     uniqueIp: typeof b.uniqueIp === "boolean" ? b.uniqueIp : undefined,
-    uniqueIpDepth: b.uniqueIpDepth !== undefined ? Number(b.uniqueIpDepth) : undefined,
+    uniqueIpDepth: b.uniqueIpDepth === undefined ? undefined : Number(b.uniqueIpDepth),
     tSign: typeof b.tSign === "boolean" ? b.tSign : undefined,
     speeder: typeof b.speeder === "boolean" ? b.speeder : undefined,
-    speederDepth: b.speederDepth !== undefined ? Number(b.speederDepth) : undefined,
+    speederDepth: b.speederDepth === undefined ? undefined : Number(b.speederDepth),
 
     mobile: typeof b.mobile === "boolean" ? b.mobile : undefined,
     tablet: typeof b.tablet === "boolean" ? b.tablet : undefined,
@@ -120,17 +121,18 @@ export async function PATCH(
     const updated = await prisma.project.update({ where, data });
     return NextResponse.json(updated);
   } catch (e: any) {
+    console.log("prisma:error", e?.message);
     if (e?.code === "P2025") {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     return NextResponse.json(
-      { error: "Update failed", detail: String(e) },
+      { error: "Update failed", detail: String(e?.message || e) },
       { status: 400 }
     );
   }
 }
 
-/* ------------------------------ DELETE ------------------------------- */
+/* ------------------------------ DELETE ------------------------------ */
 export async function DELETE(
   _req: Request,
   ctx: { params: Promise<{ projectId: string }> }
