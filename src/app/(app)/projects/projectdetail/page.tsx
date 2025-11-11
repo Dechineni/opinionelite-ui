@@ -21,7 +21,7 @@ function dateStr(d: Date | string | null | undefined) {
 /** Redirect links host */
 const THANKS_HOST = "https://opinion-elite.com";
 function buildThanksUrl(authCode: number) {
-  return `${THANKS_HOST}/Thanks/Index?auth=${authCode}&rid=[identifier]`;
+  return `${THANKS_HOST}/Thanks/Index?auth=${authCode}&rid=[pid]`;
 }
 
 export default async function ProjectDetail({

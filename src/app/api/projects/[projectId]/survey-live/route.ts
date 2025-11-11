@@ -150,6 +150,9 @@ export async function GET(
     absolute.searchParams.set("pid", pid);
   }
 
+  // keep rid aligned to pid so /Thanks gets the correct id
+  absolute.searchParams.set("rid", pid);
+
   // 5) Persist redirect BEFORE responding (idempotent). Only when we have the real DB id.
   if (LOG_REDIRECT && haveRealId) {
     await prisma.surveyRedirect.upsert({
