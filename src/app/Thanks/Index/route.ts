@@ -2,144 +2,165 @@
 export const runtime = 'edge';
 export const preferredRegion = 'auto';
 
-import { NextResponse } from 'next/server';
-import { getPrisma } from '@/lib/prisma';
+import { NextResponse } from "next/server";
+import { getPrisma } from "@/lib/prisma";
 
-/** Map auth → status (accept short and numeric codes) */
-function authToStatus(authRaw: string | null | undefined) {
-  const a = (authRaw || '').toLowerCase().trim();
-  if (a === 'c') return 'COMPLETE' as const;
-  if (a === 't') return 'TERMINATE' as const;
-  if (a === 'q') return 'OVER_QUOTA' as const;
-  if (a === 'f') return 'QUALITY_TERM' as const;
-  if (a === 'sc') return 'SURVEY_CLOSE' as const;
+/** Map auth -> our two enums */
+function mapAuth(
+  authRaw: string | null | undefined
+): {
+  redirectResult: "COMPLETE" | "TERMINATE" | "OVERQUOTA" | "QUALITYTERM" | "CLOSE" | null;
+  eventOutcome:  "COMPLETE" | "TERMINATE" | "OVER_QUOTA" | "DROP_OUT" | "QUALITY_TERM" | "SURVEY_CLOSE" | null;
+} {
+  const a = (authRaw || "").toLowerCase().trim();
+
+  // short codes
+  if (a === "c") return { redirectResult: "COMPLETE",   eventOutcome: "COMPLETE" };
+  if (a === "t") return { redirectResult: "TERMINATE",  eventOutcome: "TERMINATE" };
+  if (a === "q") return { redirectResult: "OVERQUOTA",  eventOutcome: "OVER_QUOTA" };
+  if (a === "f") return { redirectResult: "QUALITYTERM",eventOutcome: "QUALITY_TERM" };
+  if (a === "sc")return { redirectResult: "CLOSE",      eventOutcome: "SURVEY_CLOSE" };
+
+  // numeric codes used in your UI
   switch (a) {
-    case '10': return 'COMPLETE';
-    case '20': return 'TERMINATE';
-    case '30': return 'QUALITY_TERM';
-    case '40': return 'OVER_QUOTA';
-    case '70': return 'SURVEY_CLOSE';
-    default:   return null;
+    case "10": return { redirectResult: "COMPLETE",    eventOutcome: "COMPLETE" };
+    case "20": return { redirectResult: "TERMINATE",   eventOutcome: "TERMINATE" };
+    case "30": return { redirectResult: "QUALITYTERM", eventOutcome: "QUALITY_TERM" };
+    case "40": return { redirectResult: "OVERQUOTA",   eventOutcome: "OVER_QUOTA" };
+    case "70": return { redirectResult: "CLOSE",       eventOutcome: "SURVEY_CLOSE" };
+    default:   return { redirectResult: null, eventOutcome: null };
   }
 }
 
-/** Replace [identifier] or id/rid=identifier in supplier URLs */
+/** Replace [identifier] in supplier URLs */
 function fillIdentifier(rawUrl: string, supplierIdentifier: string) {
   try {
     const u = new URL(rawUrl);
-    // Replace any query value that literally contains [identifier]
     u.searchParams.forEach((v, k) => {
       if (/\[identifier\]/i.test(v)) {
         u.searchParams.set(k, v.replace(/\[identifier\]/gi, supplierIdentifier));
       }
-      if (['id', 'rid'].includes(k.toLowerCase()) && v.toLowerCase() === 'identifier') {
+      if (["id", "rid"].includes(k.toLowerCase()) && v.toLowerCase() === "identifier") {
         u.searchParams.set(k, supplierIdentifier);
       }
     });
-    let out = u.toString();
-    out = out.replace(/\[identifier\]/gi, supplierIdentifier);
-    return out;
+    let s = u.toString();
+    s = s.replace(/\[identifier\]/gi, supplierIdentifier);
+    return s;
   } catch {
-    // If invalid URL, do a best-effort string replace
     return rawUrl
       .replace(/\[identifier\]/gi, supplierIdentifier)
-      .replace(/([?&])(id|rid)=identifier/gi, `$1$2=${supplierIdentifier}`);
+      .replace(/(id|rid)=identifier/gi, `$1=${supplierIdentifier}`);
   }
 }
-
-// Map outcome → the single supplier URL column we need
-const fieldMap = {
-  COMPLETE: 'completeUrl',
-  TERMINATE: 'terminateUrl',
-  OVER_QUOTA: 'overQuotaUrl',
-  QUALITY_TERM: 'qualityTermUrl',
-  SURVEY_CLOSE: 'surveyCloseUrl',
-} as const;
-type Outcome = keyof typeof fieldMap;
-type SupplierUrlKey = (typeof fieldMap)[Outcome];
 
 export async function GET(req: Request) {
   const prisma = getPrisma();
 
   try {
-    const url = new URL(req.url);
-    const auth = (url.searchParams.get('auth') || '').trim();
-    const rid  = (url.searchParams.get('rid')  || '').trim();
+    const url  = new URL(req.url);
+    const auth = url.searchParams.get("auth");
+    const rid  = url.searchParams.get("rid"); // our pid
 
-    const status = authToStatus(auth);
-    if (!status) {
-      return NextResponse.json(
-        { ok: false, error: 'Invalid or missing auth' },
-        { status: 400, headers: { 'Cache-Control': 'no-store' } }
-      );
+    const mapped = mapAuth(auth);
+    if (!mapped.redirectResult || !mapped.eventOutcome) {
+      return NextResponse.json({ ok: false, error: "Invalid or missing auth" }, { status: 400 });
     }
     if (!rid) {
-      return NextResponse.json(
-        { ok: false, error: 'Missing rid' },
-        { status: 400, headers: { 'Cache-Control': 'no-store' } }
-      );
+      return NextResponse.json({ ok: false, error: "Missing rid" }, { status: 400 });
     }
 
-    // Find the original redirect (projectId, supplierId, respondentId)
-    const redirect = await prisma.surveyRedirect.findUnique({
+    // Load the redirect row if it exists
+    let redirect = await prisma.surveyRedirect.findUnique({
       where: { id: rid },
-      select: { projectId: true, supplierId: true, respondentId: true },
+      select: {
+        id: true,
+        projectId: true,
+        supplierId: true,
+        respondentId: true,
+        externalId: true,
+        destination: true,
+        result: true,
+      },
     });
 
-    // If we can't find the redirect, still show Thank You page (don’t block)
+    // If missing (edge write was lost), create a minimal one now
     if (!redirect) {
-      const fallback = new URL('/Thanks', url.origin);
-      fallback.searchParams.set('status', status);
-      fallback.searchParams.set('pid', rid);
-      return NextResponse.redirect(fallback.toString(), { status: 303 });
+      redirect = await prisma.surveyRedirect.create({
+        data: {
+          id: rid,
+          projectId: null as any,        // unknown here; safe to keep null (schema allows)
+          supplierId: null,
+          externalId: null,
+          destination: "",
+          result: mapped.redirectResult, // set outcome now
+        } as any,                        // cast since projectId is nullable in practice here
+        select: {
+          id: true, projectId: true, supplierId: true, respondentId: true, externalId: true, destination: true, result: true
+        },
+      });
+    } else if (redirect.result !== mapped.redirectResult) {
+      // Update the result so groupBy in supplier-maps works
+      await prisma.surveyRedirect.update({
+        where: { id: rid },
+        data: { result: mapped.redirectResult },
+      });
     }
 
-    // If we have a supplier, fetch ONLY the one URL we need plus identifiers
-    let finalSupplierUrl: string | null = null;
-    if (redirect.supplierId) {
-      const key: SupplierUrlKey = fieldMap[status];
-      // Build a minimal dynamic select
-      const select: Record<string, true> = { id: true, code: true };
-      select[key] = true;
+    const projectId  = redirect.projectId ?? null;
+    const supplierId = redirect.supplierId ?? null;
 
+    // Record SupplierRedirectEvent (best-effort)
+    try {
+      await prisma.supplierRedirectEvent.create({
+        data: {
+          projectId: projectId as any, // may be null; schema expects string — if you prefer, make it optional
+          supplierId,
+          respondentId: redirect.respondentId ?? null,
+          pid: rid,
+          outcome: mapped.eventOutcome as any,
+        },
+      });
+    } catch {
+      // ignore
+    }
+
+    // Optional bounce back to supplier specific URL
+    let nextUrl: string | null = null;
+    if (supplierId) {
       const supplier = await prisma.supplier.findUnique({
-        where: { id: redirect.supplierId },
-        select: select as any,
+        where: { id: supplierId },
+        select: {
+          code: true,
+          completeUrl: true,
+          terminateUrl: true,
+          overQuotaUrl: true,
+          qualityTermUrl: true,
+          surveyCloseUrl: true,
+        },
       });
 
       if (supplier) {
-        const supplierIdent = (supplier as any).code || (supplier as any).id || '';
-        const template = (supplier as any)[key] as string | null | undefined;
-        if (template && supplierIdent) {
-          finalSupplierUrl = fillIdentifier(template, String(supplierIdent));
-        }
+        let tpl: string | null = null;
+        const r = mapped.redirectResult;
+        if (r === "COMPLETE")    tpl = supplier.completeUrl;
+        else if (r === "TERMINATE")  tpl = supplier.terminateUrl;
+        else if (r === "OVERQUOTA")  tpl = supplier.overQuotaUrl;
+        else if (r === "QUALITYTERM")tpl = supplier.qualityTermUrl;
+        else if (r === "CLOSE")      tpl = supplier.surveyCloseUrl;
+
+        if (tpl) nextUrl = fillIdentifier(tpl, supplier.code || supplierId);
       }
     }
 
-    // Prepare the user-facing Thank You redirect (fast path)
-    const thanksUrl = new URL('/Thanks', url.origin);
-    thanksUrl.searchParams.set('status', status);
-    thanksUrl.searchParams.set('pid', rid);
-    if (finalSupplierUrl) thanksUrl.searchParams.set('next', finalSupplierUrl);
+    // Redirect to your /Thanks UI with status + pid (+ optional next)
+    const thanksUrl = new URL("/Thanks", url.origin);
+    thanksUrl.searchParams.set("status", mapped.redirectResult);
+    thanksUrl.searchParams.set("pid", rid);
+    if (nextUrl) thanksUrl.searchParams.set("next", nextUrl);
 
-    const res = NextResponse.redirect(thanksUrl.toString(), { status: 303 });
-
-    // Fire-and-forget: log the supplier outcome (don’t block the redirect)
-    prisma.supplierRedirectEvent.create({
-      data: {
-        projectId: redirect.projectId,
-        supplierId: redirect.supplierId ?? null,
-        respondentId: redirect.respondentId ?? null,
-        pid: rid,
-        outcome: status, // enum
-      },
-    }).catch(() => { /* ignore logging errors */ });
-
-    return res;
+    return NextResponse.redirect(thanksUrl.toString(), { status: 302 });
   } catch (e: any) {
-    return NextResponse.json(
-      { ok: false, error: e?.message || 'server error' },
-      { status: 500, headers: { 'Cache-Control': 'no-store' } }
-    );
+    return NextResponse.json({ ok: false, error: e?.message || "server error" }, { status: 500 });
   }
 }
