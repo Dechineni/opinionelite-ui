@@ -79,10 +79,11 @@ export async function GET(
 
   // 0) try cache first
   // We key by the raw path param so SR0001 and its DB id can both cache.
-  let cached = memGet(`live:${projectId}`);
+  const cached = memGet(`live:${projectId}`);
 
   // 1) read project (short timeout). If it times out, fall back to cache.
-  let projectIdReal = projectId;
+  let projectIdReal = projectId; // will be normalized to DB id when we resolve it
+  let haveRealId = false;
   let template = cached ?? "";
 
   if (!cached) {
@@ -92,6 +93,7 @@ export async function GET(
         return NextResponse.json({ error: "Project not found." }, { status: 404 });
       }
       projectIdReal = project.id;
+      haveRealId = true;
       template = (project.surveyLiveUrl || "").trim();
       if (!template) {
         return NextResponse.json(
@@ -111,7 +113,7 @@ export async function GET(
             : "Failed to resolve project survey link.";
         return NextResponse.json({ error: msg }, { status: 504 });
       }
-      // we have a cached template; proceed using it
+      // we have a cached template; proceed using it (but skip DB logging below)
     }
   }
 
@@ -148,23 +150,21 @@ export async function GET(
     absolute.searchParams.set("pid", pid);
   }
 
-  // 5) Redirect immediately
-  const res = NextResponse.redirect(absolute.toString(), { status: 302 });
-
-  // 6) fire-and-forget minimal redirect log
-  if (LOG_REDIRECT) {
-    prisma.surveyRedirect
-      .create({
-        data: {
-          id: pid,
-          projectId: projectIdReal,
-          supplierId: supplierId || null,
-          externalId: identifier || null,
-          destination: absolute.toString(),
-        },
-      })
-      .catch(() => {});
+  // 5) Persist redirect BEFORE responding (idempotent). Only when we have the real DB id.
+  if (LOG_REDIRECT && haveRealId) {
+    await prisma.surveyRedirect.upsert({
+      where: { id: pid },
+      update: { destination: absolute.toString() },
+      create: {
+        id: pid,
+        projectId: projectIdReal,            // required FK → real DB id
+        supplierId: supplierId || null,
+        externalId: identifier || null,
+        destination: absolute.toString(),
+      },
+    });
   }
 
-  return res;
+  // 6) Now return the redirect
+  return NextResponse.redirect(absolute.toString(), { status: 302 });
 }
