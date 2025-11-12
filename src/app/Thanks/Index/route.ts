@@ -85,8 +85,6 @@ export async function GET(req: Request) {
       });
     }
 
-    // If still missing, we can't fabricate one because projectId is required in schema.
-    // Show a friendly error so you can see it in the UI/logs.
     if (!redirect) {
       return NextResponse.json(
         { ok:false, error:"Redirect context not found. (pid/externalId mismatch)"},
@@ -94,7 +92,7 @@ export async function GET(req: Request) {
       );
     }
 
-    const pid        = redirect.id;                  // the canonical 20-char id
+    const pid        = redirect.id;
     const projectId  = redirect.projectId ?? null;
     const supplierId = redirect.supplierId ?? null;
     const externalId = redirect.externalId ?? null;
@@ -113,7 +111,6 @@ export async function GET(req: Request) {
         });
         respondentId = r.id;
       } else {
-        // supplierId null path
         const existing = await prisma.respondent.findFirst({
           where: { projectId, externalId, supplierId: null },
           select: { id: true },
@@ -128,15 +125,13 @@ export async function GET(req: Request) {
           respondentId = created.id;
         }
       }
-
-      // best-effort backfill (no need to await block the response path)
       prisma.surveyRedirect.update({
         where: { id: pid },
         data: { respondentId },
       }).catch(() => {});
     }
 
-    // 3) Persist the outcome on SurveyRedirect so reporting matches
+    // 3) Persist the outcome on SurveyRedirect so reporting matches (if you keep grouping from this table)
     if (redirect.result !== mapped.redirectResult) {
       await prisma.surveyRedirect.update({
         where: { id: pid },
@@ -144,11 +139,17 @@ export async function GET(req: Request) {
       });
     }
 
-    // 4) Write SupplierRedirectEvent so the Supplier Mapped table can groupBy outcome
+    // 4) Write SupplierRedirectEvent idempotently (one row per pid)
     if (projectId) {
-      prisma.supplierRedirectEvent.create({
-        data: {
-          projectId,                      // we have it here now
+      prisma.supplierRedirectEvent.upsert({
+        where: { pid }, // unique
+        update: {
+          outcome: mapped.eventOutcome as any,
+          respondentId: respondentId ?? null,
+          supplierId: supplierId ?? null,
+        },
+        create: {
+          projectId,
           supplierId: supplierId ?? null,
           respondentId: respondentId ?? null,
           pid,

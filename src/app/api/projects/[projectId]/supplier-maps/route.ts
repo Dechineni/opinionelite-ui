@@ -78,35 +78,40 @@ export async function GET(
   const projId = await resolveProjectId(projectKey);
   if (!projId) return badJSON("Project not found", 404);
 
-  // 1) Base maps + supplier info (minimal include)
+  // 1) Base maps + supplier info
   const maps = await prisma.projectSupplierMap.findMany({
     where: { projectId: projId },
     orderBy: { createdAt: "asc" },
     include: { supplier: { select: { id: true, code: true, name: true } } },
   });
 
-  // 2) Aggregate results per supplier (single groupBy)
+  // 2) Aggregate results from SupplierRedirectEvent (idempotent per pid)
   let bySupplier: Record<string, Record<string, number>> = {};
   try {
-    const agg = await prisma.surveyRedirect.groupBy({
-      by: ["supplierId", "result"],
-      where: {
-        projectId: projId,
-        supplierId: { not: null },
-        result: { not: null },
-      },
+    const agg = await prisma.supplierRedirectEvent.groupBy({
+      by: ["supplierId", "outcome"],
+      where: { projectId: projId, supplierId: { not: null } },
       _count: { _all: true },
     });
 
     bySupplier = agg.reduce((acc, row) => {
-      if (!row.supplierId || !row.result) return acc;
+      if (!row.supplierId || !row.outcome) return acc;
       const sid = row.supplierId;
       acc[sid] ??= {};
-      acc[sid][row.result] = row._count._all;
+      // map to UI keys
+      const key =
+        row.outcome === "COMPLETE"     ? "COMPLETE"   :
+        row.outcome === "TERMINATE"    ? "TERMINATE"  :
+        row.outcome === "OVER_QUOTA"   ? "OVERQUOTA"  :
+        row.outcome === "DROP_OUT"     ? "DROPOUT"    :
+        row.outcome === "QUALITY_TERM" ? "QUALITYTERM":
+        row.outcome === "SURVEY_CLOSE" ? "CLOSE"      :
+        String(row.outcome);
+      acc[sid][key] = row._count._all;
       return acc;
     }, {} as Record<string, Record<string, number>>);
   } catch {
-    // ignore aggregation issues; counts will be zeroed
+    // ignore
   }
 
   const items = maps.map((m) => {
@@ -141,7 +146,7 @@ export async function GET(
       complete,
       terminate,
       overQuota,
-      dropOut: 0, // unchanged per your UI
+      dropOut: 0, // (you can wire DROP_OUT if/when you start recording it)
       qualityTerm,
     };
   });
@@ -150,7 +155,6 @@ export async function GET(
 }
 
 /* ---------------------------------- POST --------------------------------- */
-/** Create a supplier map (accepts project id or code in the URL). */
 export async function POST(
   req: Request,
   ctx: { params: Promise<{ projectId: string }> }

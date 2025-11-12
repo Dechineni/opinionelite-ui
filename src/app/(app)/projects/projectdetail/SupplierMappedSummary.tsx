@@ -1,3 +1,4 @@
+// FILE: src/app/(app)/projects/projectdetail/SupplierMappedSummary.tsx
 "use client";
 export const runtime = 'edge';
 

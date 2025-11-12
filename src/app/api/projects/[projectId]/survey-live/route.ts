@@ -74,11 +74,11 @@ export async function GET(
   const { projectId } = await ctx.params;
 
   const url = new URL(req.url);
-  const supplierId = (url.searchParams.get("supplierId") || "").trim();
+  const supplierIdRaw = (url.searchParams.get("supplierId") || "").trim();
+  const supplierIdOrNull = supplierIdRaw === "" ? null : supplierIdRaw;
   const identifier = (url.searchParams.get("id") || "").trim();
 
   // 0) try cache first
-  // We key by the raw path param so SR0001 and its DB id can both cache.
   const cached = memGet(`live:${projectId}`);
 
   // 1) read project (short timeout). If it times out, fall back to cache.
@@ -106,22 +106,48 @@ export async function GET(
       memPut(`live:${project.id}`, template);
     } catch (e: any) {
       if (!cached) {
-        // first load, nothing cached → return fast instead of hanging
         const msg =
           e?.message === "db-timeout"
             ? "Database timeout while resolving survey link."
             : "Failed to resolve project survey link.";
         return NextResponse.json({ error: msg }, { status: 504 });
       }
-      // we have a cached template; proceed using it (but skip DB logging below)
+      // proceed with cached template
     }
   }
+
+  // --- REUSE GUARD ---------------------------------------------------------
+  // If this (projectId, supplierId, externalId) was already used (has result),
+  // OR a very recent redirect exists (5 min), don't mint a fresh pid again.
+  if (identifier && haveRealId) {
+    const prior = await prisma.surveyRedirect.findFirst({
+      where: {
+        projectId: projectIdReal,
+        externalId: identifier,
+        supplierId: supplierIdOrNull,
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, result: true, createdAt: true },
+    });
+
+    if (prior) {
+      const used = !!prior.result;
+      const recent = !used && Date.now() - new Date(prior.createdAt).getTime() < 5 * 60 * 1000;
+      if (used || recent) {
+        const thanks = new URL("/Thanks", url.origin);
+        thanks.searchParams.set("status", "CLOSE");
+        thanks.searchParams.set("pid", prior.id);
+        return NextResponse.redirect(thanks.toString(), { status: 302 });
+      }
+    }
+  }
+  // -------------------------------------------------------------------------
 
   // 2) Prepare redirect URL
   const pid = id20();
   const replaced = replaceTokens(template, {
     projectId: projectIdReal, // normalize to DB id when we had it
-    supplierId,
+    supplierId: supplierIdOrNull ?? "",
     identifier,
     pid,
   });
@@ -145,23 +171,19 @@ export async function GET(
     return NextResponse.json({ error: "Live URL must use http(s) scheme." }, { status: 400 });
   }
 
-  // 4) ensure pid
-  if (!absolute.searchParams.has("pid")) {
-    absolute.searchParams.set("pid", pid);
-  }
-
-  // keep rid aligned to pid so /Thanks gets the correct id
+  // 4) ensure pid + rid on outbound link
+  if (!absolute.searchParams.has("pid")) absolute.searchParams.set("pid", pid);
   absolute.searchParams.set("rid", pid);
 
-  // 5) Persist redirect BEFORE responding (idempotent). Only when we have the real DB id.
+  // 5) Persist redirect BEFORE responding (idempotent) when we have the real DB id.
   if (LOG_REDIRECT && haveRealId) {
     await prisma.surveyRedirect.upsert({
       where: { id: pid },
       update: { destination: absolute.toString() },
       create: {
         id: pid,
-        projectId: projectIdReal,            // required FK → real DB id
-        supplierId: supplierId || null,
+        projectId: projectIdReal,
+        supplierId: supplierIdOrNull,
         externalId: identifier || null,
         destination: absolute.toString(),
       },

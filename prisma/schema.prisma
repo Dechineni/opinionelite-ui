@@ -327,6 +327,9 @@ model SurveyRedirect {
 
   @@index([projectId])
   @@index([respondentId])
+
+  // speeds up the reuse guard
+  @@index([projectId, supplierId, externalId])
 }
 
 // schema.prisma – add below your existing models
@@ -351,9 +354,9 @@ model SupplierRedirectEvent {
   respondentId String?
   respondent   Respondent? @relation(fields: [respondentId], references: [id], onDelete: SetNull)
 
-  /// The unique pid we generated when going OUT to the provider
-  pid String? // SurveyRedirect.id (20 chars)
-
+  // CHANGED: make pid non-null and unique so we can upsert idempotently
+  pid       String  @unique
+  
   outcome   RedirectOutcome
   createdAt DateTime        @default(now())
 
