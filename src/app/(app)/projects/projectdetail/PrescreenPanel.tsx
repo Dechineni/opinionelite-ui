@@ -97,7 +97,7 @@ const TEXT_TYPE_OPTIONS: { value: TextType; label: string }[] = [
 function SuccessDialog({
   open,
   onClose,
-  message = "Mapped Successfully!",
+  message = "Created Successfully!",
 }: {
   open: boolean;
   onClose: () => void;
@@ -567,7 +567,7 @@ export default function PrescreenPanel({ projectId }: { projectId: string }) {
 
   // Saved list + dialog
   const [successOpen, setSuccessOpen] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("Mapped Successfully!");
+  const [successMessage, setSuccessMessage] = useState("Created Successfully!");
   const [saved, setSaved] = useState<SavedRow[]>([]);
 
   // Edit modal
@@ -707,7 +707,7 @@ export default function PrescreenPanel({ projectId }: { projectId: string }) {
       });
       if (!res.ok) throw new Error(await res.text());
 
-      setSuccessMessage(fromEdit ? "Edited successfully!" : "Mapped Successfully!");
+      setSuccessMessage(fromEdit ? "Edited successfully!" : "Created Successfully!");
       setSuccessOpen(true);
       setFromEdit(false);
 
