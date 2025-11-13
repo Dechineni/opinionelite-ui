@@ -1,6 +1,5 @@
-// FILE: src/app/Prescreen/page.tsx
 "use client";
-export const runtime = 'edge';
+export const runtime = "edge";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -26,8 +25,12 @@ function PrescreenInner() {
   const router = useRouter();
 
   const projectId = params.get("projectId") || "";
+  // Support both ?identifier=… (new) and ?id=… (legacy)
+  const rid = params.get("identifier") || params.get("id") || "";
+  // supplierId is optional in DB; don’t block the page if it’s absent
   const supplierId = params.get("supplierId") || "";
-  const rid = params.get("id") || ""; // respondent identifier
+  // When provided by /survey-live gate, this is the “resume” URL after prescreen
+  const nextUrl = params.get("next") || "";
 
   const [loading, setLoading] = useState(true);
   const [questions, setQuestions] = useState<PrescreenQuestion[]>([]);
@@ -35,10 +38,15 @@ function PrescreenInner() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Early guard: we at least need projectId + rid
   useEffect(() => {
-    if (!projectId || !supplierId || !rid) return;
-  }, [projectId, supplierId, rid]);
+    if (!projectId || !rid) {
+      setError("Missing project or identifier.");
+      setLoading(false);
+    }
+  }, [projectId, rid]);
 
+  // Load pending questions
   useEffect(() => {
     let cancelled = false;
 
@@ -47,10 +55,13 @@ function PrescreenInner() {
       setLoading(true);
       setError(null);
       try {
+        const qs = new URLSearchParams();
+        if (supplierId) qs.set("supplierId", supplierId); // only send if present
+
         const res = await fetch(
           `/api/projects/${encodeURIComponent(projectId)}/prescreen/${encodeURIComponent(
             rid
-          )}/pending?supplierId=${encodeURIComponent(supplierId)}`,
+          )}/pending${qs.toString() ? `?${qs.toString()}` : ""}`,
           { cache: "no-store" }
         );
         if (!res.ok) throw new Error(await res.text());
@@ -96,16 +107,27 @@ function PrescreenInner() {
     });
   }, [questions, answers]);
 
+  // Helper: go to “next” (preferred) or fall back to /survey-live
+  function continueToSurveyLive() {
+    if (nextUrl) {
+      window.location.href = nextUrl; // preserve full URL including any params added by gate
+      return;
+    }
+    const fallback = new URL(
+      `/api/projects/${encodeURIComponent(projectId)}/survey-live`,
+      window.location.origin
+    );
+    if (supplierId) fallback.searchParams.set("supplierId", supplierId);
+    fallback.searchParams.set("id", rid);
+    window.location.href = fallback.toString();
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!projectId || !rid || submitting) return;
 
     if (questions.length === 0) {
-      router.replace(
-        `/api/projects/${encodeURIComponent(projectId)}/survey-live?supplierId=${encodeURIComponent(
-          supplierId
-        )}&id=${encodeURIComponent(rid)}`
-      );
+      continueToSurveyLive();
       return;
     }
 
@@ -133,22 +155,17 @@ function PrescreenInner() {
         }
       );
 
-      window.location.href = `/api/projects/${encodeURIComponent(
-        projectId
-      )}/survey-live?supplierId=${encodeURIComponent(supplierId)}&id=${encodeURIComponent(rid)}`;
+      continueToSurveyLive();
     } catch (e: any) {
       setError(e?.message || "Submit failed");
       setSubmitting(false);
     }
   }
 
+  // If there are no pending questions, auto-continue
   useEffect(() => {
     if (!loading && questions.length === 0 && projectId && rid) {
-      router.replace(
-        `/api/projects/${encodeURIComponent(projectId)}/survey-live?supplierId=${encodeURIComponent(
-          supplierId
-        )}&id=${encodeURIComponent(rid)}`
-      );
+      continueToSurveyLive();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, questions.length, projectId, rid]);
@@ -165,7 +182,7 @@ function PrescreenInner() {
         {questions.map((q, idx) => (
           <div key={q.id} className="rounded-lg border border-slate-200 p-4">
             <div className="mb-3 text-sm text-slate-600">
-              {idx + 1}.{q.question}
+              {idx + 1}. {q.question}
             </div>
 
             {q.controlType === "TEXT" && (

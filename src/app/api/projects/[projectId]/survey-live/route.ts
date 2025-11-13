@@ -26,15 +26,12 @@ function isAllowedScheme(u: URL) {
 }
 
 /* ----------------------- ultra-light memory cache ----------------------- */
-/** Per-isolate cache so we can survive brief DB blips without stalling */
 type CacheEntry = { v: string; exp: number };
 type MemCache = Map<string, CacheEntry>;
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const G: any = globalThis as any;
 const MEM_TTL_MS = 5 * 60 * 1000; // 5 min
 const mem: MemCache = (G.__surveyLiveCache ??= new Map<string, CacheEntry>());
-
 function memGet(k: string): string | null {
   const e = mem.get(k);
   if (!e) return null;
@@ -65,6 +62,8 @@ async function loadProjectBasicsWithTimeout(
 
 /** Env flag: set REDIRECT_LOG="off" to skip DB log writes */
 const LOG_REDIRECT = (process.env.REDIRECT_LOG || "on").toLowerCase() !== "off";
+/** Where the prescreen page lives (respect your capital P route) */
+const PRESCREEN_PAGE_PATH = process.env.PRESCREEN_PAGE_PATH || "/Prescreen";
 
 export async function GET(
   req: Request,
@@ -75,14 +74,18 @@ export async function GET(
 
   const url = new URL(req.url);
   const supplierIdRaw = (url.searchParams.get("supplierId") || "").trim();
-  const supplierIdOrNull = supplierIdRaw === "" ? null : supplierIdRaw;
-  const identifier = (url.searchParams.get("id") || "").trim();
+  const identifier = (url.searchParams.get("id") || "").trim(); // supplier's respondent id
+  const supplierId = supplierIdRaw === "" ? null : supplierIdRaw;
+
+  if (!identifier) {
+    return NextResponse.json({ error: "Missing id (identifier)" }, { status: 400 });
+  }
 
   // 0) try cache first
-  const cached = memGet(`live:${projectId}`);
+  let cached = memGet(`live:${projectId}`);
 
   // 1) read project (short timeout). If it times out, fall back to cache.
-  let projectIdReal = projectId; // will be normalized to DB id when we resolve it
+  let projectIdReal = projectId; // normalized to DB id once resolved
   let haveRealId = false;
   let template = cached ?? "";
 
@@ -101,7 +104,6 @@ export async function GET(
           { status: 400 }
         );
       }
-      // warm cache for both keys (code/id)
       memPut(`live:${projectId}`, template);
       memPut(`live:${project.id}`, template);
     } catch (e: any) {
@@ -112,50 +114,22 @@ export async function GET(
             : "Failed to resolve project survey link.";
         return NextResponse.json({ error: msg }, { status: 504 });
       }
-      // proceed with cached template
+      // proceed using cached template (skip DB work below)
     }
   }
 
-  // --- REUSE GUARD ---------------------------------------------------------
-  // If this (projectId, supplierId, externalId) was already used (has result),
-  // OR a very recent redirect exists (5 min), don't mint a fresh pid again.
-  if (identifier && haveRealId) {
-    const prior = await prisma.surveyRedirect.findFirst({
-      where: {
-        projectId: projectIdReal,
-        externalId: identifier,
-        supplierId: supplierIdOrNull,
-      },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, result: true, createdAt: true },
-    });
-
-    if (prior) {
-      const used = !!prior.result;
-      const recent = !used && Date.now() - new Date(prior.createdAt).getTime() < 5 * 60 * 1000;
-      if (used || recent) {
-        const thanks = new URL("/Thanks", url.origin);
-        thanks.searchParams.set("status", "CLOSE");
-        thanks.searchParams.set("pid", prior.id);
-        return NextResponse.redirect(thanks.toString(), { status: 302 });
-      }
-    }
-  }
-  // -------------------------------------------------------------------------
-
-  // 2) Prepare redirect URL
+  // 2) Prepare the final client URL (we may pass it as `next` if prescreen is pending)
   const pid = id20();
   const replaced = replaceTokens(template, {
-    projectId: projectIdReal, // normalize to DB id when we had it
-    supplierId: supplierIdOrNull ?? "",
+    projectId: projectIdReal,
+    supplierId: supplierId || "",
     identifier,
     pid,
   });
 
-  // 3) Ensure absolute URL (fallback to SURVEY_PROVIDER_BASE_URL)
-  let absolute: URL;
+  let clientUrl: URL;
   try {
-    absolute = new URL(replaced);
+    clientUrl = new URL(replaced);
   } catch {
     const base = (process.env.SURVEY_PROVIDER_BASE_URL || "").trim();
     if (!base) {
@@ -164,32 +138,90 @@ export async function GET(
         { status: 500 }
       );
     }
-    absolute = new URL(replaced, base);
+    clientUrl = new URL(replaced, base);
   }
-
-  if (!isAllowedScheme(absolute)) {
+  if (!isAllowedScheme(clientUrl)) {
     return NextResponse.json({ error: "Live URL must use http(s) scheme." }, { status: 400 });
   }
+  // ensure pid and rid for the client provider
+  if (!clientUrl.searchParams.has("pid")) clientUrl.searchParams.set("pid", pid);
+  clientUrl.searchParams.set("rid", pid);
 
-  // 4) ensure pid + rid on outbound link
-  if (!absolute.searchParams.has("pid")) absolute.searchParams.set("pid", pid);
-  absolute.searchParams.set("rid", pid);
+  // 3) PRESCREEN GATE — only if we have a real project id
+  let mustPrescreen = false;
+  let respondentId: string | null = null;
 
-  // 5) Persist redirect BEFORE responding (idempotent) when we have the real DB id.
+  if (haveRealId) {
+    // a) are there any prescreen questions for this project?
+    const questionCount = await prisma.prescreenQuestion.count({ where: { projectId: projectIdReal } });
+
+    if (questionCount > 0) {
+      // b) ensure respondent (NULL cannot be used in composite upsert)
+      if (supplierId === null) {
+        const existing = await prisma.respondent.findFirst({
+          where: { projectId: projectIdReal, externalId: identifier, supplierId: null },
+          select: { id: true },
+        });
+        if (existing) {
+          respondentId = existing.id;
+        } else {
+          const created = await prisma.respondent.create({
+            data: { projectId: projectIdReal, externalId: identifier, supplierId: null },
+            select: { id: true },
+          });
+          respondentId = created.id;
+        }
+      } else {
+        const up = await prisma.respondent.upsert({
+          where: {
+            projectId_externalId_supplierId: {
+              projectId: projectIdReal,
+              externalId: identifier,
+              supplierId: supplierId,
+            },
+          },
+          update: {},
+          create: { projectId: projectIdReal, externalId: identifier, supplierId: supplierId },
+          select: { id: true },
+        });
+        respondentId = up.id;
+      }
+
+      // c) how many have they already answered?
+      const answeredForRespondent = await prisma.prescreenAnswer.count({
+        where: { respondentId: respondentId! },
+      });
+
+      mustPrescreen = answeredForRespondent < questionCount;
+    }
+  }
+
+  // 4) Always upsert a SurveyRedirect row for this pid (so /Thanks can resolve later)
   if (LOG_REDIRECT && haveRealId) {
     await prisma.surveyRedirect.upsert({
       where: { id: pid },
-      update: { destination: absolute.toString() },
+      update: { destination: clientUrl.toString() },
       create: {
         id: pid,
         projectId: projectIdReal,
-        supplierId: supplierIdOrNull,
+        supplierId: supplierId || null,
         externalId: identifier || null,
-        destination: absolute.toString(),
+        destination: clientUrl.toString(),
       },
     });
   }
 
-  // 6) Now return the redirect
-  return NextResponse.redirect(absolute.toString(), { status: 302 });
+  // 5) If prescreen is required, send to /Prescreen with a `next` that points to the clientUrl
+  if (mustPrescreen) {
+    const prescreen = new URL(PRESCREEN_PAGE_PATH, url.origin);
+    prescreen.searchParams.set("projectId", projectIdReal);
+    if (supplierId) prescreen.searchParams.set("supplierId", supplierId);
+    // new param name is `identifier`; your page also accepts legacy `id`
+    prescreen.searchParams.set("identifier", identifier);
+    prescreen.searchParams.set("next", clientUrl.toString());
+    return NextResponse.redirect(prescreen.toString(), { status: 302 });
+  }
+
+  // 6) Otherwise, go straight to client
+  return NextResponse.redirect(clientUrl.toString(), { status: 302 });
 }
