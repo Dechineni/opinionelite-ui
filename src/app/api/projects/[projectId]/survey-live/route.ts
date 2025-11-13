@@ -4,6 +4,15 @@ export const preferredRegion = "auto";
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 
+const isUniqueViolation = (e: any) => {
+  const msg = String(e?.message || "");
+  return (
+    (e && e.code === "P2002") ||
+    /Unique constraint failed/i.test(msg) ||
+    /duplicate key value violates unique constraint/i.test(msg)
+  );
+};
+
 /** Generate a 20-char URL-safe id (Edge-safe, no deps) */
 function id20() {
   const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -25,7 +34,6 @@ function isAllowedScheme(u: URL) {
 }
 
 /* ----------------------- ultra-light memory cache ----------------------- */
-/** Per-isolate cache so we can survive brief DB blips without stalling */
 type CacheEntry = { v: string; exp: number };
 type MemCache = Map<string, CacheEntry>;
 
@@ -59,37 +67,11 @@ async function loadProjectBasicsWithTimeout(
       select: { id: true, surveyLiveUrl: true },
     }),
     new Promise<null>((_, rej) => setTimeout(() => rej(new Error("db-timeout")), ms)),
-  ]) as Promise<{ id: string; surveyLiveUrl: string | null } | null>;
+  ]) as Promise<{ id: string; surveyLiveUrl: string | null }>;
 }
 
 /** Env flag: set REDIRECT_LOG="off" to skip DB log writes */
 const LOG_REDIRECT = (process.env.REDIRECT_LOG || "on").toLowerCase() !== "off";
-
-/** Helper: best-effort write that never throws up the stack in HTTP mode */
-async function safeLogRedirect(prisma: ReturnType<typeof getPrisma>, data: {
-  id: string;
-  projectId: string;
-  supplierId: string | null;
-  externalId: string | null;
-  destination: string;
-}) {
-  if (!LOG_REDIRECT) return;
-  try {
-    await prisma.surveyRedirect.upsert({
-      where: { id: data.id },
-      update: { destination: data.destination },
-      create: {
-        id: data.id,
-        projectId: data.projectId,
-        supplierId: data.supplierId,
-        externalId: data.externalId,
-        destination: data.destination,
-      },
-    });
-  } catch (_e) {
-    // Never block user flow because of a logging failure in HTTP mode
-  }
-}
 
 export async function GET(
   req: Request,
@@ -99,19 +81,18 @@ export async function GET(
   const { projectId } = await ctx.params;
 
   const url = new URL(req.url);
-  const supplierId = (url.searchParams.get("supplierId") || "").trim() || null;
-  const identifier = (url.searchParams.get("id") || "").trim(); // supplier’s respondent id
+  const supplierId = (url.searchParams.get("supplierId") || "").trim();
+  const identifier = (url.searchParams.get("id") || "").trim();
 
-  if (!identifier) {
-    return NextResponse.json({ error: "Missing id (supplier respondent identifier)." }, { status: 400 });
-  }
+  // 0) try cache first
+  const cached = memGet(`live:${projectId}`);
 
-  // ---------------- 1) Resolve project + live URL (with cache/timeout) ----------------
-  let projectIdReal = projectId; // normalize to DB id when we resolve it
-  let template = memGet(`live:${projectId}`) ?? "";
+  // 1) read project (short timeout). If it times out, fall back to cache.
+  let projectIdReal = projectId; // will be normalized to DB id when we resolve it
   let haveRealId = false;
+  let template = cached ?? "";
 
-  if (!template) {
+  if (!cached) {
     try {
       const project = await loadProjectBasicsWithTimeout(prisma, projectId);
       if (!project) {
@@ -126,122 +107,74 @@ export async function GET(
           { status: 400 }
         );
       }
+      // warm cache for both keys (code/id)
       memPut(`live:${projectId}`, template);
       memPut(`live:${project.id}`, template);
     } catch (e: any) {
-      const msg = e?.message === "db-timeout"
-        ? "Database timeout while resolving survey link."
-        : "Failed to resolve project survey link.";
-      return NextResponse.json({ error: msg }, { status: 504 });
-    }
-  } else {
-    // We still want the real DB id if projectId was a code; fetch cheaply
-    try {
-      const p = await prisma.project.findFirst({
-        where: { OR: [{ id: projectId }, { code: projectId }] },
-        select: { id: true },
-      });
-      if (p?.id) {
-        projectIdReal = p.id;
-        haveRealId = true;
+      if (!cached) {
+        const msg =
+          e?.message === "db-timeout"
+            ? "Database timeout while resolving survey link."
+            : "Failed to resolve project survey link.";
+        return NextResponse.json({ error: msg }, { status: 504 });
       }
-    } catch {
-      /* ignore — we’ll proceed with the path value */
+      // we have a cached template; proceed using it (but skip DB logging below)
     }
   }
 
-  // ---------------- 2) PRESCREEN GATE (reads only; no transactions) ----------------
-  try {
-    // Count questions for this project.
-    const totalQuestions = await prisma.prescreenQuestion.count({
-      where: { projectId: projectIdReal },
-    });
-
-    if (totalQuestions > 0) {
-      // Ensure/resolve respondent WITHOUT any transactions.
-      // NULL cannot be used in composite upserts → follow the two-path approach.
-      let respondentId: string | null = null;
-
-      if (supplierId === null) {
-        const existing = await prisma.respondent.findFirst({
-          where: { projectId: projectIdReal, externalId: identifier, supplierId: null },
+  // 1.5) Ensure a respondent exists (best-effort, collision-safe)
+  if (haveRealId && identifier) {
+    try {
+      if (supplierId) {
+        const found = await prisma.respondent.findUnique({
+          where: {
+            projectId_externalId_supplierId: {
+              projectId: projectIdReal,
+              externalId: identifier,
+              supplierId,
+            },
+          },
           select: { id: true },
         });
-        if (existing) {
-          respondentId = existing.id;
-        } else {
+        if (!found) {
           try {
-            const created = await prisma.respondent.create({
-              data: { projectId: projectIdReal, externalId: identifier, supplierId: null },
-              select: { id: true },
+            await prisma.respondent.create({
+              data: { projectId: projectIdReal, externalId: identifier, supplierId },
             });
-            respondentId = created.id;
-          } catch {
-            // If creation fails in HTTP mode, still send user to prescreen;
-            // the prescreen page will attempt to ensure the row again.
+          } catch (e) {
+            if (!isUniqueViolation(e)) throw e;
           }
         }
       } else {
-        try {
-          const r = await prisma.respondent.upsert({
-            where: {
-              projectId_externalId_supplierId: {
-                projectId: projectIdReal,
-                externalId: identifier,
-                supplierId,
-              },
-            },
-            update: {},
-            create: { projectId: projectIdReal, externalId: identifier, supplierId },
-            select: { id: true },
-          });
-          respondentId = r.id;
-        } catch {
-          // Non-fatal — the prescreen page will handle ensuring the row.
+        const found = await prisma.respondent.findFirst({
+          where: { projectId: projectIdReal, externalId: identifier, supplierId: null },
+          select: { id: true },
+        });
+        if (!found) {
+          try {
+            await prisma.respondent.create({
+              data: { projectId: projectIdReal, externalId: identifier, supplierId: null },
+            });
+          } catch (e) {
+            if (!isUniqueViolation(e)) throw e;
+          }
         }
       }
-
-      // How many answers exist for this respondent?
-      let answeredCount = 0;
-      if (respondentId) {
-        answeredCount = await prisma.prescreenAnswer.count({
-          where: { respondentId },
-        });
-      } else {
-        // If we couldn't ensure respondent yet, treat as 0 answered to force prescreen.
-        answeredCount = 0;
-      }
-
-      if (answeredCount < totalQuestions) {
-        // There are pending prescreen questions → go to the Prescreen page NOW.
-        const prescreenUrl = new URL("/Prescreen", url.origin);
-        prescreenUrl.searchParams.set("projectId", projectId);
-        if (supplierId) prescreenUrl.searchParams.set("supplierId", supplierId);
-        prescreenUrl.searchParams.set("id", identifier);
-        return NextResponse.redirect(prescreenUrl.toString(), { status: 302 });
-      }
-      // else: all prescreen answers present → fall through to client live link
+    } catch {
+      // ignore — this is best-effort before redirect
     }
-  } catch {
-    // If anything goes wrong during the prescreen gate, be defensive and send to Prescreen.
-    // This avoids silently skipping prescreen due to a DB error.
-    const prescreenUrl = new URL("/Prescreen", url.origin);
-    prescreenUrl.searchParams.set("projectId", projectId);
-    if (supplierId) prescreenUrl.searchParams.set("supplierId", supplierId);
-    prescreenUrl.searchParams.set("id", identifier);
-    return NextResponse.redirect(prescreenUrl.toString(), { status: 302 });
   }
 
-  // ---------------- 3) Build the Client URL (pid, rid, token replacements) ----------------
+  // 2) Prepare redirect URL
   const pid = id20();
   const replaced = replaceTokens(template, {
-    projectId: projectIdReal, // normalized DB id
-    supplierId: supplierId ?? "",
+    projectId: projectIdReal, // normalize to DB id when we had it
+    supplierId,
     identifier,
     pid,
   });
 
-  // Ensure absolute URL (fallback to SURVEY_PROVIDER_BASE_URL)
+  // 3) Ensure absolute URL
   let absolute: URL;
   try {
     absolute = new URL(replaced);
@@ -260,21 +193,27 @@ export async function GET(
     return NextResponse.json({ error: "Live URL must use http(s) scheme." }, { status: 400 });
   }
 
-  // Force pid (and rid for providers that echo rid)
-  if (!absolute.searchParams.has("pid")) absolute.searchParams.set("pid", pid);
+  // 4) ensure pid and rid align
+  if (!absolute.searchParams.has("pid")) {
+    absolute.searchParams.set("pid", pid);
+  }
   absolute.searchParams.set("rid", pid);
 
-  // ---------------- 4) Best-effort logging of outbound redirect ----------------
-  if (haveRealId) {
-    await safeLogRedirect(prisma, {
-      id: pid,
-      projectId: projectIdReal,
-      supplierId,
-      externalId: identifier || null,
-      destination: absolute.toString(),
+  // 5) Persist redirect BEFORE responding (idempotent). Only when we have the real DB id.
+  if (LOG_REDIRECT && haveRealId) {
+    await prisma.surveyRedirect.upsert({
+      where: { id: pid },
+      update: { destination: absolute.toString() },
+      create: {
+        id: pid,
+        projectId: projectIdReal, // required FK → real DB id
+        supplierId: supplierId || null,
+        externalId: identifier || null,
+        destination: absolute.toString(),
+      },
     });
   }
 
-  // ---------------- 5) Go to client ----------------
+  // 6) Now return the redirect
   return NextResponse.redirect(absolute.toString(), { status: 302 });
 }

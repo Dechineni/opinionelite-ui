@@ -1,4 +1,3 @@
-// FILE: src/app/api/projects/[projectId]/prescreen/[identifier]/answers/route.ts
 export const runtime = "edge";
 export const preferredRegion = "auto";
 
@@ -7,6 +6,15 @@ import { getPrisma } from "@/lib/prisma";
 
 /** A tiny type so we don't import Prisma at runtime */
 type PrismaClientLike = ReturnType<typeof getPrisma>;
+
+const isUniqueViolation = (e: any) => {
+  const msg = String(e?.message || "");
+  return (
+    (e && e.code === "P2002") ||
+    /Unique constraint failed/i.test(msg) ||
+    /duplicate key value violates unique constraint/i.test(msg)
+  );
+};
 
 async function resolveProjectId(prisma: PrismaClientLike, projectIdOrCode: string) {
   const p = await prisma.project.findFirst({
@@ -68,26 +76,36 @@ export async function POST(
 
     const projId = await resolveProjectId(prisma, projectId);
 
-    // Ensure respondent (NULL cannot be used in composite upserts)
-    let respondentId: string;
+    // ---------- Ensure respondent (collision safe) ----------
+    let respondentId: string | null = null;
 
     if (supplierId === null) {
-      const existing = await prisma.respondent.findFirst({
+      const found = await prisma.respondent.findFirst({
         where: { projectId: projId, externalId: identifier, supplierId: null },
         select: { id: true },
       });
-
-      if (existing) {
-        respondentId = existing.id;
-      } else {
-        const created = await prisma.respondent.create({
-          data: { projectId: projId, externalId: identifier, supplierId: null },
-          select: { id: true },
-        });
-        respondentId = created.id;
+      if (found) respondentId = found.id;
+      else {
+        try {
+          const created = await prisma.respondent.create({
+            data: { projectId: projId, externalId: identifier, supplierId: null },
+            select: { id: true },
+          });
+          respondentId = created.id;
+        } catch (e) {
+          if (isUniqueViolation(e)) {
+            const again = await prisma.respondent.findFirst({
+              where: { projectId: projId, externalId: identifier, supplierId: null },
+              select: { id: true },
+            });
+            respondentId = again?.id ?? null;
+          } else {
+            throw e;
+          }
+        }
       }
     } else {
-      const r = await prisma.respondent.upsert({
+      const found = await prisma.respondent.findUnique({
         where: {
           projectId_externalId_supplierId: {
             projectId: projId,
@@ -95,11 +113,41 @@ export async function POST(
             supplierId,
           },
         },
-        create: { projectId: projId, externalId: identifier, supplierId },
-        update: { supplierId },
         select: { id: true },
       });
-      respondentId = r.id;
+      if (found) respondentId = found.id;
+      else {
+        try {
+          const created = await prisma.respondent.create({
+            data: { projectId: projId, externalId: identifier, supplierId },
+            select: { id: true },
+          });
+          respondentId = created.id;
+        } catch (e) {
+          if (isUniqueViolation(e)) {
+            const again = await prisma.respondent.findUnique({
+              where: {
+                projectId_externalId_supplierId: {
+                  projectId: projId,
+                  externalId: identifier,
+                  supplierId,
+                },
+              },
+              select: { id: true },
+            });
+            respondentId = again?.id ?? null;
+          } else {
+            throw e;
+          }
+        }
+      }
+    }
+
+    if (!respondentId) {
+      return NextResponse.json(
+        { error: "Failed to ensure respondent" },
+        { status: 500 }
+      );
     }
 
     // Write answers WITHOUT transactions, using small concurrency
@@ -110,14 +158,13 @@ export async function POST(
       const selectedValues = isArray
         ? (a.value as unknown[])
             .filter((v) => typeof v === "string")
-            .slice(0, 50) // cap multi-selects
+            .slice(0, 50)
             .map((v) => String(v))
         : [];
 
       const answerText = isArray ? null : String(a.value ?? "");
       const answerValue = isArray ? null : String(a.value ?? "");
 
-      // Each upsert stands alone; if one fails we skip it
       try {
         await prisma.prescreenAnswer.upsert({
           where: {

@@ -1,11 +1,10 @@
-// FILE: src/app/Survey/page.tsx
 "use client";
-export const runtime = 'edge';
+export const runtime = "edge";
 
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-// Avoid static prerendering for this page (it depends on client-side URL params)
+// This page depends on URL params, don't prerender.
 export const dynamic = "force-dynamic";
 
 function SurveyLandingInner() {
@@ -13,53 +12,64 @@ function SurveyLandingInner() {
   const router = useRouter();
 
   useEffect(() => {
-    const projectId = sp.get("projectId");
-    const supplierId = sp.get("supplierId") ?? "";
-    const id = sp.get("id") ?? "";
+    const projectId = sp.get("projectId") || "";
+    const supplierId = sp.get("supplierId") || "";
+    const id = sp.get("id") || "";
 
     if (!projectId || !id) return;
 
+    const toLive = () => {
+      window.location.href = `/api/projects/${encodeURIComponent(
+        projectId
+      )}/survey-live?supplierId=${encodeURIComponent(supplierId)}&id=${encodeURIComponent(id)}`;
+    };
+    const toPrescreen = () => {
+      router.replace(
+        `/Prescreen?projectId=${encodeURIComponent(projectId)}&supplierId=${encodeURIComponent(
+          supplierId
+        )}&id=${encodeURIComponent(id)}`
+      );
+    };
+
     (async () => {
       try {
-        // Ask API for pending prescreen questions for this respondent (supplier-scoped)
-        const pendingRes = await fetch(
+        // Single source of truth:
+        // This endpoint accepts project *id or code* and now also returns preScreenEnabled.
+        const res = await fetch(
           `/api/projects/${encodeURIComponent(projectId)}/prescreen/${encodeURIComponent(
             id
           )}/pending?supplierId=${encodeURIComponent(supplierId)}`,
           { cache: "no-store" }
         );
 
-        if (!pendingRes.ok) throw new Error(await pendingRes.text());
-        const pendingJson = await pendingRes.json();
-        const pending = Array.isArray(pendingJson?.items)
-          ? pendingJson.items
-          : Array.isArray(pendingJson)
-          ? pendingJson
-          : [];
+        if (!res.ok) {
+          // Any failure -> live link
+          toLive();
+          return;
+        }
 
-        if (pending.length > 0) {
-          // Go to Prescreen page (UI for questions)
-          router.replace(
-            `/Prescreen?projectId=${encodeURIComponent(projectId)}&supplierId=${encodeURIComponent(
-              supplierId
-            )}&id=${encodeURIComponent(id)}`
-          );
+        const json = await res.json();
+        const preScreenEnabled =
+          typeof json?.preScreenEnabled === "boolean" ? json.preScreenEnabled : false;
+
+        // If Prescreen is OFF, go straight to live regardless of stored questions
+        if (!preScreenEnabled) {
+          toLive();
+          return;
+        }
+
+        const items = Array.isArray(json?.items) ? json.items : Array.isArray(json) ? json : [];
+        if (items.length > 0) {
+          toPrescreen();
         } else {
-          // No pending → jump straight to provider live link
-          window.location.href = `/api/projects/${encodeURIComponent(
-            projectId
-          )}/survey-live?supplierId=${encodeURIComponent(supplierId)}&id=${encodeURIComponent(id)}`;
+          toLive();
         }
       } catch {
-        // On any failure, default to live link
-        window.location.href = `/api/projects/${encodeURIComponent(
-          projectId!
-        )}/survey-live?supplierId=${encodeURIComponent(supplierId)}&id=${encodeURIComponent(id!)}`;
+        toLive();
       }
     })();
   }, [sp, router]);
 
-  // No UI needed; we redirect
   return null;
 }
 
