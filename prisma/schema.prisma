@@ -330,6 +330,7 @@ model SurveyRedirect {
 
   // speeds up the reuse guard
   @@index([projectId, supplierId, externalId])
+  @@unique([projectId, supplierId, externalId], name: "SurveyRedirect_nat_unique")
 }
 
 // schema.prisma – add below your existing models
