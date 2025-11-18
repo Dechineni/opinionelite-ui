@@ -4,9 +4,14 @@ export const preferredRegion = "auto";
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 
-const isP2002 = (e: any) =>
-  (e && e.code === "P2002") ||
-  /P2002|Unique constraint failed/i.test(String(e?.message || e));
+const isP2002 = (e: any) => {
+  const msg = String(e?.message || "");
+  return (
+    (e && e.code === "P2002") ||
+    /Unique constraint failed/i.test(msg) ||
+    /duplicate key value violates unique constraint/i.test(msg)
+  );
+};
 
 function mapAuth(aRaw: string | null | undefined) {
   const a = (aRaw || "").toLowerCase().trim();
