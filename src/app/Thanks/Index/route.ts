@@ -236,23 +236,22 @@ export async function GET(req: Request) {
         .catch(() => {});
     }
 
-    // Write SupplierRedirectEvent (idempotent per pid)
+    // Write SupplierRedirectEvent (best-effort, but awaited so it actually runs)
     if (projectId) {
-      await prisma.supplierRedirectEvent.upsert({
-        where: { pid },
-        update: {
-          outcome: mapped.eventOutcome as any,
-          supplierId: supplierIdForEvent,
-          respondentId: respondentId ?? null,
-        },
-        create: {
-          projectId,
-          supplierId: supplierIdForEvent,
-          respondentId: respondentId ?? null,
-          pid,
-          outcome: mapped.eventOutcome as any,
-        },
-      });
+      try {
+        await prisma.supplierRedirectEvent.create({
+          data: {
+            projectId,
+            supplierId: supplierIdForEvent,
+            respondentId: respondentId ?? null,
+            pid,
+            outcome: mapped.eventOutcome as any,
+          },
+        });
+      } catch (e) {
+        // Don't break the redirect flow if logging fails
+        console.log("prisma:error", e);
+      }
     }
 
     // Optional supplier bounce
