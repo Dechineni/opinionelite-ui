@@ -272,8 +272,8 @@ export async function GET(req: Request) {
           : null;
 
       if (tpl) {
-        // Use supplier code (S1002) as the external identifier in the supplier URL
-        nextUrl = fillIdentifier(tpl, supplierRecord.code || supplierId || "");
+        // Use the DB id (cuid) as the identifier in the supplier URL
+        nextUrl = fillIdentifier(tpl, supplierRecord.id);
       }
     }
 
