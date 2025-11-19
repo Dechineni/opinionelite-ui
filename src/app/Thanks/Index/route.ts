@@ -15,18 +15,41 @@ const isP2002 = (e: any) => {
 
 function mapAuth(aRaw: string | null | undefined) {
   const a = (aRaw || "").toLowerCase().trim();
-  if (a === "c" || a === "10") return { redirectResult: "COMPLETE" as const,    eventOutcome: "COMPLETE" as const };
-  if (a === "t" || a === "20") return { redirectResult: "TERMINATE" as const,   eventOutcome: "TERMINATE" as const };
-  if (a === "q" || a === "40") return { redirectResult: "OVERQUOTA" as const,   eventOutcome: "OVER_QUOTA" as const };
-  if (a === "f" || a === "30") return { redirectResult: "QUALITYTERM" as const, eventOutcome: "QUALITY_TERM" as const };
-  if (a === "sc"|| a === "70") return { redirectResult: "CLOSE" as const,       eventOutcome: "SURVEY_CLOSE" as const };
+  if (a === "c" || a === "10")
+    return {
+      redirectResult: "COMPLETE" as const,
+      eventOutcome: "COMPLETE" as const,
+    };
+  if (a === "t" || a === "20")
+    return {
+      redirectResult: "TERMINATE" as const,
+      eventOutcome: "TERMINATE" as const,
+    };
+  if (a === "q" || a === "40")
+    return {
+      redirectResult: "OVERQUOTA" as const,
+      eventOutcome: "OVER_QUOTA" as const,
+    };
+  if (a === "f" || a === "30")
+    return {
+      redirectResult: "QUALITYTERM" as const,
+      eventOutcome: "QUALITY_TERM" as const,
+    };
+  if (a === "sc" || a === "70")
+    return {
+      redirectResult: "CLOSE" as const,
+      eventOutcome: "SURVEY_CLOSE" as const,
+    };
   return { redirectResult: null, eventOutcome: null };
 }
+
 function fillIdentifier(rawUrl: string, supplierIdentifier: string) {
   try {
     const u = new URL(rawUrl);
     u.searchParams.forEach((v, k) => {
-      if (/\[identifier\]/i.test(v)) u.searchParams.set(k, v.replace(/\[identifier\]/gi, supplierIdentifier));
+      if (/\[identifier\]/i.test(v)) {
+        u.searchParams.set(k, v.replace(/\[identifier\]/gi, supplierIdentifier));
+      }
       if (["id", "rid"].includes(k.toLowerCase()) && v.toLowerCase() === "identifier") {
         u.searchParams.set(k, supplierIdentifier);
       }
@@ -40,13 +63,14 @@ function fillIdentifier(rawUrl: string, supplierIdentifier: string) {
       .replace(/(id|rid)=identifier/gi, `$1=${supplierIdentifier}`);
   }
 }
+
 const looksLikePid = (s: string) => /^[0-9A-Za-z]{20}$/.test(s);
 
 export async function GET(req: Request) {
   const prisma = getPrisma();
 
   try {
-    const url  = new URL(req.url);
+    const url = new URL(req.url);
     const auth = url.searchParams.get("auth");
     const ridIn = (url.searchParams.get("pid") || url.searchParams.get("rid") || "").trim();
 
@@ -54,15 +78,22 @@ export async function GET(req: Request) {
     if (!mapped.redirectResult || !mapped.eventOutcome) {
       return NextResponse.json({ ok: false, error: "Invalid or missing auth" }, { status: 400 });
     }
-    if (!ridIn) return NextResponse.json({ ok: false, error: "Missing pid/rid" }, { status: 400 });
+    if (!ridIn) {
+      return NextResponse.json({ ok: false, error: "Missing pid/rid" }, { status: 400 });
+    }
 
     let redirect =
       looksLikePid(ridIn)
         ? await prisma.surveyRedirect.findUnique({
             where: { id: ridIn },
             select: {
-              id: true, projectId: true, supplierId: true, respondentId: true,
-              externalId: true, destination: true, result: true
+              id: true,
+              projectId: true,
+              supplierId: true,
+              respondentId: true,
+              externalId: true,
+              destination: true,
+              result: true,
             },
           })
         : null;
@@ -72,8 +103,13 @@ export async function GET(req: Request) {
         where: { externalId: ridIn },
         orderBy: { createdAt: "desc" },
         select: {
-          id: true, projectId: true, supplierId: true, respondentId: true,
-          externalId: true, destination: true, result: true
+          id: true,
+          projectId: true,
+          supplierId: true,
+          respondentId: true,
+          externalId: true,
+          destination: true,
+          result: true,
         },
       });
     }
@@ -81,7 +117,7 @@ export async function GET(req: Request) {
     if (!redirect) {
       return NextResponse.json(
         { ok: false, error: "Redirect context not found. (pid/externalId mismatch)" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -89,6 +125,53 @@ export async function GET(req: Request) {
     const projectId = redirect.projectId ?? null;
     const supplierId = redirect.supplierId ?? null;
     const externalId = redirect.externalId ?? null;
+
+    // Resolve supplier record – treat redirect.supplierId as either Supplier.id or Supplier.code
+    let supplierRecord:
+      | {
+          id: string;
+          code: string;
+          completeUrl: string | null;
+          terminateUrl: string | null;
+          overQuotaUrl: string | null;
+          qualityTermUrl: string | null;
+          surveyCloseUrl: string | null;
+        }
+      | null = null;
+
+    if (supplierId) {
+      // Try as internal id first
+      supplierRecord = await prisma.supplier.findUnique({
+        where: { id: supplierId },
+        select: {
+          id: true,
+          code: true,
+          completeUrl: true,
+          terminateUrl: true,
+          overQuotaUrl: true,
+          qualityTermUrl: true,
+          surveyCloseUrl: true,
+        },
+      });
+
+      // If not found, fall back to supplier code ("S1002")
+      if (!supplierRecord) {
+        supplierRecord = await prisma.supplier.findUnique({
+          where: { code: supplierId },
+          select: {
+            id: true,
+            code: true,
+            completeUrl: true,
+            terminateUrl: true,
+            overQuotaUrl: true,
+            qualityTermUrl: true,
+            surveyCloseUrl: true,
+          },
+        });
+      }
+    }
+
+    const supplierIdForEvent = supplierRecord?.id ?? null;
 
     // Ensure respondent (no upsert)
     let respondentId = redirect.respondentId ?? null;
@@ -109,15 +192,18 @@ export async function GET(req: Request) {
               select: { id: true },
             });
             respondentId = found?.id ?? null;
-          } else throw e;
+          } else {
+            throw e;
+          }
         }
       } else {
         const found = await prisma.respondent.findFirst({
           where: { projectId, externalId, supplierId: null },
           select: { id: true },
         });
-        if (found) respondentId = found.id;
-        else {
+        if (found) {
+          respondentId = found.id;
+        } else {
           try {
             const created = await prisma.respondent.create({
               data: { projectId, externalId, supplierId: null },
@@ -131,7 +217,9 @@ export async function GET(req: Request) {
                 select: { id: true },
               });
               respondentId = again?.id ?? null;
-            } else throw e;
+            } else {
+              throw e;
+            }
           }
         }
       }
@@ -148,58 +236,54 @@ export async function GET(req: Request) {
         .catch(() => {});
     }
 
-    // Write SupplierRedirectEvent (best-effort)
+    // Write SupplierRedirectEvent (idempotent per pid)
     if (projectId) {
-      prisma.supplierRedirectEvent
-        .create({
-          data: {
-            projectId,
-            supplierId: supplierId ?? null,
-            respondentId: respondentId ?? null,
-            pid,
-            outcome: mapped.eventOutcome as any,
-          },
-        })
-        .catch(() => {});
+      await prisma.supplierRedirectEvent.upsert({
+        where: { pid },
+        update: {
+          outcome: mapped.eventOutcome as any,
+          supplierId: supplierIdForEvent,
+          respondentId: respondentId ?? null,
+        },
+        create: {
+          projectId,
+          supplierId: supplierIdForEvent,
+          respondentId: respondentId ?? null,
+          pid,
+          outcome: mapped.eventOutcome as any,
+        },
+      });
     }
 
     // Optional supplier bounce
     let nextUrl: string | null = null;
-    if (supplierId) {
-      const supplier = await prisma.supplier.findUnique({
-        where: { id: supplierId },
-        select: {
-          code: true,
-          completeUrl: true,
-          terminateUrl: true,
-          overQuotaUrl: true,
-          qualityTermUrl: true,
-          surveyCloseUrl: true,
-        },
-      });
-      if (supplier) {
-        const r = mapped.redirectResult;
-        const tpl =
-          r === "COMPLETE"
-            ? supplier.completeUrl
-            : r === "TERMINATE"
-            ? supplier.terminateUrl
-            : r === "OVERQUOTA"
-            ? supplier.overQuotaUrl
-            : r === "QUALITYTERM"
-            ? supplier.qualityTermUrl
-            : r === "CLOSE"
-            ? supplier.surveyCloseUrl
-            : null;
+    if (supplierRecord) {
+      const r = mapped.redirectResult;
+      const tpl =
+        r === "COMPLETE"
+          ? supplierRecord.completeUrl
+          : r === "TERMINATE"
+          ? supplierRecord.terminateUrl
+          : r === "OVERQUOTA"
+          ? supplierRecord.overQuotaUrl
+          : r === "QUALITYTERM"
+          ? supplierRecord.qualityTermUrl
+          : r === "CLOSE"
+          ? supplierRecord.surveyCloseUrl
+          : null;
 
-        if (tpl) nextUrl = fillIdentifier(tpl, supplier.code || supplierId);
+      if (tpl) {
+        // Use supplier code (S1002) as the external identifier in the supplier URL
+        nextUrl = fillIdentifier(tpl, supplierRecord.code || supplierId || "");
       }
     }
 
     const thanksUrl = new URL("/Thanks", url.origin);
     thanksUrl.searchParams.set("status", mapped.redirectResult);
     thanksUrl.searchParams.set("pid", pid);
-    if (nextUrl) thanksUrl.searchParams.set("next", nextUrl);
+    if (nextUrl) {
+      thanksUrl.searchParams.set("next", nextUrl);
+    }
 
     return NextResponse.redirect(thanksUrl.toString(), { status: 302 });
   } catch (e: any) {
