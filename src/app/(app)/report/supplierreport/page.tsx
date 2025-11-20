@@ -1,4 +1,4 @@
-// FILE: src/app/(app)/report/supplierreport/page.tsx  (Add User)
+// FILE: src/app/(app)/report/supplierreport/page.tsx
 export const runtime = 'edge';
 
 import { getSession } from "@/lib/session";

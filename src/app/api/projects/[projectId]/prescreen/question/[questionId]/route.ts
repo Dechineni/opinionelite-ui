@@ -1,5 +1,8 @@
-export const runtime = 'edge';
-export const preferredRegion = 'auto';
+// FILE: src/app/api/projects/[projectId]/prescreen/question/[questionId]/route.ts
+
+export const runtime = "edge";
+export const preferredRegion = "auto";
+
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 
@@ -52,16 +55,21 @@ export async function PATCH(
           )
         );
       } else {
-        // replace all options
+        // replace all options (NO createMany → loop create)
         await prisma.prescreenOption.deleteMany({ where: { questionId } });
-        if (b.options.length > 0) {
-          await prisma.prescreenOption.createMany({
-            data: b.options.map((o: any, i: number) => ({
+
+        for (let i = 0; i < b.options.length; i++) {
+          const o = b.options[i];
+          await prisma.prescreenOption.create({
+            data: {
               questionId,
               label: String(o.label ?? o),
               value: String(o.value ?? o.label ?? o),
-              sortOrder: Number(o.sortOrder ?? i),
-            })),
+              sortOrder:
+                o.sortOrder !== undefined && o.sortOrder !== null
+                  ? Number(o.sortOrder)
+                  : i,
+            },
           });
         }
       }
@@ -76,6 +84,29 @@ export async function PATCH(
   } catch (e: any) {
     return NextResponse.json(
       { error: "Update failed", detail: String(e?.message || e) },
+      { status: 400 }
+    );
+  }
+}
+
+// --- DELETE: remove a question + its options -------------------------------
+export async function DELETE(
+  _req: Request,
+  ctx: { params: Promise<{ projectId: string; questionId: string }> }
+) {
+  const prisma = getPrisma();
+  const { questionId } = await ctx.params;
+
+  try {
+    // remove options first
+    await prisma.prescreenOption.deleteMany({ where: { questionId } });
+    // then remove the question
+    await prisma.prescreenQuestion.delete({ where: { id: questionId } });
+
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: "Delete failed", detail: String(e?.message || e) },
       { status: 400 }
     );
   }

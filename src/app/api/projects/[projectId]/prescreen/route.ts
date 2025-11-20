@@ -53,9 +53,10 @@ export async function GET(
  *   { title, question, controlType: "RADIO" | "DROPDOWN" | "CHECKBOX", options: [{label, value?, sortOrder?}, ...] }
  *
  * NOTE (Workers + Prisma HTTP driver):
- *   Avoid nested writes that wrap into transactions. We do two separate writes:
+ *   We must avoid any operations that internally use transactions (like createMany
+ *   with special flags). So we:
  *   1) create PrescreenQuestion
- *   2) createMany PrescreenOption (if any)
+ *   2) loop and create PrescreenOption rows one-by-one.
  */
 export async function POST(
   req: Request,
@@ -107,26 +108,25 @@ export async function POST(
       baseData.textType = b?.text?.textType ?? null; // Prisma enum validates
     }
 
-    // 1) Create the question FIRST (no nested writes → no tx)
+    // 1) Create the question FIRST
     const createdQ = await prisma.prescreenQuestion.create({
       data: baseData,
       select: { id: true },
     });
 
-    // 2) If non-TEXT, create options with createMany (still no tx)
+    // 2) If non-TEXT, create options one-by-one (NO createMany → NO tx)
     if (controlType !== "TEXT") {
       const rawOptions: any[] = Array.isArray(b?.options) ? b.options.slice(0, 200) : [];
-      const optionRows = rawOptions.map((o: any, i: number) => ({
-        questionId: createdQ.id,
-        label: String(o?.label ?? o),
-        value: String(o?.value ?? o?.label ?? o),
-        sortOrder: clampInt(o?.sortOrder, i),
-      }));
 
-      if (optionRows.length > 0) {
-        await prisma.prescreenOption.createMany({
-          data: optionRows,
-          skipDuplicates: true,
+      for (let i = 0; i < rawOptions.length; i++) {
+        const o = rawOptions[i];
+        await prisma.prescreenOption.create({
+          data: {
+            questionId: createdQ.id,
+            label: String(o?.label ?? o),
+            value: String(o?.value ?? o?.label ?? o),
+            sortOrder: clampInt(o?.sortOrder, i),
+          },
         });
       }
     }
@@ -139,10 +139,9 @@ export async function POST(
 
     return NextResponse.json(createdFull, { status: 201 });
   } catch (e: any) {
-    // Make the limitation explicit in the error for easier future debugging
     const msg = String(e?.message || e);
     const hint = msg.includes("Transactions are not supported")
-      ? " (cloud/HTTP driver cannot do nested/tx writes; we now split the writes)"
+      ? " (Prisma HTTP driver does not support transactional writes; we avoid createMany/tx.)"
       : "";
     return NextResponse.json(
       { error: "Failed to create prescreen question" + hint, detail: msg },
