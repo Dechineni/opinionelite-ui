@@ -4,7 +4,7 @@ export const preferredRegion = 'auto';
 
 import { NextResponse } from 'next/server';
 import { getPrisma } from '@/lib/prisma';
-import { Prisma, ProjectStatus } from '@prisma/client';
+import { Prisma, ProjectStatus, RedirectOutcome } from '@prisma/client';
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -45,6 +45,7 @@ export async function GET(req: Request) {
     ...(groupId ? { groupId } : {}),
   };
 
+  // 1) Base project list + total + status buckets
   const [itemsRaw, total, grouped] = await Promise.all([
     prisma.project.findMany({
       where,
@@ -62,13 +63,60 @@ export async function GET(req: Request) {
     }),
   ]);
 
-  // Flatten client name once
-  const items = itemsRaw.map(({ client, ...rest }) => ({
-    ...rest,
-    clientName: client?.name ?? null,
-  }));
+  // 2) Aggregate redirect outcomes (C/T/Q/D) per project
+  const projectIds = itemsRaw.map((p) => p.id);
 
-  // Build status buckets
+  let outcomeGrouped: { projectId: string; outcome: RedirectOutcome; _count: { _all: number } }[] =
+    [];
+
+  if (projectIds.length > 0) {
+    // TypeScript is a bit strict on groupBy generics, so we cast the result.
+    const groupedOutcomes = await prisma.supplierRedirectEvent.groupBy({
+      by: ['projectId', 'outcome'] as const,
+      where: { projectId: { in: projectIds } },
+      _count: { _all: true },
+    });
+
+    outcomeGrouped = groupedOutcomes as typeof outcomeGrouped;
+  }
+
+  // Build map: projectId -> { c, t, q, d }
+  const byProject: Record<string, { c: number; t: number; q: number; d: number }> = {};
+  for (const g of outcomeGrouped) {
+    const bucket = (byProject[g.projectId] ??= { c: 0, t: 0, q: 0, d: 0 });
+    switch (g.outcome) {
+      case 'COMPLETE':
+        bucket.c += g._count._all;
+        break;
+      case 'TERMINATE':
+        bucket.t += g._count._all;
+        break;
+      case 'OVER_QUOTA':
+        bucket.q += g._count._all;
+        break;
+      case 'DROP_OUT':
+        bucket.d += g._count._all;
+        break;
+      default:
+        // QUALITY_TERM / SURVEY_CLOSE are not displayed in ProjectList
+        break;
+    }
+  }
+
+  // 3) Flatten client name once & attach C/T/Q/D totals
+  const items = itemsRaw.map(({ client, ...rest }) => {
+    const totals = byProject[rest.id] ?? { c: 0, t: 0, q: 0, d: 0 };
+    return {
+      ...rest,
+      clientName: client?.name ?? null,
+      c: totals.c,
+      t: totals.t,
+      q: totals.q,
+      d: totals.d,
+    };
+  });
+
+  // 4) Build status buckets
   const statusCounts = Object.values(ProjectStatus).reduce<Record<ProjectStatus, number>>(
     (acc, s) => {
       acc[s] = 0;

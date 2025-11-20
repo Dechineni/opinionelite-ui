@@ -33,8 +33,8 @@ type ApiProject = {
   clientName?: string | null;
   c?: number; // completes
   t?: number; // terminates
-  q?: number; // over-quotas / quality terms (we’ll define precisely later)
-  d?: number; // drops / close, etc.
+  q?: number; // over-quotas (we’ll define precisely later)
+  d?: number; // dropouts
 };
 
 type ApiResp = {
