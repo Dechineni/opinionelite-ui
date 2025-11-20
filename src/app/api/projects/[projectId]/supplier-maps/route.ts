@@ -117,7 +117,7 @@ export async function GET(
       return acc;
     }, {} as Record<string, Record<string, number>>);
   } catch {
-    // ignore aggregation failures, we can still render basic rows
+    // ignore aggregation failures; they shouldn't break list view
   }
 
   const items = maps.map((m) => {
@@ -152,7 +152,7 @@ export async function GET(
       complete,
       terminate,
       overQuota,
-      dropOut: 0, // (wire DROP_OUT when you start recording it)
+      dropOut: 0, // (wire DROP_OUT later if you start recording it)
       qualityTerm,
     };
   });
@@ -190,14 +190,14 @@ export async function POST(
     }
     const data = parsed.data;
 
-    // Verify supplier exists (cheap read)
+    // Verify supplier exists (simple single-table read)
     const supplier = await prisma.supplier.findUnique({
       where: { id: data.supplierId },
       select: { id: true, code: true, name: true },
     });
     if (!supplier) return badJSON("Supplier not found", 404);
 
-    // Build plain create payload – NO nested writes, NO transactions
+    // Build payload for ProjectSupplierMap (simple single-table write)
     const createData: any = {
       projectId: projId,
       supplierId: data.supplierId,
@@ -222,19 +222,20 @@ export async function POST(
       createData.postBackUrl = (data as any).postBackUrl;
     }
 
+    // Single-table create, no include, no transaction
     const created = await prisma.projectSupplierMap.create({
       data: createData,
-      include: { supplier: { select: { code: true, name: true } } },
     });
 
+    // Build response using the supplier we already fetched
     return NextResponse.json(
       {
         item: {
           id: created.id,
           projectId: created.projectId,
           supplierId: created.supplierId,
-          supplierCode: created.supplier?.code ?? "",
-          supplierName: created.supplier?.name ?? "",
+          supplierCode: supplier.code ?? "",
+          supplierName: supplier.name ?? "",
           supplierQuota: created.quota,
           clickQuota: created.clickQuota,
           cpi: created.cpi?.toString(),
@@ -262,12 +263,12 @@ export async function POST(
   } catch (e: any) {
     const msg = String(e?.message || e);
     const hint = msg.includes("Transactions are not supported")
-      ? "Prisma HTTP/Data Proxy on Cloudflare does not support $transaction or nested writes. This route now uses only simple single-table writes; if you still see this error, make sure the deployment picked up the latest code."
-      : msg;
+      ? " Prisma HTTP/Data Proxy on Cloudflare does not support $transaction or nested writes. This route now uses only simple single-table reads/writes (supplier.findUnique, projectSupplierMap.create). If you still see this, please confirm there is no older build or other middleware calling prisma.$transaction in this request."
+      : "";
 
     return NextResponse.json(
-      { error: "Failed to create supplier map", detail: hint },
-      { status: 500 }
+      { error: "Failed to create supplier map", detail: msg + hint },
+      { status: 400 }
     );
   }
 }
