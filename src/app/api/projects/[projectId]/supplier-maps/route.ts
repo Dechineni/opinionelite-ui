@@ -100,18 +100,24 @@ export async function GET(
       acc[sid] ??= {};
       // map to UI keys
       const key =
-        row.outcome === "COMPLETE"     ? "COMPLETE"   :
-        row.outcome === "TERMINATE"    ? "TERMINATE"  :
-        row.outcome === "OVER_QUOTA"   ? "OVERQUOTA"  :
-        row.outcome === "DROP_OUT"     ? "DROPOUT"    :
-        row.outcome === "QUALITY_TERM" ? "QUALITYTERM":
-        row.outcome === "SURVEY_CLOSE" ? "CLOSE"      :
-        String(row.outcome);
+        row.outcome === "COMPLETE"
+          ? "COMPLETE"
+          : row.outcome === "TERMINATE"
+          ? "TERMINATE"
+          : row.outcome === "OVER_QUOTA"
+          ? "OVERQUOTA"
+          : row.outcome === "DROP_OUT"
+          ? "DROPOUT"
+          : row.outcome === "QUALITY_TERM"
+          ? "QUALITYTERM"
+          : row.outcome === "SURVEY_CLOSE"
+          ? "CLOSE"
+          : String(row.outcome);
       acc[sid][key] = row._count._all;
       return acc;
     }, {} as Record<string, Record<string, number>>);
   } catch {
-    // ignore
+    // ignore aggregation failures, we can still render basic rows
   }
 
   const items = maps.map((m) => {
@@ -146,7 +152,7 @@ export async function GET(
       complete,
       terminate,
       overQuota,
-      dropOut: 0, // (you can wire DROP_OUT if/when you start recording it)
+      dropOut: 0, // (wire DROP_OUT when you start recording it)
       qualityTerm,
     };
   });
@@ -162,94 +168,106 @@ export async function POST(
   const prisma = getPrisma();
   const { projectId: projectKey } = await ctx.params;
 
-  const projId = await resolveProjectId(projectKey);
-  if (!projId) return badJSON("Project not found", 404);
-
-  let body: unknown;
   try {
-    body = await req.json();
-  } catch {
-    return badJSON("Invalid JSON", 400);
-  }
+    const projId = await resolveProjectId(projectKey);
+    if (!projId) return badJSON("Project not found", 404);
 
-  const parsed = CreateSchema.safeParse(body);
-  if (!parsed.success) {
-    const flat = parsed.error.flatten();
-    const msg =
-      flat.formErrors.join("; ") ||
-      Object.values(flat.fieldErrors).flat().join("; ") ||
-      "Invalid payload";
-    return badJSON(msg, 400);
-  }
-  const data = parsed.data;
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return badJSON("Invalid JSON", 400);
+    }
 
-  // Verify supplier exists (cheap check)
-  const supplier = await prisma.supplier.findUnique({
-    where: { id: data.supplierId },
-    select: { id: true, code: true, name: true },
-  });
-  if (!supplier) return badJSON("Supplier not found", 404);
+    const parsed = CreateSchema.safeParse(body);
+    if (!parsed.success) {
+      const flat = parsed.error.flatten();
+      const msg =
+        flat.formErrors.join("; ") ||
+        Object.values(flat.fieldErrors).flat().join("; ") ||
+        "Invalid payload";
+      return badJSON(msg, 400);
+    }
+    const data = parsed.data;
 
-  // Build prisma payload
-  const createData: any = {
-    projectId: projId,
-    supplierId: data.supplierId,
-    quota: data.supplierQuota,
-    clickQuota: data.clickQuota,
-    cpi: data.cpi,
-    redirectionType: data.redirectionType,
-    allowTraffic: data.allowTraffic ?? false,
-    supplierProjectId: data.supplierProjectId ?? null,
-  };
+    // Verify supplier exists (cheap read)
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: data.supplierId },
+      select: { id: true, code: true, name: true },
+    });
+    if (!supplier) return badJSON("Supplier not found", 404);
 
-  if (
-    data.redirectionType === "STATIC_REDIRECT" ||
-    data.redirectionType === "DYNAMIC_REDIRECT"
-  ) {
-    createData.completeUrl = (data as any).completeUrl;
-    createData.terminateUrl = (data as any).terminateUrl;
-    createData.overQuotaUrl = (data as any).overQuotaUrl;
-    createData.qualityTermUrl = (data as any).qualityTermUrl;
-    createData.surveyCloseUrl = (data as any).surveyCloseUrl;
-  } else {
-    createData.postBackUrl = (data as any).postBackUrl;
-  }
+    // Build plain create payload – NO nested writes, NO transactions
+    const createData: any = {
+      projectId: projId,
+      supplierId: data.supplierId,
+      quota: data.supplierQuota,
+      clickQuota: data.clickQuota,
+      cpi: data.cpi,
+      redirectionType: data.redirectionType,
+      allowTraffic: data.allowTraffic ?? false,
+      supplierProjectId: data.supplierProjectId ?? null,
+    };
 
-  const created = await prisma.projectSupplierMap.create({
-    data: createData,
-    include: { supplier: { select: { code: true, name: true } } },
-  });
+    if (
+      data.redirectionType === "STATIC_REDIRECT" ||
+      data.redirectionType === "DYNAMIC_REDIRECT"
+    ) {
+      createData.completeUrl = (data as any).completeUrl;
+      createData.terminateUrl = (data as any).terminateUrl;
+      createData.overQuotaUrl = (data as any).overQuotaUrl;
+      createData.qualityTermUrl = (data as any).qualityTermUrl;
+      createData.surveyCloseUrl = (data as any).surveyCloseUrl;
+    } else {
+      createData.postBackUrl = (data as any).postBackUrl;
+    }
 
-  return NextResponse.json(
-    {
-      item: {
-        id: created.id,
-        projectId: created.projectId,
-        supplierId: created.supplierId,
-        supplierCode: created.supplier?.code ?? "",
-        supplierName: created.supplier?.name ?? "",
-        supplierQuota: created.quota,
-        clickQuota: created.clickQuota,
-        cpi: created.cpi?.toString(),
-        redirectionType: created.redirectionType,
-        postBackUrl: created.postBackUrl,
-        completeUrl: created.completeUrl,
-        terminateUrl: created.terminateUrl,
-        overQuotaUrl: created.overQuotaUrl,
-        qualityTermUrl: created.qualityTermUrl,
-        surveyCloseUrl: created.surveyCloseUrl,
-        allowTraffic: created.allowTraffic,
-        supplierProjectId: created.supplierProjectId,
-        createdAt: created.createdAt,
-        updatedAt: created.updatedAt,
-        total: 0,
-        complete: 0,
-        terminate: 0,
-        overQuota: 0,
-        dropOut: 0,
-        qualityTerm: 0,
+    const created = await prisma.projectSupplierMap.create({
+      data: createData,
+      include: { supplier: { select: { code: true, name: true } } },
+    });
+
+    return NextResponse.json(
+      {
+        item: {
+          id: created.id,
+          projectId: created.projectId,
+          supplierId: created.supplierId,
+          supplierCode: created.supplier?.code ?? "",
+          supplierName: created.supplier?.name ?? "",
+          supplierQuota: created.quota,
+          clickQuota: created.clickQuota,
+          cpi: created.cpi?.toString(),
+          redirectionType: created.redirectionType,
+          postBackUrl: created.postBackUrl,
+          completeUrl: created.completeUrl,
+          terminateUrl: created.terminateUrl,
+          overQuotaUrl: created.overQuotaUrl,
+          qualityTermUrl: created.qualityTermUrl,
+          surveyCloseUrl: created.surveyCloseUrl,
+          allowTraffic: created.allowTraffic,
+          supplierProjectId: created.supplierProjectId,
+          createdAt: created.createdAt,
+          updatedAt: created.updatedAt,
+          total: 0,
+          complete: 0,
+          terminate: 0,
+          overQuota: 0,
+          dropOut: 0,
+          qualityTerm: 0,
+        },
       },
-    },
-    { status: 201 }
-  );
+      { status: 201 }
+    );
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    const hint = msg.includes("Transactions are not supported")
+      ? "Prisma HTTP/Data Proxy on Cloudflare does not support $transaction or nested writes. This route now uses only simple single-table writes; if you still see this error, make sure the deployment picked up the latest code."
+      : msg;
+
+    return NextResponse.json(
+      { error: "Failed to create supplier map", detail: hint },
+      { status: 500 }
+    );
+  }
 }
