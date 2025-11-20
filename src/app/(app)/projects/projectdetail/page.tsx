@@ -135,9 +135,9 @@ export default async function ProjectDetail({
         <Tab href={`/projects/projectdetail?id=${qid}&tab=survey`} active={tab === "survey"}>
           Survey Link
         </Tab>
-        <Tab href={`/projects/projectdetail?id=${qid}&tab=security`} active={tab === "security"}>
+        {/* <Tab href={`/projects/projectdetail?id=${qid}&tab=security`} active={tab === "security"}>
           Security
-        </Tab>
+        </Tab> */}
         <Tab href={`/projects/projectdetail?id=${qid}&tab=supplier`} active={tab === "supplier"}>
           Supplier Mapping
         </Tab>
@@ -146,9 +146,9 @@ export default async function ProjectDetail({
             Prescreen
           </Tab>
         )}
-        <Tab href={`/projects/projectdetail?id=${qid}&tab=report`} active={tab === "report"}>
+        {/* <Tab href={`/projects/projectdetail?id=${qid}&tab=report`} active={tab === "report"}>
           Project Report
-        </Tab>
+        </Tab> */}
       </div>
 
       {/* content by tab */}
