@@ -80,10 +80,10 @@ function buildMenu(role: Role): RootItem[] {
       label: "Report",
       icon: FileBarChart2,
       children: [
-        { key: "report-client", label: "Client Report", href: "/reports/client" },
-        { key: "report-supplier", label: "Supplier Report", href: "/reports/supplier" },
-        { key: "report-group", label: "Group Report", href: "/reports/group" },
-        { key: "report-tsign", label: "TSign", href: "/reports/tsign" },
+        { key: "report-client", label: "Client Report", href: "/report/clientreport" },
+        { key: "report-supplier", label: "Supplier Report", href: "/report/supplierreport" },
+        { key: "report-group", label: "Group Report", href: "/report/groupreport" },
+        { key: "report-tsign", label: "TSign", href: "/report/tsign" },
       ],
     },
   ];

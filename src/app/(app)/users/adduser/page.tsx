@@ -12,7 +12,7 @@ export default async function AddUserPage() {
     <div className="space-y-4">
       <h1 className="text-lg font-semibold">Add User</h1>
       {/* TODO: render your Add User form here */}
-      <div className="rounded-lg border bg-white p-4">Form coming soon…</div>
+      <div className="rounded-lg border bg-white p-4">UI coming soon…</div>
     </div>
   );
 }
