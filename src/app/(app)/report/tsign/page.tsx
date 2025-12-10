@@ -1,18 +1,15 @@
 // FILE: src/app/(app)/report/tsign/page.tsx
-export const runtime = 'edge';
 
-import { getSession } from "@/lib/session";
+import { getServerSession } from "@/lib/server-session";
 import { redirect } from "next/navigation";
+import TSignUI from "./TSignUI";
 
-export default async function Tsign() {
-  const session = await getSession();
-  if (session?.user.role !== "admin") redirect("/dashboard");
+export default async function TSignReportPage() {
+  const session = await getServerSession();
 
-  return (
-    <div className="space-y-4">
-      <h1 className="text-lg font-semibold">Tsign</h1>
-      {/* TODO: render your tsign form here */}
-      <div className="rounded-lg border bg-white p-4">UI coming soon…</div>
-    </div>
-  );
+  if (!session) {
+    return redirect("/login");
+  }
+
+  return <TSignUI session={session} />;
 }

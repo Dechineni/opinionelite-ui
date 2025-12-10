@@ -1,18 +1,15 @@
 // FILE: src/app/(app)/report/supplierreport/page.tsx
-export const runtime = 'edge';
-
-import { getSession } from "@/lib/session";
+ 
+import { getServerSession } from "@/lib/server-session";
 import { redirect } from "next/navigation";
+import SupplierReportUI from "./SupplierReportUI";
 
-export default async function SupplierReport() {
-  const session = await getSession();
-  if (session?.user.role !== "admin") redirect("/dashboard");
+export default async function SupplierReportPage() {
+  const session = await getServerSession();
 
-  return (
-    <div className="space-y-4">
-      <h1 className="text-lg font-semibold">Supplier Report</h1>
-      {/* TODO: render your supplier report form here */}
-      <div className="rounded-lg border bg-white p-4">UI coming soon…</div>
-    </div>
-  );
+  if (!session) {
+    return redirect("/login");
+  }
+
+  return <SupplierReportUI session={session} />;
 }
