@@ -2,14 +2,12 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import Topbar from "@/app/components/Topbar";
-import Sidebar, { type Role } from "@/app/components/Sidebar";
+import Topbar from "@/components/Topbar";
+import Sidebar, { type Role } from "@/components/Sidebar";
 
 type ShellProps = {
   children: React.ReactNode;
-  /** Role controls whether the "User" menu shows up (admin only). */
-  role?: Role; // "admin" | "manager"
-  /** Shown at the right side of the top bar */
+  role?: Role;
   userName?: string;
 };
 
@@ -21,24 +19,28 @@ export default function Shell({
   const pathname = usePathname();
   const router = useRouter();
 
-  // If the shell ever wraps /login by mistake, render only the page (no chrome).
+  // Avoid sidebar on login page
   if (pathname?.startsWith("/login")) {
     return <div className="min-h-screen w-full">{children}</div>;
   }
 
   return (
-    <div className="min-h-screen w-full">
-      {/* ⬇️ Remove onLogout prop; Topbar handles logout internally */}
+    <div className="min-h-screen w-full bg-slate-50">
       <Topbar userName={userName} />
+
       <div className="flex">
+        {/* FIXED WIDTH SIDEBAR */}
         <Sidebar
           role={role}
           activePath={pathname ?? "/"}
-          showHeaderBrand={false}   // keep brand only in Topbar
-          showHeaderToggle={true}   // hamburger inside sidebar
-          onNavigate={(href) => router.push(href)}
+          fixedWidth={true}   // NEW OPTION
+          onNavigate={(href: string) => router.push(href)}
         />
-        <main className="flex-1 p-6">{children}</main>
+
+        {/* MAIN CONTENT - NO EXTRA PADDING LEFT */}
+        <main className="flex-1 px-6 py-6">
+          {children}
+        </main>
       </div>
     </div>
   );
