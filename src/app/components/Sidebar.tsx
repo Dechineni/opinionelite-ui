@@ -12,6 +12,7 @@ import {
   ChevronDown,
   Menu,
   UserCog,
+  LifeBuoy,
 } from "lucide-react";
 
 export type Role = "admin" | "manager";
@@ -42,7 +43,7 @@ function buildMenu(role: Role): RootItem[] {
       key: "project",
       label: "Project",
       icon: FileText,
-      children: [
+      children: [ 
         { key: "project-list", label: "Project List", href: "/projects/new/projectlist" },
         {
           key: "project-create",
@@ -86,6 +87,28 @@ function buildMenu(role: Role): RootItem[] {
         { key: "report-tsign", label: "TSign", href: "/report/tsign" },
       ],
     },
+    {
+  key: "support",
+  label: "Support",
+  icon: LifeBuoy,
+  children: [
+    {
+      key: "support-ip-tracker",
+      label: "IP Tracker",
+      href: "/support/ip-tracker",
+    },
+    {
+      key: "support-reconciliation",
+      label: "Reconciliation",
+      href: "/support/reconciliation",
+    },
+    {
+      key: "support-redirect-status",
+      label: "Redirect Status",
+      href: "/support/redirect-status",
+    },
+  ],
+},
   ];
 
   if (role === "admin") {
@@ -185,8 +208,24 @@ export default function Sidebar({
       )
   );
 
-  const toggleGroup = (key: string) =>
-    setOpenGroups((s) => ({ ...s, [key]: !s[key] }));
+  const toggleGroup = (key: string, depth: number) => {
+  setOpenGroups((prev) => {
+    // Top-level accordion behavior
+    if (depth === 0) {
+      const next: Record<string, boolean> = {};
+      Object.keys(prev).forEach((k) => (next[k] = false));
+      next[key] = !prev[key];
+      return next;
+    }
+
+    // Nested groups (normal toggle)
+    return {
+      ...prev,
+      [key]: !prev[key],
+    };
+  });
+};
+
   const handleNav = (href: string) => (e: React.MouseEvent) => {
     if (onNavigate) {
       e.preventDefault();
@@ -262,7 +301,7 @@ function NavItem({
   depth: number;
   collapsed: boolean;
   openGroups: Record<string, boolean>;
-  toggleGroup: (key: string) => void;
+  toggleGroup: (key: string, depth: number) => void;
   activePath: string;
   handleNav: (href: string) => (e: React.MouseEvent) => void;
 }) {
@@ -276,7 +315,7 @@ function NavItem({
         <button
           type="button"
           className={[cls.itemBase, active ? cls.itemActive : ""].join(" ")}
-          onClick={() => toggleGroup(item.key)}
+          onClick={() => toggleGroup(item.key, depth)}
           aria-expanded={openGroups[item.key] || false}
           title={item.label}
         >

@@ -27,10 +27,11 @@ export default function Shell({
   }
 
   return (
-    <div className="min-h-screen w-full">
+    <div className="min-h-screen w-full bg-slate-100 overflow-x-hidden">
       {/* ⬇️ Remove onLogout prop; Topbar handles logout internally */}
       <Topbar userName={userName} />
-      <div className="flex">
+      <div className="flex w-full overflow-x-hidden">
+        {/* ⬇️ showHeaderBrand false to avoid duplicate branding */}
         <Sidebar
           role={role}
           activePath={pathname ?? "/"}
@@ -38,7 +39,9 @@ export default function Shell({
           showHeaderToggle={true}   // hamburger inside sidebar
           onNavigate={(href) => router.push(href)}
         />
-        <main className="flex-1 p-6">{children}</main>
+        <main className="flex-1 p-6 max-w-full overflow-x-auto">
+          {children}
+        </main>
       </div>
     </div>
   );

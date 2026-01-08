@@ -1,18 +1,15 @@
 // FILE: src/app/(app)/report/groupreport/page.tsx
-export const runtime = 'edge';
 
-import { getSession } from "@/lib/session";
+import { getServerSession } from "@/lib/server-session";
 import { redirect } from "next/navigation";
+import GroupReportUI from "./GroupReportUI";
 
-export default async function GroupReport() {
-  const session = await getSession();
-  if (session?.user.role !== "admin") redirect("/dashboard");
+export default async function GroupReportPage() {
+  const session = await getServerSession();
+  
+  if (!session) {
+    return redirect("/login");
+  }
 
-  return (
-    <div className="space-y-4">
-      <h1 className="text-lg font-semibold">Group Report</h1>
-      {/* TODO: render your group report form here */}
-      <div className="rounded-lg border bg-white p-4">UI coming soon…</div>
-    </div>
-  );
+  return <GroupReportUI session={session} />;
 }
