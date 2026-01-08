@@ -208,8 +208,24 @@ export default function Sidebar({
       )
   );
 
-  const toggleGroup = (key: string) =>
-    setOpenGroups((s) => ({ ...s, [key]: !s[key] }));
+  const toggleGroup = (key: string, depth: number) => {
+  setOpenGroups((prev) => {
+    // Top-level accordion behavior
+    if (depth === 0) {
+      const next: Record<string, boolean> = {};
+      Object.keys(prev).forEach((k) => (next[k] = false));
+      next[key] = !prev[key];
+      return next;
+    }
+
+    // Nested groups (normal toggle)
+    return {
+      ...prev,
+      [key]: !prev[key],
+    };
+  });
+};
+
   const handleNav = (href: string) => (e: React.MouseEvent) => {
     if (onNavigate) {
       e.preventDefault();
@@ -285,7 +301,7 @@ function NavItem({
   depth: number;
   collapsed: boolean;
   openGroups: Record<string, boolean>;
-  toggleGroup: (key: string) => void;
+  toggleGroup: (key: string, depth: number) => void;
   activePath: string;
   handleNav: (href: string) => (e: React.MouseEvent) => void;
 }) {
@@ -299,7 +315,7 @@ function NavItem({
         <button
           type="button"
           className={[cls.itemBase, active ? cls.itemActive : ""].join(" ")}
-          onClick={() => toggleGroup(item.key)}
+          onClick={() => toggleGroup(item.key, depth)}
           aria-expanded={openGroups[item.key] || false}
           title={item.label}
         >
