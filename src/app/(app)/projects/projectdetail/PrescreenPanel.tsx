@@ -1,8 +1,9 @@
 // FILE: src/app/(app)/projects/projectdetail/PrescreenPanel.tsx
 "use client";
-export const runtime = 'edge';
-
 import React, { useMemo, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { ProjectStatus } from "../ProjectList";
+
 
 /* ----------------------------- tiny UI helpers ----------------------------- */
 const Label = ({ children, required = false }: { children: React.ReactNode; required?: boolean }) => (
@@ -78,12 +79,13 @@ const TrashIcon = () => (
 );
 
 /* ------------------------------ types & consts ----------------------------- */
-type ControlType = "TEXT" | "RADIO";
+type ControlType = "TEXT" | "RADIO"| "CHECKBOX";
 type TextType = "EMAIL" | "CONTACTNO" | "ZIPCODE" | "CUSTOM";
 
 const CONTROL_TYPE_OPTIONS: { value: ControlType; label: string }[] = [
   { value: "TEXT", label: "Text" },
   { value: "RADIO", label: "Radio" },
+  { value: "CHECKBOX", label: "Checkbox" },
 ];
 
 const TEXT_TYPE_OPTIONS: { value: TextType; label: string }[] = [
@@ -556,8 +558,14 @@ type SavedRow = {
   controlType: ControlType;
   sortOrder: number; // used for stable suffix numbering
 };
+type PreScreenPanelProps = {
+  projectId: string;
+  initialStatus: "ACTIVE" | "CLOSED";
+};
 
-export default function PrescreenPanel({ projectId }: { projectId: string }) {
+export default function PrescreenPanel({ projectId, initialStatus }: PreScreenPanelProps) { 
+  const router = useRouter();
+
   const [addOpen, setAddOpen] = useState(false);
 
   // For “configure options” after create OR after edit of non-TEXT
@@ -755,7 +763,11 @@ export default function PrescreenPanel({ projectId }: { projectId: string }) {
   const confirmNo = () => setConfirmDelete({ open: false, id: null });
 
   /* ------------------------------ render ---------------------------------- */
+  
   return (
+    <>
+    
+
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-4 flex items-center justify-between">
         <div className="text-sm text-slate-700">Prescreen</div>
@@ -875,7 +887,7 @@ export default function PrescreenPanel({ projectId }: { projectId: string }) {
             >
               {saving ? "Saving…" : "Save"}
             </button>
-          </div>
+          </div>      
         </>
       ) : (
         <div className="overflow-auto rounded-lg border border-slate-200">
@@ -1001,5 +1013,7 @@ export default function PrescreenPanel({ projectId }: { projectId: string }) {
         onNo={confirmNo}
       />
     </div>
+    
+  </>
   );
 }

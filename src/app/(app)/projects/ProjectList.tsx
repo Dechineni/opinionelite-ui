@@ -77,6 +77,8 @@ export default function ProjectList() {
       .catch(() => {})
       .finally(() => setLoading(false));
 
+
+
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, page, status]);
@@ -127,18 +129,18 @@ export default function ProjectList() {
           <table className="min-w-full text-left text-sm">
             <thead className="sticky top-0 z-10 bg-slate-800 text-white">
               <tr>
-                <th className="px-4 py-3">S.No.</th>
-                <th className="px-4 py-3">ProjectCode</th>
-                <th className="px-4 py-3">ProjectName</th>
-                <th className="px-4 py-3">ClientName</th>      {/* NEW */}
-                <th className="px-4 py-3">ProjectManager</th>
-                <th className="px-4 py-3 text-right">LOI</th>
-                <th className="px-4 py-3 text-right">IR%</th>
-                <th className="px-4 py-3 text-right">C</th>     {/* NEW */}
-                <th className="px-4 py-3 text-right">T</th>     {/* NEW */}
-                <th className="px-4 py-3 text-right">Q</th>     {/* NEW */}
-                <th className="px-4 py-3 text-right">D</th>     {/* NEW */}
-                <th className="px-4 py-3 text-right">CPI</th>
+                <td className="px-4 py-3">S.No.</td>
+                <td className="px-4 py-3">ProjectCode</td>
+                <td className="px-4 py-3">ProjectName</td>
+                <td className="px-4 py-3">ClientName</td>
+                <td className="px-4 py-3">ProjectManager</td>
+                <td className="px-4 py-3 text-right">LOI</td>
+                <td className="px-4 py-3 text-right">IR%</td>
+                <td className="px-4 py-3 text-right">C</td>
+                <td className="px-4 py-3 text-right">T</td>
+                <td className="px-4 py-3 text-right">Q</td>
+                <td className="px-4 py-3 text-right">D</td>
+                <td className="px-4 py-3 text-right">CPI</td>
               </tr>
             </thead>
             <tbody>
@@ -151,28 +153,26 @@ export default function ProjectList() {
               )}
               {!loading &&
                 rows.map((r, i) => (
-                  <tr key={r.id} className={i % 2 ? "bg-slate-50" : "bg-white"}>
+                  <tr key={r.id} className={i % 2 ?"bg-slate-50": "bg-white"}>
                     <td className="px-4 py-3">{(page - 1) * pageSize + i + 1}</td>
                     <td className="px-4 py-3 font-semibold">
                       <a
-                        href={`/projects/projectdetail?id=${encodeURIComponent(r.id)}`}
-                        className="text-emerald-700 hover:underline"
-                        title={`Open ${r.code}`}
-                      >
-                        {r.code}
+                       href={`/projects/projectdetail?id=${encodeURIComponent(r.id)}`}
+                       className="text-emerald-700 hover:underline font-semibold">
+                       {r.code}
                       </a>
                     </td>
-                    <td className="px-4 py-3">{r.name}</td>
-                    <td className="px-4 py-3">{r.clientName ?? "—"}</td> {/* NEW */}
+                    <td className="px-4 py-3">                    
+                      <span>{r.name}</span>
+                      </td>
+                    <td className="px-4 py-3">{r.clientName ?? "—"}</td>
                     <td className="px-4 py-3">{r.managerEmail}</td>
-                    {/* Status removed */}
                     <td className="px-4 py-3 text-right">{r.loi}</td>
                     <td className="px-4 py-3 text-right">{r.ir}</td>
-                    {/* Sample removed */}
-                    <td className="px-4 py-3 text-right">{r.c ?? 0}</td>  {/* NEW */}
-                    <td className="px-4 py-3 text-right">{r.t ?? 0}</td>  {/* NEW */}
-                    <td className="px-4 py-3 text-right">{r.q ?? 0}</td>  {/* NEW */}
-                    <td className="px-4 py-3 text-right">{r.d ?? 0}</td>  {/* NEW */}
+                    <td className="px-4 py-3 text-right">{r.c ?? 0}</td>
+                    <td className="px-4 py-3 text-right">{r.t ?? 0}</td>
+                    <td className="px-4 py-3 text-right">{r.q ?? 0}</td>
+                    <td className="px-4 py-3 text-right">{r.d ?? 0}</td>
                     <td className="px-4 py-3 text-right">{r.projectCpi}</td>
                   </tr>
                 ))}
