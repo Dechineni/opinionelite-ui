@@ -6,6 +6,35 @@ export const preferredRegion = "auto";
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 
+export async function GET(
+  _req: Request,
+  ctx: { params: Promise<{ projectId: string; questionId: string }> }
+) {
+  const prisma = getPrisma();
+  const { questionId } = await ctx.params;
+
+  try {
+    const question = await prisma.prescreenQuestion.findUnique({
+      where: { id: questionId },
+      include: { options: true },
+    });
+
+    if (!question) {
+      return NextResponse.json(
+        { error: "Question not found" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json(question);
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: "Failed to load question", detail: String(e?.message || e) },
+      { status: 400 }
+    );
+  }
+}
+
 export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ projectId: string; questionId: string }> }

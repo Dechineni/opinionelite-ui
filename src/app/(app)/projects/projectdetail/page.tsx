@@ -7,6 +7,7 @@ import SurveyLinkPanel from "./SurveyLinkPanel";
 import SupplierMappingPanel from "./SupplierMappingPanel";
 import PrescreenPanel from "./PrescreenPanel";
 import SupplierMappedSummary from "./SupplierMappedSummary"; // ✅ new import
+import ProjectStatusControl from "./ProjectStatusControl";
 
 /* helpers */
 function fmt(n: number | null | undefined, d = 2) {
@@ -25,6 +26,8 @@ function buildThanksUrl(authCode: number) {
 }
 
 export default async function ProjectDetail({
+
+
   // In Next 15 RSC, this is a Promise and must be awaited.
   searchParams,
 }: {
@@ -34,6 +37,7 @@ export default async function ProjectDetail({
   const sp = await searchParams;
   const projectId = (sp.id ?? "").trim();
   const tab = (sp.tab ?? "detail").toLowerCase();
+  
 
   if (!projectId) return redirect("/projects");
 
@@ -95,69 +99,76 @@ export default async function ProjectDetail({
   );
 
   const qid = encodeURIComponent(projectId);
+  const preScreenstatus: "ACTIVE" | "CLOSED" =
+  status === "CLOSED" ? "CLOSED" : "ACTIVE";
 
   return (
     <div className="space-y-4">
       {/* header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/projects/new/projectlist"
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-          >
-            ← Back
-          </Link>
-          <div className="text-lg font-semibold">
-            {code} : {name}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span
-            className={`inline-block h-3 w-3 rounded-full ${
-              status === "ACTIVE"
-                ? "bg-emerald-500"
-                : status === "CLOSED"
-                ? "bg-slate-500"
-                : status === "INVOICED"
-                ? "bg-indigo-500"
-                : "bg-amber-500"
-            }`}
-          />
-          <span className="rounded-md border border-slate-300 px-2 py-1 text-sm">{status}</span>
-        </div>
-      </div>
+      <div className="space-y-2">
+  {/* HEADER ROW 1 */}
+<div className="flex items-center justify-between">
+  <div className="flex items-center gap-3">
+    <Link
+      href="/projects/new/projectlist"
+      className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+    >
+      ← Back
+    </Link>
+    <div className="text-lg font-semibold">
+      {code} : {name}
+    </div>
+  </div>
 
-      {/* tabs */}
-      <div className="flex gap-2">
-        <Tab href={`/projects/projectdetail?id=${qid}&tab=detail`} active={tab === "detail"} color="bg-emerald-600">
-          Project Detail
-        </Tab>
-        <Tab href={`/projects/projectdetail?id=${qid}&tab=survey`} active={tab === "survey"}>
-          Survey Link
-        </Tab>
-        {/* <Tab href={`/projects/projectdetail?id=${qid}&tab=security`} active={tab === "security"}>
-          Security
-        </Tab> */}
-        <Tab href={`/projects/projectdetail?id=${qid}&tab=supplier`} active={tab === "supplier"}>
-          Supplier Mapping
-        </Tab>
-        {preScreen && (
-          <Tab href={`/projects/projectdetail?id=${qid}&tab=prescreen`} active={tab === "prescreen"}>
-            Prescreen
-          </Tab>
-        )}
-        {/* <Tab href={`/projects/projectdetail?id=${qid}&tab=report`} active={tab === "report"}>
-          Project Report
-        </Tab> */}
-      </div>
+  {/* Status dot + project info (RIGHT) */}
+  <div className="flex items-center gap-2">
+    <span
+      className={`h-3 w-3 rounded-full ${
+        status === "CLOSED" ? "bg-red-500" : "bg-emerald-500"
+      }`}
+    />
+    <span className="text-sm font-semibold text-slate-800">
+      {code} : {name}
+    </span>
+  </div>
+</div>
 
+{/* HEADER ROW 2 */}
+<div className="flex items-center justify-between">
+  {/* Tabs LEFT */}
+  <div className="flex gap-2">
+    <Tab href={`/projects/projectdetail?id=${qid}&tab=detail`} active={tab === "detail"} color="bg-emerald-600">
+      Project Detail
+    </Tab>
+    <Tab href={`/projects/projectdetail?id=${qid}&tab=survey`} active={tab === "survey"}>
+      Survey Link
+    </Tab>
+    <Tab href={`/projects/projectdetail?id=${qid}&tab=supplier`} active={tab === "supplier"}>
+      Supplier Mapping
+    </Tab>
+    {preScreen && (
+      <Tab href={`/projects/projectdetail?id=${qid}&tab=prescreen`} active={tab === "prescreen"}>
+        Prescreen
+      </Tab>
+    )}
+  </div>
+
+  {/* Dropdown + Update RIGHT */}
+  {tab !== "prescreen" && (
+  <ProjectStatusControl
+    projectId={projectId}
+    initialStatus={preScreenstatus}
+  />
+  )}
+</div>
+      </div>
       {/* content by tab */}
       {tab === "survey" ? (
         <SurveyLinkPanel projectId={projectId} />
       ) : tab === "supplier" ? (
         <SupplierMappingPanel projectId={projectId} />
       ) : tab === "prescreen" ? (
-        <PrescreenPanel projectId={projectId} />
+        <PrescreenPanel projectId={projectId} initialStatus={preScreenstatus} />
       ) : (
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-4 flex justify-end">

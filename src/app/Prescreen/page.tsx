@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-type ControlType = "TEXT" | "RADIO" | "DROPDOWN" | "CHECKBOX";
+type ControlType = "TEXT" | "RADIO" | "DROPDOWN" | "CHECKBOX";         
 type TextType = "EMAIL" | "CONTACTNO" | "ZIPCODE" | "CUSTOM";
 
 type PrescreenOption = { id: string; label: string; value: string };

@@ -1,11 +1,16 @@
 // FILE: src/app/(app)/projects/projectdetail/PrescreenPanel.tsx
 "use client";
-export const runtime = 'edge';
-
 import React, { useMemo, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 /* ----------------------------- tiny UI helpers ----------------------------- */
-const Label = ({ children, required = false }: { children: React.ReactNode; required?: boolean }) => (
+const Label = ({
+  children,
+  required = false,
+}: {
+  children: React.ReactNode;
+  required?: boolean;
+}) => (
   <label className="mb-1 block text-xs font-medium text-slate-700">
     {children}
     {required && <span className="ml-0.5 text-rose-500">*</span>}
@@ -50,7 +55,11 @@ const IconButton = ({
   title,
   onClick,
   children,
-}: { title: string; onClick: () => void; children: React.ReactNode }) => (
+}: {
+  title: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) => (
   <button
     type="button"
     title={title}
@@ -62,14 +71,28 @@ const IconButton = ({
 );
 
 const PencilIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <path d="M12 20h9" />
     <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
   </svg>
 );
 
 const TrashIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <polyline points="3 6 5 6 21 6" />
     <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
     <line x1="10" y1="11" x2="10" y2="17" />
@@ -78,12 +101,13 @@ const TrashIcon = () => (
 );
 
 /* ------------------------------ types & consts ----------------------------- */
-type ControlType = "TEXT" | "RADIO";
+type ControlType = "TEXT" | "RADIO" | "CHECKBOX";
 type TextType = "EMAIL" | "CONTACTNO" | "ZIPCODE" | "CUSTOM";
 
 const CONTROL_TYPE_OPTIONS: { value: ControlType; label: string }[] = [
   { value: "TEXT", label: "Text" },
   { value: "RADIO", label: "Radio" },
+  { value: "CHECKBOX", label: "Checkbox" },
 ];
 
 const TEXT_TYPE_OPTIONS: { value: TextType; label: string }[] = [
@@ -107,7 +131,9 @@ function SuccessDialog({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 p-4">
       <div className="w-[min(360px,92vw)] rounded-xl bg-white p-6 text-center shadow-2xl">
-        <div className="mb-5 text-lg font-semibold text-slate-900">{message}</div>
+        <div className="mb-5 text-lg font-semibold text-slate-900">
+          {message}
+        </div>
         <button
           onClick={onClose}
           className="rounded-md bg-teal-600 px-6 py-2 text-sm font-medium text-white hover:bg-teal-700"
@@ -139,7 +165,9 @@ function ConfirmDialog({
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 p-4">
       <div className="w-[min(420px,92vw)] rounded-xl bg-white p-6 text-center shadow-2xl">
-        <div className="mb-6 text-xl font-semibold text-slate-900">{message}</div>
+        <div className="mb-6 text-xl font-semibold text-slate-900">
+          {message}
+        </div>
         <div className="flex items-center justify-center gap-3">
           <button
             onClick={onYes}
@@ -188,14 +216,18 @@ function AddQuestionModal({
       if (!textType) return false;
       const min = parseInt(minLen || "0", 10);
       const max = parseInt(maxLen || "0", 10);
-      if (Number.isNaN(min) || Number.isNaN(max) || min < 0 || max < 0) return false;
+      if (Number.isNaN(min) || Number.isNaN(max) || min < 0 || max < 0)
+        return false;
       if (max && min > max) return false;
     } else if (options.length === 0) return false;
     return true;
   }, [title, question, controlType, minLen, maxLen, textType, options.length]);
 
   const addOption = () => {
-    const parts = optionDraft.split("\n").map((s) => s.trim()).filter(Boolean);
+    const parts = optionDraft
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (!parts.length) return;
     setOptions((prev) => Array.from(new Set([...prev, ...parts])));
     setOptionDraft("");
@@ -216,7 +248,14 @@ function AddQuestionModal({
     const base = { title: title.trim(), question: question.trim(), controlType };
     const payload =
       controlType === "TEXT"
-        ? { ...base, text: { minLength: Number(minLen) || 0, maxLength: Number(maxLen) || 0, textType } }
+        ? {
+            ...base,
+            text: {
+              minLength: Number(minLen) || 0,
+              maxLength: Number(maxLen) || 0,
+              textType,
+            },
+          }
         : { ...base, options };
     await onSubmit(payload);
     reset();
@@ -231,7 +270,11 @@ function AddQuestionModal({
         {/* header */}
         <div className="flex items-center justify-between rounded-t-xl bg-slate-800 px-5 py-3 text-white">
           <div className="text-base font-semibold">Add Question</div>
-          <button onClick={onClose} className="rounded px-2 py-1 text-xl leading-none hover:bg-white/10" aria-label="Close">
+          <button
+            onClick={onClose}
+            className="rounded px-2 py-1 text-xl leading-none hover:bg-white/10"
+            aria-label="Close"
+          >
             ×
           </button>
         </div>
@@ -245,7 +288,11 @@ function AddQuestionModal({
 
           <div className="col-span-12 md:col-span-6">
             <Label required>Control Type</Label>
-            <Select value={controlType} onChange={(e) => setControlType(e.target.value as ControlType)} required>
+            <Select
+              value={controlType}
+              onChange={(e) => setControlType(e.target.value as ControlType)}
+              required
+            >
               <option value="">-- Select Control Type --</option>
               {CONTROL_TYPE_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -264,15 +311,31 @@ function AddQuestionModal({
             <>
               <div className="col-span-12 md:col-span-4">
                 <Label required>Min-Length</Label>
-                <Input type="number" min={0} value={minLen} onChange={(e) => setMinLen(e.target.value)} required />
+                <Input
+                  type="number"
+                  min={0}
+                  value={minLen}
+                  onChange={(e) => setMinLen(e.target.value)}
+                  required
+                />
               </div>
               <div className="col-span-12 md:col-span-4">
                 <Label required>Max-Length</Label>
-                <Input type="number" min={0} value={maxLen} onChange={(e) => setMaxLen(e.target.value)} required />
+                <Input
+                  type="number"
+                  min={0}
+                  value={maxLen}
+                  onChange={(e) => setMaxLen(e.target.value)}
+                  required
+                />
               </div>
               <div className="col-span-12 md:col-span-4">
                 <Label required>Text Type</Label>
-                <Select value={textType} onChange={(e) => setTextType(e.target.value as TextType)} required>
+                <Select
+                  value={textType}
+                  onChange={(e) => setTextType(e.target.value as TextType)}
+                  required
+                >
                   <option value="">-- Select Control --</option>
                   {TEXT_TYPE_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>
@@ -286,9 +349,18 @@ function AddQuestionModal({
             <>
               <div className="col-span-12 md:col-span-6">
                 <Label>Add Option</Label>
-                <Textarea rows={8} value={optionDraft} onChange={(e) => setOptionDraft(e.target.value)} placeholder="Type one option per line" />
+                <Textarea
+                  rows={8}
+                  value={optionDraft}
+                  onChange={(e) => setOptionDraft(e.target.value)}
+                  placeholder="Type one option per line"
+                />
                 <div className="mt-3">
-                  <button type="button" onClick={addOption} className="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700">
+                  <button
+                    type="button"
+                    onClick={addOption}
+                    className="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
+                  >
                     Add
                   </button>
                 </div>
@@ -301,9 +373,17 @@ function AddQuestionModal({
                   ) : (
                     <ul className="space-y-2">
                       {options.map((opt) => (
-                        <li key={opt} className="flex items-center justify-between rounded border border-slate-200 bg-slate-50 px-3 py-1 text-sm">
+                        <li
+                          key={opt}
+                          className="flex items-center justify-between rounded border border-slate-200 bg-slate-50 px-3 py-1 text-sm"
+                        >
                           <span className="truncate">{opt}</span>
-                          <button type="button" onClick={() => setOptions((prev) => prev.filter((x) => x !== opt))} className="rounded px-2 py-0.5 text-slate-500 hover:bg-white" aria-label={`Remove ${opt}`}>
+                          <button
+                            type="button"
+                            onClick={() => setOptions((prev) => prev.filter((x) => x !== opt))}
+                            className="rounded px-2 py-0.5 text-slate-500 hover:bg-white"
+                            aria-label={`Remove ${opt}`}
+                          >
                             ×
                           </button>
                         </li>
@@ -318,10 +398,19 @@ function AddQuestionModal({
 
         {/* footer */}
         <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
-          <button type="button" onClick={onClose} className="rounded-md border border-slate-300 bg-white px-5 py-2 text-sm hover:bg-slate-50">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-slate-300 bg-white px-5 py-2 text-sm hover:bg-slate-50"
+          >
             Cancel
           </button>
-          <button type="button" disabled={!canSubmit} onClick={handleSubmit} className="rounded-md bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+          <button
+            type="button"
+            disabled={!canSubmit}
+            onClick={handleSubmit}
+            className="rounded-md bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
             Submit
           </button>
         </div>
@@ -382,8 +471,7 @@ function EditQuestionModal({
 
     if (draft.controlType === "TEXT") {
       const t =
-        (draft as any).text ??
-        {
+        (draft as any).text ?? {
           minLength: (draft as any).textMinLength,
           maxLength: (draft as any).textMaxLength,
           textType: (draft as any).textType,
@@ -395,7 +483,9 @@ function EditQuestionModal({
     } else {
       const raw = Array.isArray((draft as any).options) ? (draft as any).options : [];
       setOptions(
-        raw.map((o: any) => (typeof o === "string" ? o : String(o.label ?? o.value ?? ""))).filter(Boolean)
+        raw
+          .map((o: any) => (typeof o === "string" ? o : String(o.label ?? o.value ?? "")))
+          .filter(Boolean)
       );
       setMinLen("0");
       setMaxLen("0");
@@ -441,7 +531,11 @@ function EditQuestionModal({
         {/* header */}
         <div className="flex items-center justify-between rounded-t-xl bg-slate-800 px-5 py-3 text-white">
           <div className="text-base font-semibold">Edit Question</div>
-          <button onClick={onClose} className="rounded px-2 py-1 text-xl leading-none hover:bg-white/10" aria-label="Close">
+          <button
+            onClick={onClose}
+            className="rounded px-2 py-1 text-xl leading-none hover:bg-white/10"
+            aria-label="Close"
+          >
             ×
           </button>
         </div>
@@ -494,9 +588,18 @@ function EditQuestionModal({
             <>
               <div className="col-span-12 md:col-span-6">
                 <Label>Edit Options</Label>
-                <Textarea rows={8} value={optionDraft} onChange={(e) => setOptionDraft(e.target.value)} placeholder="Type one option per line" />
+                <Textarea
+                  rows={8}
+                  value={optionDraft}
+                  onChange={(e) => setOptionDraft(e.target.value)}
+                  placeholder="Type one option per line"
+                />
                 <div className="mt-3">
-                  <button type="button" onClick={addOption} className="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700">
+                  <button
+                    type="button"
+                    onClick={addOption}
+                    className="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
+                  >
                     Add
                   </button>
                 </div>
@@ -509,9 +612,17 @@ function EditQuestionModal({
                   ) : (
                     <ul className="space-y-2">
                       {options.map((opt) => (
-                        <li key={opt} className="flex items-center justify-between rounded border border-slate-200 bg-slate-50 px-3 py-1 text-sm">
+                        <li
+                          key={opt}
+                          className="flex items-center justify-between rounded border border-slate-200 bg-slate-50 px-3 py-1 text-sm"
+                        >
                           <span className="truncate">{opt}</span>
-                          <button type="button" onClick={() => setOptions((prev) => prev.filter((x) => x !== opt))} className="rounded px-2 py-0.5 text-slate-500 hover:bg-white" aria-label={`Remove ${opt}`}>
+                          <button
+                            type="button"
+                            onClick={() => setOptions((prev) => prev.filter((x) => x !== opt))}
+                            className="rounded px-2 py-0.5 text-slate-500 hover:bg-white"
+                            aria-label={`Remove ${opt}`}
+                          >
                             ×
                           </button>
                         </li>
@@ -526,12 +637,329 @@ function EditQuestionModal({
 
         {/* footer */}
         <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
-          <button type="button" onClick={onClose} className="rounded-md border border-slate-300 bg-white px-5 py-2 text-sm hover:bg-slate-50">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-slate-300 bg-white px-5 py-2 text-sm hover:bg-slate-50"
+          >
             Cancel
           </button>
-          <button type="button" disabled={!canSubmit} onClick={submit} className="rounded-md bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+          <button
+            type="button"
+            disabled={!canSubmit}
+            onClick={submit}
+            className="rounded-md bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
             Submit
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------ Library modal ----------------------------- */
+type LibraryProfile = { key: string; name: string };
+
+type LibraryQuestion = {
+  key: string;
+  title: string;
+  question: string;
+  controlType: ControlType;
+  options?: { label: string; value?: string }[];
+  text?: { minLength?: number; maxLength?: number | null; textType?: TextType | "CUSTOM" };
+};
+
+function LibraryModal({
+  open,
+  onClose,
+  projectId,
+  onAdded,
+  setSuccessMessage,
+  setSuccessOpen,
+}: {
+  open: boolean;
+  onClose: () => void;
+  projectId: string;
+  onAdded: () => Promise<void>;
+  setSuccessMessage: (m: string) => void;
+  setSuccessOpen: (v: boolean) => void;
+}) {
+  const [profiles, setProfiles] = useState<LibraryProfile[]>([]);
+  const [profileKey, setProfileKey] = useState<string>("");
+  const [questions, setQuestions] = useState<LibraryQuestion[]>([]);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [loadingProfiles, setLoadingProfiles] = useState(false);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [error, setError] = useState<string>("");
+
+
+  const selectedCount = useMemo(
+    () => Object.values(selected).filter(Boolean).length,
+    [selected]
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      setError("");
+      setLoadingProfiles(true);
+      try {
+        const r = await fetch(`/api/prescreen-library`, { cache: "no-store" });
+        if (!r.ok) throw new Error(await r.text());
+        const json = await r.json();
+        const list = Array.isArray(json?.profiles) ? json.profiles : [];
+        setProfiles(list);
+
+        if (!profileKey && list.length) setProfileKey(String(list[0].key));
+      } catch (e: any) {
+        setError(e?.message || "Failed to load library profiles.");
+      } finally {
+        setLoadingProfiles(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!profileKey) {
+      setQuestions([]);
+      setSelected({});
+      return;
+    }
+    (async () => {
+      setError("");
+      setLoadingQuestions(true);
+      try {
+        const r = await fetch(
+          `/api/prescreen-library?profile=${encodeURIComponent(profileKey)}`,
+          { cache: "no-store" }
+        );
+        if (!r.ok) throw new Error(await r.text());
+        const json = await r.json();
+        const qs = Array.isArray(json?.questions) ? json.questions : [];
+        setQuestions(qs);
+        setSelected({});
+      } catch (e: any) {
+        setError(e?.message || "Failed to load library questions.");
+        setQuestions([]);
+        setSelected({});
+      } finally {
+        setLoadingQuestions(false);
+      }
+    })();
+  }, [open, profileKey]);
+
+  const toggleAll = (val: boolean) => {
+    const next: Record<string, boolean> = {};
+    for (const q of questions) next[q.key] = val;
+    setSelected(next);
+  };
+
+  const addSelected = async () => {
+    const picks = questions.filter((q) => selected[q.key]);
+    if (picks.length === 0) return;
+
+    setAdding(true);
+    setError("");
+
+    try {
+      for (const q of picks) {
+        const base: any = {
+          title: String(q.title ?? "").trim(),
+          question: String(q.question ?? "").trim(),
+          controlType: q.controlType,
+        };
+
+        let payload: any = base;
+
+        if (q.controlType === "TEXT") {
+          payload = {
+            ...base,
+            text: {
+              minLength: Number(q.text?.minLength ?? 0) || 0,
+              maxLength: Number(q.text?.maxLength ?? 0) || 0,
+              textType: (q.text?.textType as any) || "CUSTOM",
+            },
+          };
+        } else {
+          const opts = Array.isArray(q.options) ? q.options : [];
+          const labels = opts
+            .map((o) => String(o?.label ?? "").trim())
+            .filter(Boolean);
+
+          payload = { ...base, options: labels };
+        }
+
+        const res = await fetch(`/api/projects/${projectId}/prescreen`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error(await res.text());
+      }
+
+      await onAdded();
+      setSuccessMessage(`Added ${picks.length} question(s) from Library!`);
+      setSuccessOpen(true);
+      onClose();
+    } catch (e: any) {
+      setError(e?.message || "Failed to add selected questions.");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[130] flex items-start justify-center bg-black/40 p-4">
+      <div className="w-[min(1100px,95vw)] rounded-xl bg-white shadow-2xl">
+        {/* header */}
+        <div className="flex items-center justify-between rounded-t-xl bg-slate-800 px-5 py-3 text-white">
+          <div className="text-base font-semibold">Add from Library</div>
+          <button
+            onClick={onClose}
+            className="rounded px-2 py-1 text-xl leading-none hover:bg-white/10"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* body */}
+        <div className="p-6">
+          <div className="mb-4 grid grid-cols-12 gap-4">
+            <div className="col-span-12 md:col-span-5">
+              <Label required>Profile</Label>
+              <Select
+                value={profileKey}
+                onChange={(e) => setProfileKey(e.target.value)}
+                disabled={loadingProfiles || profiles.length === 0}
+              >
+                {profiles.length === 0 ? (
+                  <option value="">
+                    {loadingProfiles ? "Loading profiles..." : "-- No profiles found --"}
+                  </option>
+                ) : (
+                  profiles.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.name}
+                    </option>
+                  ))
+                )}
+              </Select>
+            </div>
+
+            <div className="col-span-12 md:col-span-7 flex items-end justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => toggleAll(true)}
+                disabled={questions.length === 0 || loadingQuestions}
+                className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-50"
+              >
+                Select all
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleAll(false)}
+                disabled={questions.length === 0 || loadingQuestions}
+                className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-50"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          {error ? (
+            <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {String(error)}
+            </div>
+          ) : null}
+
+          <div className="overflow-auto rounded-lg border border-slate-200">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-800 text-white">
+                <tr>
+                  <th className="w-16 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={questions.length > 0 && selectedCount === questions.length}
+                      onChange={(e) => toggleAll(e.target.checked)}
+                      disabled={questions.length === 0 || loadingQuestions}
+                    />
+                  </th>
+                  <th className="w-64 px-4 py-3">Title</th>
+                  <th className="px-4 py-3">Question</th>
+                  <th className="w-36 px-4 py-3">Control</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {loadingQuestions ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+                      Loading questions...
+                    </td>
+                  </tr>
+                ) : questions.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+                      No questions found for this profile.
+                    </td>
+                  </tr>
+                ) : (
+                  questions.map((q, idx) => (
+                    <tr key={q.key} className={idx % 2 ? "bg-slate-50" : "bg-white"}>
+                      <td className="px-4 py-2">
+                        <input
+                          type="checkbox"
+                          checked={!!selected[q.key]}
+                          onChange={(e) =>
+                            setSelected((prev) => ({ ...prev, [q.key]: e.target.checked }))
+                          }
+                        />
+                      </td>
+                      <td className="px-4 py-2">{q.title}</td>
+                      <td className="px-4 py-2">{q.question}</td>
+                      <td className="px-4 py-2">
+                        {q.controlType === "TEXT"
+                          ? "Text"
+                          : q.controlType[0] + q.controlType.slice(1).toLowerCase()}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* footer */}
+          <div className="mt-4 flex items-center justify-between">
+            <div className="text-sm text-slate-600">
+              Selected: <span className="font-semibold">{selectedCount}</span>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-md border border-slate-300 bg-white px-5 py-2 text-sm hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={addSelected}
+                disabled={selectedCount === 0 || adding}
+                className="rounded-md bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {adding ? "Adding..." : "Add Selected"}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -557,8 +985,17 @@ type SavedRow = {
   sortOrder: number; // used for stable suffix numbering
 };
 
-export default function PrescreenPanel({ projectId }: { projectId: string }) {
+type PreScreenPanelProps = {
+  projectId: string;
+  initialStatus: "ACTIVE" | "CLOSED";
+};
+
+export default function PrescreenPanel({ projectId, initialStatus }: PreScreenPanelProps) {
+  const router = useRouter();
+
   const [addOpen, setAddOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [showDeleteSuccess, setShowDeleteSuccess] = useState(false);
 
   // For “configure options” after create OR after edit of non-TEXT
   const [activeQ, setActiveQ] = useState<CreatedQuestion | null>(null);
@@ -576,7 +1013,10 @@ export default function PrescreenPanel({ projectId }: { projectId: string }) {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Delete confirm
-  const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
+  const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; id: string | null }>({
+    open: false,
+    id: null,
+  });
 
   // Track if we arrived at the mapping table from an Edit flow (for the right success message)
   const [fromEdit, setFromEdit] = useState(false);
@@ -731,7 +1171,7 @@ export default function PrescreenPanel({ projectId }: { projectId: string }) {
       setEditDraft(q);
       setEditOpen(true);
     } catch (e: any) {
-      window.alert(e?.message || "Failed to load question.");
+      window.alert(e?.message || "Failed to load question."); 
     }
   };
 
@@ -742,9 +1182,13 @@ export default function PrescreenPanel({ projectId }: { projectId: string }) {
   const confirmYes = async () => {
     if (!confirmDelete.id) return;
     try {
-      const r = await fetch(`/api/projects/${projectId}/prescreen/question/${confirmDelete.id}`, { method: "DELETE" });
+      const r = await fetch(`/api/projects/${projectId}/prescreen/question/${confirmDelete.id}`, {
+        method: "DELETE",
+      });
       if (!r.ok) throw new Error(await r.text());
       await loadSavedList();
+      // ✅ show delete success dialog
+    setShowDeleteSuccess(true);
     } catch (e: any) {
       window.alert(e?.message || "Failed to delete.");
     } finally {
@@ -756,250 +1200,303 @@ export default function PrescreenPanel({ projectId }: { projectId: string }) {
 
   /* ------------------------------ render ---------------------------------- */
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="text-sm text-slate-700">Prescreen</div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setAddOpen(true)}
-            className="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
-          >
-            Add a new Question
-          </button>
-          <button
-            type="button"
-            onClick={() => alert("Open Library (to be implemented)")}
-            className="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
-          >
-            Add from Library
-          </button>
+    <>
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="text-sm text-slate-700">Prescreen</div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              className="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
+            >
+              Add a new Question
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setLibraryOpen(true)}
+              className="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
+            >
+              Add from Library
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* mapping table (shown after create OR after edit of non-TEXT) */}
-      {activeQ ? (
-        <>
-          <div className="mb-3 grid grid-cols-[120px_1fr] gap-2 text-sm">
-            <div className="text-slate-500">Title</div>
-            <div>: {(activeQ as any).title}</div>
-            <div className="text-slate-500">Question</div>
-            <div>: {(activeQ as any).question}</div>
-            <div className="text-slate-500">Control Type</div>
-            <div>
-              : {(activeQ as any).controlType === "TEXT"
-                ? "Text"
-                : (activeQ as any).controlType[0] + (activeQ as any).controlType.slice(1).toLowerCase()}
+        {/* mapping table (shown after create OR after edit of non-TEXT) */}
+        {activeQ ? (
+          <>
+            <div className="mb-3 grid grid-cols-[120px_1fr] gap-2 text-sm">
+              <div className="text-slate-500">Title</div>
+              <div>: {(activeQ as any).title}</div>
+              <div className="text-slate-500">Question</div>
+              <div>: {(activeQ as any).question}</div>
+              <div className="text-slate-500">Control Type</div>
+              <div>
+                :{" "}
+                {(activeQ as any).controlType === "TEXT"
+                  ? "Text"
+                  : (activeQ as any).controlType[0] +
+                    (activeQ as any).controlType.slice(1).toLowerCase()}
+              </div>
             </div>
-          </div>
 
-          {(activeQ as any).controlType !== "TEXT" ? (
-            <div className="overflow-auto rounded-lg border border-slate-200">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-slate-800 text-white">
-                  <tr>
-                    <th className="w-28 px-4 py-2">
-                      <label className="inline-flex items-center gap-2">
-                        <input type="checkbox" onChange={(e) => toggleAll("enabled", e.target.checked)} /> Enable
-                      </label>
-                    </th>
-                    <th className="px-4 py-2">Option</th>
-                    <th className="w-32 px-4 py-2">
-                      <label className="inline-flex items-center gap-2">
-                        <input type="checkbox" onChange={(e) => toggleAll("validate", e.target.checked)} /> Validate
-                      </label>
-                    </th>
-                    <th className="w-32 px-4 py-2">Quota</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {opts.map((o, i) => (
-                    <tr key={o.id} className={i % 2 ? "bg-slate-50" : "bg-white"}>
-                      <td className="px-4 py-2">
-                        <input
-                          type="checkbox"
-                          checked={o.enabled}
-                          onChange={(e) =>
-                            setOpts((prev) => prev.map((x) => (x.id === o.id ? { ...x, enabled: e.target.checked } : x)))
-                          }
-                        />
-                      </td>
-                      <td className="px-4 py-2">{o.label}</td>
-                      <td className="px-4 py-2">
-                        <input
-                          type="checkbox"
-                          checked={o.validate}
-                          onChange={(e) =>
-                            setOpts((prev) => prev.map((x) => (x.id === o.id ? { ...x, validate: e.target.checked } : x)))
-                          }
-                        />
-                      </td>
-                      <td className="px-4 py-2">
-                        <Input
-                          type="number"
-                          min={0}
-                          value={String(o.quota ?? 0)}
-                          onChange={(e) =>
-                            setOpts((prev) =>
-                              prev.map((x) => (x.id === o.id ? { ...x, quota: Math.max(0, Number(e.target.value || 0)) } : x))
-                            )
-                          }
-                          className="w-24"
-                        />
-                      </td>
+            {(activeQ as any).controlType !== "TEXT" ? (
+              <div className="overflow-auto rounded-lg border border-slate-200">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-slate-800 text-white">
+                    <tr>
+                      <th className="w-28 px-4 py-2">
+                        <label className="inline-flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            onChange={(e) => toggleAll("enabled", e.target.checked)}
+                          />{" "}
+                          Enable
+                        </label>
+                      </th>
+                      <th className="px-4 py-2">Option</th>
+                      <th className="w-32 px-4 py-2">
+                        <label className="inline-flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            onChange={(e) => toggleAll("validate", e.target.checked)}
+                          />{" "}
+                          Validate
+                        </label>
+                      </th>
+                      <th className="w-32 px-4 py-2">Quota</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
+                  </thead>
+                  <tbody>
+                    {opts.map((o, i) => (
+                      <tr key={o.id} className={i % 2 ? "bg-slate-50" : "bg-white"}>
+                        <td className="px-4 py-2">
+                          <input
+                            type="checkbox"
+                            checked={o.enabled}
+                            onChange={(e) =>
+                              setOpts((prev) =>
+                                prev.map((x) =>
+                                  x.id === o.id ? { ...x, enabled: e.target.checked } : x
+                                )
+                              )
+                            }
+                          />
+                        </td>
+                        <td className="px-4 py-2">{o.label}</td>
+                        <td className="px-4 py-2">
+                          <input
+                            type="checkbox"
+                            checked={o.validate}
+                            onChange={(e) =>
+                              setOpts((prev) =>
+                                prev.map((x) =>
+                                  x.id === o.id ? { ...x, validate: e.target.checked } : x
+                                )
+                              )
+                            }
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <Input
+                            type="number"
+                            min={0}
+                            value={String(o.quota ?? 0)}
+                            onChange={(e) =>
+                              setOpts((prev) =>
+                                prev.map((x) =>
+                                  x.id === o.id
+                                    ? { ...x, quota: Math.max(0, Number(e.target.value || 0)) }
+                                    : x
+                                )
+                              )
+                            }
+                            className="w-24"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
 
-          <div className="mt-4 flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setActiveQ(null);
-                setOpts([]);
-                setFromEdit(false);
-                loadSavedList(); // refresh when returning to list
-              }}
-              className="rounded-md border border-slate-300 bg-white px-5 py-2 text-sm hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={saveConfig}
-              disabled={saving}
-              className="rounded-md bg-teal-600 px-5 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50"
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
-          </div>
-        </>
-      ) : (
-        <div className="overflow-auto rounded-lg border border-slate-200">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-800 text-white">
-              <tr>
-                <th className="w-20 px-4 py-3">ID</th>
-                <th className="px-4 py-3">Title</th>
-                <th className="px-4 py-3">Question</th>
-                <th className="w-36 px-4 py-3">Control</th>
-                <th className="w-28 px-4 py-3">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {saved.length === 0 ? (
+            <div className="mt-4 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveQ(null);
+                  setOpts([]);
+                  setFromEdit(false);
+                  loadSavedList();
+                }}
+                className="rounded-md border border-slate-300 bg-white px-5 py-2 text-sm hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveConfig}
+                disabled={saving}
+                className="rounded-md bg-teal-600 px-5 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="overflow-auto rounded-lg border border-slate-200">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-800 text-white">
                 <tr>
-                  <td className="px-4 py-6 text-center text-slate-500" colSpan={5}>
-                    Add a question to configure prescreen options.
-                  </td>
+                  <th className="w-20 px-4 py-3">ID</th>
+                  <th className="px-4 py-3">Title</th>
+                  <th className="px-4 py-3">Question</th>
+                  <th className="w-36 px-4 py-3">Control</th>
+                  <th className="w-28 px-4 py-3">Action</th>
                 </tr>
-              ) : (
-                saved.map((q, i) => {
-                  // Stable suffix based on server sortOrder, NOT array index
-                  const displayTitle = `${q.title}_${1000 + (q.sortOrder ?? 0)}`;
-                  return (
-                    <tr key={q.id} className={i % 2 ? "bg-slate-50" : "bg-white"}>
-                      <td className="px-4 py-2">{i + 1}</td>
-                      <td className="px-4 py-2">{displayTitle}</td>
-                      <td className="px-4 py-2">{q.question}</td>
-                      <td className="px-4 py-2">
-                        {q.controlType === "TEXT" ? "Text" : q.controlType[0] + q.controlType.slice(1).toLowerCase()}
-                      </td>
-                      <td className="px-2 py-2">
-                        <div className="flex items-center gap-1">
-                          <IconButton title="Edit" onClick={() => handleEdit(q.id)}>
-                            <PencilIcon />
-                          </IconButton>
-                          <IconButton title="Delete" onClick={() => requestDelete(q.id)}>
-                            <TrashIcon />
-                          </IconButton>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {saved.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-slate-500" colSpan={5}>
+                      Add a question to configure prescreen options.
+                    </td>
+                  </tr>
+                ) : (
+                  saved.map((q, i) => {
+                    const displayTitle = `${q.title}_${1000 + (q.sortOrder ?? 0)}`;
+                    return (
+                      <tr key={q.id} className={i % 2 ? "bg-slate-50" : "bg-white"}>
+                        <td className="px-4 py-2">{i + 1}</td>
+                        <td className="px-4 py-2">{displayTitle}</td>
+                        <td className="px-4 py-2">{q.question}</td>
+                        <td className="px-4 py-2">
+                          {q.controlType === "TEXT"
+                            ? "Text"
+                            : q.controlType[0] + q.controlType.slice(1).toLowerCase()}
+                        </td>
+                        <td className="px-2 py-2">
+                          <div className="flex items-center gap-1">
+                            <IconButton title="Edit" onClick={() => handleEdit(q.id)}>
+                              <PencilIcon />
+                            </IconButton>
+                            <IconButton title="Delete" onClick={() => requestDelete(q.id)}>
+                              <TrashIcon />
+                            </IconButton>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-      {/* Create modal */}
-      <AddQuestionModal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onSubmit={async (payload) => {
-          const res = await fetch(`/api/projects/${projectId}/prescreen`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          if (!res.ok) throw new Error(await res.text());
-          const created = (await res.json()) as CreatedQuestion | { id: string };
-          if ("title" in created) {
-            loadIntoState(created);
-          } else {
-            await fetchAndLoadQuestion((created as any).id);
-          }
-          // also refresh list for persistence (and to get server sortOrder)
-          await loadSavedList();
-        }}
-      />
+        {/* Create modal */}
+        <AddQuestionModal
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
+          onSubmit={async (payload) => {
+            const res = await fetch(`/api/projects/${projectId}/prescreen`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            const created = (await res.json()) as CreatedQuestion | { id: string };
+            if ("title" in created) {
+              loadIntoState(created);
+            } else {
+              await fetchAndLoadQuestion((created as any).id);
+            }
+            await loadSavedList();
+          }}
+        />
 
-      {/* EDIT modal */}
-      <EditQuestionModal
-        open={editOpen}
-        draft={editDraft}
-        onClose={() => setEditOpen(false)}
-        onSubmit={async (payload) => {
-          if (!editingId) return;
-          const res = await fetch(`/api/projects/${projectId}/prescreen/question/${editingId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          if (!res.ok) throw new Error(await res.text());
-          const updated = (await res.json()) as CreatedQuestion;
+        {/* Library modal */}
+        <LibraryModal
+          open={libraryOpen}
+          onClose={() => setLibraryOpen(false)}
+          projectId={projectId}
+          onAdded={async () => {
+            await loadSavedList();
+          }}
+          setSuccessMessage={setSuccessMessage}
+          setSuccessOpen={setSuccessOpen}
+        />
 
-          if ((updated as any).controlType !== "TEXT") {
-            // Go to mapping table; initial flags fetched freshly
-            setEditOpen(false);
-            setFromEdit(true);
-            await fetchAndLoadQuestion((updated as any).id);
-            return;
-          }
+        {/* EDIT modal */}
+        <EditQuestionModal
+          open={editOpen}
+          draft={editDraft}
+          onClose={() => setEditOpen(false)}
+          onSubmit={async (payload) => {
+            if (!editingId) return;
+            const res = await fetch(`/api/projects/${projectId}/prescreen/question/${editingId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            const updated = (await res.json()) as CreatedQuestion;
 
-          // TEXT: just refresh list and show dialog
-          await loadSavedList();
-          setSuccessMessage("Edited successfully!");
-          setSuccessOpen(true);
-        }}
-      />
+            if ((updated as any).controlType !== "TEXT") {
+              setEditOpen(false);
+              setFromEdit(true);
+              await fetchAndLoadQuestion((updated as any).id);
+              return;
+            }
 
-      {/* Success dialog */}
-      <SuccessDialog
-        open={successOpen}
-        onClose={() => {
-          setSuccessOpen(false);
-          setActiveQ(null);
-          setOpts([]);
-          loadSavedList(); // ensure list is up-to-date after dialog
-        }}
-        message={successMessage}
-      />
+            await loadSavedList();
+            setSuccessMessage("Edited successfully!");
+            setSuccessOpen(true);
+          }}
+        />
 
-      {/* Delete confirm dialog */}
-      <ConfirmDialog
-        open={confirmDelete.open}
-        message="Do you want to Delete?"
-        yesText="Yes"
-        noText="No"
-        onYes={confirmYes}
-        onNo={confirmNo}
-      />
+        {/* Success dialog */}
+        <SuccessDialog
+          open={successOpen}
+          onClose={() => {
+            setSuccessOpen(false);
+            setActiveQ(null);
+            setOpts([]);
+            loadSavedList();
+          }}
+          message={successMessage}
+        />
+
+        {/* Delete confirm dialog */}
+        <ConfirmDialog
+          open={confirmDelete.open}
+          message="Do you want to Delete?"
+          yesText="Yes"
+          noText="No"
+          onYes={confirmYes}
+          onNo={confirmNo}
+        />
+        {/* Delete success dialog */}
+        {showDeleteSuccess && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="bg-white rounded-md w-[360px] p-6 text-center">
+      <h3 className="text-lg font-semibold mb-4">
+        Question deleted successfully!
+      </h3>
+
+      <button
+        onClick={() => setShowDeleteSuccess(false)}
+        className="bg-teal-600 text-white px-6 py-2 rounded-md text-sm font-medium text-white hover:bg-teal-700"
+      >
+        OK
+      </button>
     </div>
+  </div>
+)}
+
+      </div>
+    </>
   );
 }
