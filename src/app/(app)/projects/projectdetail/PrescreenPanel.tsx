@@ -694,6 +694,7 @@ function LibraryModal({
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string>("");
 
+
   const selectedCount = useMemo(
     () => Object.values(selected).filter(Boolean).length,
     [selected]
@@ -994,6 +995,7 @@ export default function PrescreenPanel({ projectId, initialStatus }: PreScreenPa
 
   const [addOpen, setAddOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [showDeleteSuccess, setShowDeleteSuccess] = useState(false);
 
   // For “configure options” after create OR after edit of non-TEXT
   const [activeQ, setActiveQ] = useState<CreatedQuestion | null>(null);
@@ -1169,7 +1171,7 @@ export default function PrescreenPanel({ projectId, initialStatus }: PreScreenPa
       setEditDraft(q);
       setEditOpen(true);
     } catch (e: any) {
-      window.alert(e?.message || "Failed to load question.");
+      window.alert(e?.message || "Failed to load question."); 
     }
   };
 
@@ -1185,6 +1187,8 @@ export default function PrescreenPanel({ projectId, initialStatus }: PreScreenPa
       });
       if (!r.ok) throw new Error(await r.text());
       await loadSavedList();
+      // ✅ show delete success dialog
+    setShowDeleteSuccess(true);
     } catch (e: any) {
       window.alert(e?.message || "Failed to delete.");
     } finally {
@@ -1474,6 +1478,24 @@ export default function PrescreenPanel({ projectId, initialStatus }: PreScreenPa
           onYes={confirmYes}
           onNo={confirmNo}
         />
+        {/* Delete success dialog */}
+        {showDeleteSuccess && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="bg-white rounded-md w-[360px] p-6 text-center">
+      <h3 className="text-lg font-semibold mb-4">
+        Question deleted successfully!
+      </h3>
+
+      <button
+        onClick={() => setShowDeleteSuccess(false)}
+        className="bg-teal-600 text-white px-6 py-2 rounded-md text-sm font-medium text-white hover:bg-teal-700"
+      >
+        OK
+      </button>
+    </div>
+  </div>
+)}
+
       </div>
     </>
   );
