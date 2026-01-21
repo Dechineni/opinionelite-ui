@@ -1,7 +1,6 @@
 // FILE: src/app/(app)/projects/projectdetail/PrescreenPanel.tsx
 "use client";
 import React, { useMemo, useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 
 /* ----------------------------- tiny UI helpers ----------------------------- */
 const Label = ({
@@ -129,7 +128,7 @@ function SuccessDialog({
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 p-4">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30 p-4">
       <div className="w-[min(360px,92vw)] rounded-xl bg-white p-6 text-center shadow-2xl">
         <div className="mb-5 text-lg font-semibold text-slate-900">
           {message}
@@ -163,7 +162,7 @@ function ConfirmDialog({
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 p-4">
+    <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/30 p-4">
       <div className="w-[min(420px,92vw)] rounded-xl bg-white p-6 text-center shadow-2xl">
         <div className="mb-6 text-xl font-semibold text-slate-900">
           {message}
@@ -216,7 +215,12 @@ function AddQuestionModal({
       if (!textType) return false;
       const min = parseInt(minLen || "0", 10);
       const max = parseInt(maxLen || "0", 10);
-      if (Number.isNaN(min) || Number.isNaN(max) || min < 0 || max < 0)
+      if (
+        Number.isNaN(min) ||
+        Number.isNaN(max) ||
+        min < 0 ||
+        max < 0
+      )
         return false;
       if (max && min > max) return false;
     } else if (options.length === 0) return false;
@@ -265,10 +269,10 @@ function AddQuestionModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center bg-black/40 p-4">
-      <div className="w-[min(980px,95vw)] rounded-xl bg-white shadow-2xl">
+    <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/40 p-4">
+      <div className="flex max-h-[90vh] w-[min(980px,95vw)] flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
         {/* header */}
-        <div className="flex items-center justify-between rounded-t-xl bg-slate-800 px-5 py-3 text-white">
+        <div className="flex items-center justify-between bg-slate-800 px-5 py-3 text-white">
           <div className="text-base font-semibold">Add Question</div>
           <button
             onClick={onClose}
@@ -279,124 +283,140 @@ function AddQuestionModal({
           </button>
         </div>
 
-        {/* body */}
-        <div className="grid grid-cols-12 gap-5 p-6">
-          <div className="col-span-12 md:col-span-6">
-            <Label required>Title</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
-          </div>
+        {/* body (scrollable) */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="grid grid-cols-12 gap-5">
+            <div className="col-span-12 md:col-span-6">
+              <Label required>Title</Label>
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+              />
+            </div>
 
-          <div className="col-span-12 md:col-span-6">
-            <Label required>Control Type</Label>
-            <Select
-              value={controlType}
-              onChange={(e) => setControlType(e.target.value as ControlType)}
-              required
-            >
-              <option value="">-- Select Control Type --</option>
-              {CONTROL_TYPE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
-          </div>
+            <div className="col-span-12 md:col-span-6">
+              <Label required>Control Type</Label>
+              <Select
+                value={controlType}
+                onChange={(e) => setControlType(e.target.value as ControlType)}
+                required
+              >
+                <option value="">-- Select Control Type --</option>
+                {CONTROL_TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
 
-          <div className="col-span-12">
-            <Label required>Question</Label>
-            <Input value={question} onChange={(e) => setQuestion(e.target.value)} required />
-          </div>
+            <div className="col-span-12">
+              <Label required>Question</Label>
+              <Input
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                required
+              />
+            </div>
 
-          {controlType === "TEXT" ? (
-            <>
-              <div className="col-span-12 md:col-span-4">
-                <Label required>Min-Length</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={minLen}
-                  onChange={(e) => setMinLen(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="col-span-12 md:col-span-4">
-                <Label required>Max-Length</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={maxLen}
-                  onChange={(e) => setMaxLen(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="col-span-12 md:col-span-4">
-                <Label required>Text Type</Label>
-                <Select
-                  value={textType}
-                  onChange={(e) => setTextType(e.target.value as TextType)}
-                  required
-                >
-                  <option value="">-- Select Control --</option>
-                  {TEXT_TYPE_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="col-span-12 md:col-span-6">
-                <Label>Add Option</Label>
-                <Textarea
-                  rows={8}
-                  value={optionDraft}
-                  onChange={(e) => setOptionDraft(e.target.value)}
-                  placeholder="Type one option per line"
-                />
-                <div className="mt-3">
-                  <button
-                    type="button"
-                    onClick={addOption}
-                    className="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
+            {controlType === "TEXT" ? (
+              <>
+                <div className="col-span-12 md:col-span-4">
+                  <Label required>Min-Length</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={minLen}
+                    onChange={(e) => setMinLen(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="col-span-12 md:col-span-4">
+                  <Label required>Max-Length</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={maxLen}
+                    onChange={(e) => setMaxLen(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="col-span-12 md:col-span-4">
+                  <Label required>Text Type</Label>
+                  <Select
+                    value={textType}
+                    onChange={(e) => setTextType(e.target.value as TextType)}
+                    required
                   >
-                    Add
-                  </button>
+                    <option value="">-- Select Control --</option>
+                    {TEXT_TYPE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </Select>
                 </div>
-              </div>
-              <div className="col-span-12 md:col-span-6">
-                <Label>Mapped Options</Label>
-                <div className="min-h-[200px] rounded-lg border border-slate-300 p-3">
-                  {options.length === 0 ? (
-                    <div className="text-sm text-slate-500">None added yet.</div>
-                  ) : (
-                    <ul className="space-y-2">
-                      {options.map((opt) => (
-                        <li
-                          key={opt}
-                          className="flex items-center justify-between rounded border border-slate-200 bg-slate-50 px-3 py-1 text-sm"
-                        >
-                          <span className="truncate">{opt}</span>
-                          <button
-                            type="button"
-                            onClick={() => setOptions((prev) => prev.filter((x) => x !== opt))}
-                            className="rounded px-2 py-0.5 text-slate-500 hover:bg-white"
-                            aria-label={`Remove ${opt}`}
+              </>
+            ) : (
+              <>
+                <div className="col-span-12 md:col-span-6">
+                  <Label>Add Option</Label>
+                  <Textarea
+                    rows={8}
+                    value={optionDraft}
+                    onChange={(e) => setOptionDraft(e.target.value)}
+                    placeholder="Type one option per line"
+                  />
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={addOption}
+                      className="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+                <div className="col-span-12 md:col-span-6">
+                  <Label>Mapped Options</Label>
+                  <div className="min-h-[200px] rounded-lg border border-slate-300 p-3">
+                    {options.length === 0 ? (
+                      <div className="text-sm text-slate-500">
+                        None added yet.
+                      </div>
+                    ) : (
+                      <ul className="space-y-2">
+                        {options.map((opt) => (
+                          <li
+                            key={opt}
+                            className="flex items-center justify-between rounded border border-slate-200 bg-slate-50 px-3 py-1 text-sm"
                           >
-                            ×
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                            <span className="truncate">{opt}</span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setOptions((prev) =>
+                                  prev.filter((x) => x !== opt)
+                                )
+                              }
+                              className="rounded px-2 py-0.5 text-slate-500 hover:bg-white"
+                              aria-label={`Remove ${opt}`}
+                            >
+                              ×
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </>
-          )}
+              </>
+            )}
+          </div>
         </div>
 
-        {/* footer */}
+        {/* footer (sticky) */}
         <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
           <button
             type="button"
@@ -481,10 +501,14 @@ function EditQuestionModal({
       setTextType((t?.textType as TextType) ?? "CUSTOM");
       setOptions([]);
     } else {
-      const raw = Array.isArray((draft as any).options) ? (draft as any).options : [];
+      const raw = Array.isArray((draft as any).options)
+        ? (draft as any).options
+        : [];
       setOptions(
         raw
-          .map((o: any) => (typeof o === "string" ? o : String(o.label ?? o.value ?? "")))
+          .map((o: any) =>
+            typeof o === "string" ? o : String(o.label ?? o.value ?? "")
+          )
           .filter(Boolean)
       );
       setMinLen("0");
@@ -498,7 +522,13 @@ function EditQuestionModal({
     if (controlType === "TEXT") {
       const min = parseInt(minLen || "0", 10);
       const max = parseInt(maxLen || "0", 10);
-      if (Number.isNaN(min) || Number.isNaN(max) || min < 0 || max < 0) return false;
+      if (
+        Number.isNaN(min) ||
+        Number.isNaN(max) ||
+        min < 0 ||
+        max < 0
+      )
+        return false;
       if (max && min > max) return false;
       if (!textType) return false;
     } else if (options.length === 0) return false;
@@ -506,7 +536,10 @@ function EditQuestionModal({
   }, [title, question, controlType, minLen, maxLen, textType, options.length]);
 
   const addOption = () => {
-    const parts = optionDraft.split("\n").map((s) => s.trim()).filter(Boolean);
+    const parts = optionDraft
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (!parts.length) return;
     setOptions((prev) => Array.from(new Set([...prev, ...parts])));
     setOptionDraft("");
@@ -517,8 +550,22 @@ function EditQuestionModal({
     const base: any = { title: title.trim(), question: question.trim() };
     const payload =
       controlType === "TEXT"
-        ? { ...base, text: { minLength: Number(minLen) || 0, maxLength: Number(maxLen) || 0, textType } }
-        : { ...base, options: options.map((label, i) => ({ label, value: label, sortOrder: i })) };
+        ? {
+            ...base,
+            text: {
+              minLength: Number(minLen) || 0,
+              maxLength: Number(maxLen) || 0,
+              textType,
+            },
+          }
+        : {
+            ...base,
+            options: options.map((label, i) => ({
+              label,
+              value: label,
+              sortOrder: i,
+            })),
+          };
     await onSubmit(payload);
     onClose();
   };
@@ -526,10 +573,10 @@ function EditQuestionModal({
   if (!open || !draft) return null;
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-start justify-center bg-black/40 p-4">
-      <div className="w-[min(980px,95vw)] rounded-xl bg-white shadow-2xl">
+    <div className="fixed inset-0 z-[170] flex items-center justify-center bg-black/40 p-4">
+      <div className="flex max-h-[90vh] w-[min(980px,95vw)] flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
         {/* header */}
-        <div className="flex items-center justify-between rounded-t-xl bg-slate-800 px-5 py-3 text-white">
+        <div className="flex items-center justify-between bg-slate-800 px-5 py-3 text-white">
           <div className="text-base font-semibold">Edit Question</div>
           <button
             onClick={onClose}
@@ -540,102 +587,124 @@ function EditQuestionModal({
           </button>
         </div>
 
-        {/* body */}
-        <div className="grid grid-cols-12 gap-5 p-6">
-          <div className="col-span-12 md:col-span-6">
-            <Label required>Title</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} />
-          </div>
+        {/* body (scrollable) */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="grid grid-cols-12 gap-5">
+            <div className="col-span-12 md:col-span-6">
+              <Label required>Title</Label>
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+            </div>
 
-          <div className="col-span-12 md:col-span-6">
-            <Label required>Control Type</Label>
-            <Select value={controlType} disabled>
-              {CONTROL_TYPE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
-          </div>
+            <div className="col-span-12 md:col-span-6">
+              <Label required>Control Type</Label>
+              <Select value={controlType} disabled>
+                {CONTROL_TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
 
-          <div className="col-span-12">
-            <Label required>Question</Label>
-            <Input value={question} onChange={(e) => setQuestion(e.target.value)} />
-          </div>
+            <div className="col-span-12">
+              <Label required>Question</Label>
+              <Input
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+              />
+            </div>
 
-          {controlType === "TEXT" ? (
-            <>
-              <div className="col-span-12 md:col-span-4">
-                <Label required>Min-Length</Label>
-                <Input type="number" min={0} value={minLen} onChange={(e) => setMinLen(e.target.value)} />
-              </div>
-              <div className="col-span-12 md:col-span-4">
-                <Label required>Max-Length</Label>
-                <Input type="number" min={0} value={maxLen} onChange={(e) => setMaxLen(e.target.value)} />
-              </div>
-              <div className="col-span-12 md:col-span-4">
-                <Label required>Text Type</Label>
-                <Select value={textType} onChange={(e) => setTextType(e.target.value as TextType)}>
-                  {TEXT_TYPE_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="col-span-12 md:col-span-6">
-                <Label>Edit Options</Label>
-                <Textarea
-                  rows={8}
-                  value={optionDraft}
-                  onChange={(e) => setOptionDraft(e.target.value)}
-                  placeholder="Type one option per line"
-                />
-                <div className="mt-3">
-                  <button
-                    type="button"
-                    onClick={addOption}
-                    className="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
+            {controlType === "TEXT" ? (
+              <>
+                <div className="col-span-12 md:col-span-4">
+                  <Label required>Min-Length</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={minLen}
+                    onChange={(e) => setMinLen(e.target.value)}
+                  />
+                </div>
+                <div className="col-span-12 md:col-span-4">
+                  <Label required>Max-Length</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={maxLen}
+                    onChange={(e) => setMaxLen(e.target.value)}
+                  />
+                </div>
+                <div className="col-span-12 md:col-span-4">
+                  <Label required>Text Type</Label>
+                  <Select
+                    value={textType}
+                    onChange={(e) => setTextType(e.target.value as TextType)}
                   >
-                    Add
-                  </button>
+                    {TEXT_TYPE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </Select>
                 </div>
-              </div>
-              <div className="col-span-12 md:col-span-6">
-                <Label>Mapped Options</Label>
-                <div className="min-h-[200px] rounded-lg border border-slate-300 p-3">
-                  {options.length === 0 ? (
-                    <div className="text-sm text-slate-500">None.</div>
-                  ) : (
-                    <ul className="space-y-2">
-                      {options.map((opt) => (
-                        <li
-                          key={opt}
-                          className="flex items-center justify-between rounded border border-slate-200 bg-slate-50 px-3 py-1 text-sm"
-                        >
-                          <span className="truncate">{opt}</span>
-                          <button
-                            type="button"
-                            onClick={() => setOptions((prev) => prev.filter((x) => x !== opt))}
-                            className="rounded px-2 py-0.5 text-slate-500 hover:bg-white"
-                            aria-label={`Remove ${opt}`}
+              </>
+            ) : (
+              <>
+                <div className="col-span-12 md:col-span-6">
+                  <Label>Edit Options</Label>
+                  <Textarea
+                    rows={8}
+                    value={optionDraft}
+                    onChange={(e) => setOptionDraft(e.target.value)}
+                    placeholder="Type one option per line"
+                  />
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={addOption}
+                      className="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+                <div className="col-span-12 md:col-span-6">
+                  <Label>Mapped Options</Label>
+                  <div className="min-h-[200px] rounded-lg border border-slate-300 p-3">
+                    {options.length === 0 ? (
+                      <div className="text-sm text-slate-500">None.</div>
+                    ) : (
+                      <ul className="space-y-2">
+                        {options.map((opt) => (
+                          <li
+                            key={opt}
+                            className="flex items-center justify-between rounded border border-slate-200 bg-slate-50 px-3 py-1 text-sm"
                           >
-                            ×
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                            <span className="truncate">{opt}</span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setOptions((prev) =>
+                                  prev.filter((x) => x !== opt)
+                                )
+                              }
+                              className="rounded px-2 py-0.5 text-slate-500 hover:bg-white"
+                              aria-label={`Remove ${opt}`}
+                            >
+                              ×
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </>
-          )}
+              </>
+            )}
+          </div>
         </div>
 
-        {/* footer */}
+        {/* footer (sticky) */}
         <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
           <button
             type="button"
@@ -667,7 +736,11 @@ type LibraryQuestion = {
   question: string;
   controlType: ControlType;
   options?: { label: string; value?: string }[];
-  text?: { minLength?: number; maxLength?: number | null; textType?: TextType | "CUSTOM" };
+  text?: {
+    minLength?: number;
+    maxLength?: number | null;
+    textType?: TextType | "CUSTOM";
+  };
 };
 
 function LibraryModal({
@@ -710,7 +783,6 @@ function LibraryModal({
         const json = await r.json();
         const list = Array.isArray(json?.profiles) ? json.profiles : [];
         setProfiles(list);
-
         if (!profileKey && list.length) setProfileKey(String(list[0].key));
       } catch (e: any) {
         setError(e?.message || "Failed to load library profiles.");
@@ -751,7 +823,7 @@ function LibraryModal({
     })();
   }, [open, profileKey]);
 
-  const toggleAll = (val: boolean) => {
+  const toggleAllLib = (val: boolean) => {
     const next: Record<string, boolean> = {};
     for (const q of questions) next[q.key] = val;
     setSelected(next);
@@ -788,7 +860,6 @@ function LibraryModal({
           const labels = opts
             .map((o) => String(o?.label ?? "").trim())
             .filter(Boolean);
-
           payload = { ...base, options: labels };
         }
 
@@ -814,10 +885,10 @@ function LibraryModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[130] flex items-start justify-center bg-black/40 p-4">
-      <div className="w-[min(1100px,95vw)] rounded-xl bg-white shadow-2xl">
+    <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/40 p-4">
+      <div className="flex max-h-[90vh] w-[min(1100px,95vw)] flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
         {/* header */}
-        <div className="flex items-center justify-between rounded-t-xl bg-slate-800 px-5 py-3 text-white">
+        <div className="flex items-center justify-between bg-slate-800 px-5 py-3 text-white">
           <div className="text-base font-semibold">Add from Library</div>
           <button
             onClick={onClose}
@@ -828,8 +899,8 @@ function LibraryModal({
           </button>
         </div>
 
-        {/* body */}
-        <div className="p-6">
+        {/* body (scrollable) */}
+        <div className="flex-1 overflow-y-auto p-6">
           <div className="mb-4 grid grid-cols-12 gap-4">
             <div className="col-span-12 md:col-span-5">
               <Label required>Profile</Label>
@@ -840,7 +911,9 @@ function LibraryModal({
               >
                 {profiles.length === 0 ? (
                   <option value="">
-                    {loadingProfiles ? "Loading profiles..." : "-- No profiles found --"}
+                    {loadingProfiles
+                      ? "Loading profiles..."
+                      : "-- No profiles found --"}
                   </option>
                 ) : (
                   profiles.map((p) => (
@@ -855,7 +928,7 @@ function LibraryModal({
             <div className="col-span-12 md:col-span-7 flex items-end justify-end gap-2">
               <button
                 type="button"
-                onClick={() => toggleAll(true)}
+                onClick={() => toggleAllLib(true)}
                 disabled={questions.length === 0 || loadingQuestions}
                 className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-50"
               >
@@ -863,7 +936,7 @@ function LibraryModal({
               </button>
               <button
                 type="button"
-                onClick={() => toggleAll(false)}
+                onClick={() => toggleAllLib(false)}
                 disabled={questions.length === 0 || loadingQuestions}
                 className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-50"
               >
@@ -878,15 +951,19 @@ function LibraryModal({
             </div>
           ) : null}
 
-          <div className="overflow-auto rounded-lg border border-slate-200">
+          {/* table wrapper with its own scroll if many rows */}
+          <div className="max-h-[55vh] overflow-auto rounded-lg border border-slate-200">
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-800 text-white">
                 <tr>
                   <th className="w-16 px-4 py-3">
                     <input
                       type="checkbox"
-                      checked={questions.length > 0 && selectedCount === questions.length}
-                      onChange={(e) => toggleAll(e.target.checked)}
+                      checked={
+                        questions.length > 0 &&
+                        selectedCount === questions.length
+                      }
+                      onChange={(e) => toggleAllLib(e.target.checked)}
                       disabled={questions.length === 0 || loadingQuestions}
                     />
                   </th>
@@ -899,25 +976,37 @@ function LibraryModal({
               <tbody>
                 {loadingQuestions ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+                    <td
+                      colSpan={4}
+                      className="px-4 py-6 text-center text-slate-500"
+                    >
                       Loading questions...
                     </td>
                   </tr>
                 ) : questions.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+                    <td
+                      colSpan={4}
+                      className="px-4 py-6 text-center text-slate-500"
+                    >
                       No questions found for this profile.
                     </td>
                   </tr>
                 ) : (
                   questions.map((q, idx) => (
-                    <tr key={q.key} className={idx % 2 ? "bg-slate-50" : "bg-white"}>
+                    <tr
+                      key={q.key}
+                      className={idx % 2 ? "bg-slate-50" : "bg-white"}
+                    >
                       <td className="px-4 py-2">
                         <input
                           type="checkbox"
                           checked={!!selected[q.key]}
                           onChange={(e) =>
-                            setSelected((prev) => ({ ...prev, [q.key]: e.target.checked }))
+                            setSelected((prev) => ({
+                              ...prev,
+                              [q.key]: e.target.checked,
+                            }))
                           }
                         />
                       </td>
@@ -926,7 +1015,8 @@ function LibraryModal({
                       <td className="px-4 py-2">
                         {q.controlType === "TEXT"
                           ? "Text"
-                          : q.controlType[0] + q.controlType.slice(1).toLowerCase()}
+                          : q.controlType[0] +
+                            q.controlType.slice(1).toLowerCase()}
                       </td>
                     </tr>
                   ))
@@ -934,30 +1024,30 @@ function LibraryModal({
               </tbody>
             </table>
           </div>
+        </div>
 
-          {/* footer */}
-          <div className="mt-4 flex items-center justify-between">
-            <div className="text-sm text-slate-600">
-              Selected: <span className="font-semibold">{selectedCount}</span>
-            </div>
+        {/* footer (sticky) */}
+        <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4">
+          <div className="text-sm text-slate-600">
+            Selected: <span className="font-semibold">{selectedCount}</span>
+          </div>
 
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-md border border-slate-300 bg-white px-5 py-2 text-sm hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={addSelected}
-                disabled={selectedCount === 0 || adding}
-                className="rounded-md bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-              >
-                {adding ? "Adding..." : "Add Selected"}
-              </button>
-            </div>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-slate-300 bg-white px-5 py-2 text-sm hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={addSelected}
+              disabled={selectedCount === 0 || adding}
+              className="rounded-md bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {adding ? "Adding..." : "Add Selected"}
+            </button>
           </div>
         </div>
       </div>
@@ -989,11 +1079,13 @@ type PreScreenPanelProps = {
   initialStatus: "ACTIVE" | "CLOSED";
 };
 
-export default function PrescreenPanel({ projectId, initialStatus }: PreScreenPanelProps) {
-  const router = useRouter();
-
+export default function PrescreenPanel({
+  projectId,
+  initialStatus: _initialStatus,
+}: PreScreenPanelProps) {
   const [addOpen, setAddOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [showDeleteSuccess, setShowDeleteSuccess] = useState(false);
 
   // For “configure options” after create OR after edit of non-TEXT
   const [activeQ, setActiveQ] = useState<CreatedQuestion | null>(null);
@@ -1011,7 +1103,10 @@ export default function PrescreenPanel({ projectId, initialStatus }: PreScreenPa
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Delete confirm
-  const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; id: string | null }>({
+  const [confirmDelete, setConfirmDelete] = useState<{
+    open: boolean;
+    id: string | null;
+  }>({
     open: false,
     id: null,
   });
@@ -1023,7 +1118,13 @@ export default function PrescreenPanel({ projectId, initialStatus }: PreScreenPa
   function normalizeOptions(raw: any[]): OptionConfig[] {
     return raw.map((opt: any, idx: number) => {
       if (typeof opt === "string") {
-        return { id: String(idx), label: opt, enabled: false, validate: false, quota: 0 };
+        return {
+          id: String(idx),
+          label: opt,
+          enabled: false,
+          validate: false,
+          quota: 0,
+        };
       }
       const id = String(opt.id ?? `${opt.value ?? opt.label ?? idx}`);
       const label = String(opt.label ?? opt.value ?? `Option ${idx + 1}`);
@@ -1036,7 +1137,9 @@ export default function PrescreenPanel({ projectId, initialStatus }: PreScreenPa
 
   /** Fetch a question by id and load into mapping view. */
   const fetchAndLoadQuestion = async (questionId: string) => {
-    const r = await fetch(`/api/projects/${projectId}/prescreen/question/${questionId}`);
+    const r = await fetch(
+      `/api/projects/${projectId}/prescreen/question/${questionId}`
+    );
     if (!r.ok) throw new Error(await r.text());
     const q = (await r.json()) as CreatedQuestion;
     setActiveQ(q);
@@ -1062,7 +1165,9 @@ export default function PrescreenPanel({ projectId, initialStatus }: PreScreenPa
   /** Fetch saved list whenever tab mounts or projectId changes */
   const loadSavedList = async () => {
     try {
-      const r = await fetch(`/api/projects/${projectId}/prescreen`, { cache: "no-store" });
+      const r = await fetch(`/api/projects/${projectId}/prescreen`, {
+        cache: "no-store",
+      });
       if (!r.ok) throw new Error(await r.text());
 
       const json: any = await r.json();
@@ -1138,18 +1243,20 @@ export default function PrescreenPanel({ projectId, initialStatus }: PreScreenPa
               })),
             };
 
-      const res = await fetch(`/api/projects/${projectId}/prescreen/question/${(activeQ as any).id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const res = await fetch(
+        `/api/projects/${projectId}/prescreen/question/${(activeQ as any).id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }
+      );
       if (!res.ok) throw new Error(await res.text());
 
       setSuccessMessage(fromEdit ? "Edited successfully!" : "Created Successfully!");
       setSuccessOpen(true);
       setFromEdit(false);
 
-      // Refresh list from server so it persists across tab navigation/back
       await loadSavedList();
     } catch (e: any) {
       console.error(e);
@@ -1180,11 +1287,13 @@ export default function PrescreenPanel({ projectId, initialStatus }: PreScreenPa
   const confirmYes = async () => {
     if (!confirmDelete.id) return;
     try {
-      const r = await fetch(`/api/projects/${projectId}/prescreen/question/${confirmDelete.id}`, {
-        method: "DELETE",
-      });
+      const r = await fetch(
+        `/api/projects/${projectId}/prescreen/question/${confirmDelete.id}`,
+        { method: "DELETE" }
+      );
       if (!r.ok) throw new Error(await r.text());
       await loadSavedList();
+      setShowDeleteSuccess(true);
     } catch (e: any) {
       window.alert(e?.message || "Failed to delete.");
     } finally {
@@ -1356,7 +1465,10 @@ export default function PrescreenPanel({ projectId, initialStatus }: PreScreenPa
               <tbody>
                 {saved.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-6 text-center text-slate-500" colSpan={5}>
+                    <td
+                      className="px-4 py-6 text-center text-slate-500"
+                      colSpan={5}
+                    >
                       Add a question to configure prescreen options.
                     </td>
                   </tr>
@@ -1432,11 +1544,14 @@ export default function PrescreenPanel({ projectId, initialStatus }: PreScreenPa
           onClose={() => setEditOpen(false)}
           onSubmit={async (payload) => {
             if (!editingId) return;
-            const res = await fetch(`/api/projects/${projectId}/prescreen/question/${editingId}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(payload),
-            });
+            const res = await fetch(
+              `/api/projects/${projectId}/prescreen/question/${editingId}`,
+              {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              }
+            );
             if (!res.ok) throw new Error(await res.text());
             const updated = (await res.json()) as CreatedQuestion;
 
@@ -1474,6 +1589,24 @@ export default function PrescreenPanel({ projectId, initialStatus }: PreScreenPa
           onYes={confirmYes}
           onNo={confirmNo}
         />
+
+        {/* Delete success dialog */}
+        {showDeleteSuccess && (
+          <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/40 p-4">
+            <div className="w-[min(360px,92vw)] rounded-md bg-white p-6 text-center">
+              <h3 className="mb-4 text-lg font-semibold">
+                Question deleted successfully!
+              </h3>
+
+              <button
+                onClick={() => setShowDeleteSuccess(false)}
+                className="rounded-md bg-teal-600 px-6 py-2 text-sm font-medium text-white hover:bg-teal-700"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
