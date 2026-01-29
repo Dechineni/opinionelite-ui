@@ -27,3 +27,5 @@ export function getPrisma(): PrismaClient {
 
   return globalForPrisma.prisma;
 }
+
+export const prisma = getPrisma();

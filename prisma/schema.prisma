@@ -253,6 +253,9 @@ model PrescreenOption {
   label     String
   value     String // store canonical value you send to suppliers
   sortOrder Int    @default(0)
+  enabled   Boolean @default(false)
+  validate  Boolean @default(false)
+  quota     Int     @default(0)
 }
 
 model Respondent {
