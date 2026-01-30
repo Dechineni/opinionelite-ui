@@ -6,6 +6,8 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { z } from "zod";
 
+/* ----------------------------- helpers ----------------------------- */
+
 const RedirectionType = z.enum([
   "STATIC_REDIRECT",
   "STATIC_POSTBACK",
@@ -13,111 +15,153 @@ const RedirectionType = z.enum([
   "DYNAMIC_POSTBACK",
 ]);
 
-const UpdateSchema = z.object({
-  supplierQuota: z.number().int().nonnegative().optional(),
-  clickQuota: z.number().int().nonnegative().optional(),
-  cpi: z.number().nonnegative().optional(),
-  redirectionType: RedirectionType.optional(),
-  allowTraffic: z.boolean().optional(),
-  supplierProjectId: z.string().nullable().optional(),
-  completeUrl: z.string().url().optional(),
-  terminateUrl: z.string().url().optional(),
-  overQuotaUrl: z.string().url().optional(),
-  qualityTermUrl: z.string().url().optional(),
-  surveyCloseUrl: z.string().url().optional(),
-});
+const UpdateSchema = z
+  .object({
+    supplierQuota: z.coerce.number().int().nonnegative().optional(),
+    clickQuota: z.coerce.number().int().nonnegative().optional(),
+    cpi: z.coerce.number().nonnegative().optional(),
+    redirectionType: RedirectionType.optional(),
+    allowTraffic: z.coerce.boolean().optional(),
+    supplierProjectId: z.union([z.string().min(1), z.null()]).optional(),
 
-function bad(msg: string, code = 400) {
+    // Redirect URLs
+    completeUrl: z.string().url().nullable().optional(),
+    terminateUrl: z.string().url().nullable().optional(),
+    overQuotaUrl: z.string().url().nullable().optional(),
+    qualityTermUrl: z.string().url().nullable().optional(),
+    surveyCloseUrl: z.string().url().nullable().optional(),
+
+    // Postback
+    postBackUrl: z.string().url().nullable().optional(),
+  })
+  .strict();
+
+function badJSON(msg: string, code = 400) {
   return NextResponse.json({ error: msg }, { status: code });
 }
 
+async function resolveProjectId(projectKey: string) {
+  const prisma = getPrisma();
+  const p = await prisma.project.findFirst({
+    where: { OR: [{ id: projectKey }, { code: projectKey }] },
+    select: { id: true },
+  });
+  return p?.id ?? null;
+}
+
+function buildSupplierUrl(opts: { uiBase: string; projectCode: string; supplierCode: string }) {
+  const ui = (opts.uiBase || "").replace(/\/+$/, "");
+  const p = encodeURIComponent(opts.projectCode || "");
+  const s = encodeURIComponent(opts.supplierCode || "");
+  return `${ui}/Survey?projectId=${p}&supplierId=${s}&id=[identifier]`;
+}
+
+/* ---------------------------------- PUT ---------------------------------- */
 export async function PUT(
   req: Request,
   ctx: { params: Promise<{ projectId: string; mapId: string }> }
 ) {
-  // breadcrumb so we can see exactly which handler ran in CF logs
-  console.log("[PUT] /projects/:projectId/supplier-maps/:mapId");
-
   const prisma = getPrisma();
-  const { projectId, mapId } = await ctx.params;
+  const { projectId: projectKey, mapId } = await ctx.params;
 
-  // 1) validate path + existence (NO transactions)
-  if (!projectId || !mapId) return bad("projectId/mapId missing");
+  const projId = await resolveProjectId(projectKey);
+  if (!projId) return badJSON("Project not found", 404);
 
-  const existing = await prisma.projectSupplierMap.findUnique({
-    where: { id: mapId },
-    select: { id: true, projectId: true, redirectionType: true },
-  });
-  if (!existing || existing.projectId !== projectId) {
-    return bad("Supplier map not found", 404);
-  }
-
-  // 2) parse body
-  let json: unknown;
+  let body: unknown;
   try {
-    json = await req.json();
+    body = await req.json();
   } catch {
-    return bad("Invalid JSON");
+    return badJSON("Invalid JSON", 400);
   }
-  const parsed = UpdateSchema.safeParse(json);
+
+  const parsed = UpdateSchema.safeParse(body);
   if (!parsed.success) {
-    return bad(parsed.error.flatten().formErrors.join("; ") || "Invalid payload");
-  }
-  const data = parsed.data;
-
-  // 3) build plain update object (NO nested writes that could hint a tx)
-  const updateData: any = {};
-  if (data.supplierQuota !== undefined) updateData.quota = data.supplierQuota;
-  if (data.clickQuota !== undefined) updateData.clickQuota = data.clickQuota;
-  if (data.cpi !== undefined) updateData.cpi = data.cpi;
-  if (data.allowTraffic !== undefined) updateData.allowTraffic = data.allowTraffic;
-  if (data.supplierProjectId !== undefined) updateData.supplierProjectId = data.supplierProjectId;
-  if (data.redirectionType) updateData.redirectionType = data.redirectionType;
-
-  const effectiveType = (data.redirectionType ?? existing.redirectionType);
-  if (effectiveType === "STATIC_REDIRECT" || effectiveType === "DYNAMIC_REDIRECT") {
-    if (data.completeUrl !== undefined) updateData.completeUrl = data.completeUrl;
-    if (data.terminateUrl !== undefined) updateData.terminateUrl = data.terminateUrl;
-    if (data.overQuotaUrl !== undefined) updateData.overQuotaUrl = data.overQuotaUrl;
-    if (data.qualityTermUrl !== undefined) updateData.qualityTermUrl = data.qualityTermUrl;
-    if (data.surveyCloseUrl !== undefined) updateData.surveyCloseUrl = data.surveyCloseUrl;
-  } else {
-    updateData.completeUrl = null;
-    updateData.terminateUrl = null;
-    updateData.overQuotaUrl = null;
-    updateData.qualityTermUrl = null;
-    updateData.surveyCloseUrl = null;
+    const flat = parsed.error.flatten();
+    const msg =
+      flat.formErrors.join("; ") ||
+      Object.values(flat.fieldErrors).flat().join("; ") ||
+      "Invalid payload";
+    return badJSON(msg, 400);
   }
 
-  // 4) single UPDATE + separate supplier fetch (avoid include just to be extra safe)
-  try {
-    const updated = await prisma.projectSupplierMap.update({
-      where: { id: mapId },
-      data: updateData,
-      select: {
-        id: true, projectId: true, supplierId: true, quota: true, clickQuota: true,
-        cpi: true, redirectionType: true, postBackUrl: true,
-        completeUrl: true, terminateUrl: true, overQuotaUrl: true, qualityTermUrl: true, surveyCloseUrl: true,
-        allowTraffic: true, supplierProjectId: true, createdAt: true, updatedAt: true,
-      },
-    });
+  // Ensure map belongs to project
+  const existing = await prisma.projectSupplierMap.findFirst({
+    where: { id: mapId, projectId: projId },
+    select: { id: true, supplierId: true, projectId: true },
+  });
+  if (!existing) return badJSON("Supplier map not found", 404);
 
-    const sup = await prisma.supplier.findUnique({
-      where: { id: updated.supplierId },
-      select: { code: true, name: true },
-    });
+  // Fetch supplier code + project code for supplierUrl
+  const [supplier, project] = await Promise.all([
+    prisma.supplier.findUnique({
+      where: { id: existing.supplierId },
+      select: { code: true },
+    }),
+    prisma.project.findUnique({
+      where: { id: existing.projectId },
+      select: { code: true },
+    }),
+  ]);
 
-    return NextResponse.json({
-      ...updated,
-      supplierCode: sup?.code ?? "",
-      supplierName: sup?.name ?? "",
-      supplierQuota: updated.quota,
-    });
-  } catch (e: any) {
-    console.log("prisma:error", e?.message);
-    return NextResponse.json(
-      { error: "Update failed", detail: String(e?.message || e) },
-      { status: 400 }
-    );
-  }
+  const uiBase =
+    (process.env.APP_PUBLIC_BASE_URL || "").trim() ||
+    (process.env.NEXT_PUBLIC_UI_ORIGIN || "").trim() ||
+    "https://opinion-elite.com";
+
+  const supplierUrl =
+    supplier?.code && project?.code
+      ? buildSupplierUrl({
+          uiBase,
+          projectCode: String(project.code),
+          supplierCode: String(supplier.code),
+        })
+      : null;
+
+  const data: any = {};
+
+  if (parsed.data.supplierQuota !== undefined) data.quota = parsed.data.supplierQuota;
+  if (parsed.data.clickQuota !== undefined) data.clickQuota = parsed.data.clickQuota;
+  if (parsed.data.cpi !== undefined) data.cpi = parsed.data.cpi;
+  if (parsed.data.redirectionType !== undefined) data.redirectionType = parsed.data.redirectionType;
+  if (parsed.data.allowTraffic !== undefined) data.allowTraffic = parsed.data.allowTraffic;
+  if (parsed.data.supplierProjectId !== undefined) data.supplierProjectId = parsed.data.supplierProjectId;
+
+  // URLs
+  if (parsed.data.completeUrl !== undefined) data.completeUrl = parsed.data.completeUrl;
+  if (parsed.data.terminateUrl !== undefined) data.terminateUrl = parsed.data.terminateUrl;
+  if (parsed.data.overQuotaUrl !== undefined) data.overQuotaUrl = parsed.data.overQuotaUrl;
+  if (parsed.data.qualityTermUrl !== undefined) data.qualityTermUrl = parsed.data.qualityTermUrl;
+  if (parsed.data.surveyCloseUrl !== undefined) data.surveyCloseUrl = parsed.data.surveyCloseUrl;
+  if (parsed.data.postBackUrl !== undefined) data.postBackUrl = parsed.data.postBackUrl;
+
+  // ✅ Always keep supplierUrl in sync
+  if (supplierUrl) data.supplierUrl = supplierUrl;
+
+  const updated = await prisma.projectSupplierMap.update({
+    where: { id: existing.id },
+    data,
+  });
+
+  return NextResponse.json({ item: updated });
+}
+
+/* -------------------------------- DELETE --------------------------------- */
+export async function DELETE(
+  _req: Request,
+  ctx: { params: Promise<{ projectId: string; mapId: string }> }
+) {
+  const prisma = getPrisma();
+  const { projectId: projectKey, mapId } = await ctx.params;
+
+  const projId = await resolveProjectId(projectKey);
+  if (!projId) return badJSON("Project not found", 404);
+
+  const existing = await prisma.projectSupplierMap.findFirst({
+    where: { id: mapId, projectId: projId },
+    select: { id: true },
+  });
+  if (!existing) return badJSON("Supplier map not found", 404);
+
+  await prisma.projectSupplierMap.delete({ where: { id: existing.id } });
+  return NextResponse.json({ ok: true });
 }
