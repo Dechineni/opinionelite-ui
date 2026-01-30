@@ -176,6 +176,8 @@ model ProjectSupplierMap {
   /// Redirection mode
   redirectionType SupplierRedirectionType
 
+  supplierUrl String?  @db.Text // persist "Supplier Mapping URL" shown in UI
+
   /// STATIC_REDIRECT: (no URL stored here — supplier hits your live survey URL)
   /// STATIC_POSTBACK: (no URL stored here — you’ll post back to supplier)
   /// DYNAMIC_POSTBACK:

@@ -1,16 +1,15 @@
-// src/app/api/integrations/op-panel/surveys/route.ts
+// FILE: src/app/api/integrations/op-panel/surveys/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 
 export const runtime = "edge";
 
 /**
  * ENV required in OpinionElite UI (Cloudflare):
- * OP_PANEL_CALLER_KEY=...               (OP Panel -> OpinionElite UI auth)
+ * OP_PANEL_CALLER_KEY=...              (OP Panel -> OpinionElite UI auth)
  * OP_PANEL_API_BASE=https://opinionelite.com
- * OP_PANEL_PROFILE_API_KEY=...          (OpinionElite UI -> OP Panel auth)
- * OP_PANEL_SUPPLIER_ID=S1002            (the supplierId that represents OP Panel in OpinionElite)
- * APP_PUBLIC_BASE_URL=https://opinion-elite.com
+ * OP_PANEL_PROFILE_API_KEY=...         (OpinionElite UI -> OP Panel auth)
+ * APP_PUBLIC_BASE_URL=https://opinion-elite.com   (fallback to build supplierUrl if missing)
  */
 
 function unauthorized(msg = "Unauthorized") {
@@ -38,38 +37,29 @@ function splitMulti(val: string): string[] {
     .filter(Boolean);
 }
 
-function buildSurveyLink(opts: {
+function buildSupplierUrlFallback(opts: {
   baseUrl: string;
   projectCode: string;
-  supplierId: string;
-  redirectionType: string;
+  supplierCode: string;
   identifier: string;
 }) {
-  const { baseUrl, projectCode, supplierId, redirectionType, identifier } = opts;
-  const u = new URL(`${baseUrl.replace(/\/$/, "")}/Survey`);
-  u.searchParams.set("projectId", projectCode);
-  u.searchParams.set("supplierId", supplierId);
-  u.searchParams.set("rType", redirectionType || "static");
-  u.searchParams.set("id", identifier);
+  const u = new URL(`${opts.baseUrl.replace(/\/$/, "")}/Survey`);
+  u.searchParams.set("projectId", opts.projectCode);
+  u.searchParams.set("supplierId", opts.supplierCode);
+  u.searchParams.set("id", opts.identifier);
   return u.toString();
 }
 
-async function handleRequest(req: Request, userId: string) {
+export async function GET(req: Request) {
   // ---- Auth: OP Panel -> OpinionElite UI ----
   const callerKey = req.headers.get("x-op-panel-key") || "";
   if (!process.env.OP_PANEL_CALLER_KEY || callerKey !== process.env.OP_PANEL_CALLER_KEY) {
     return unauthorized();
   }
 
-  userId = (userId || "").trim();
-  if (!userId) {
-    return NextResponse.json({ error: "Missing userId" }, { status: 400 });
-  }
-
-  const supplierId = (process.env.OP_PANEL_SUPPLIER_ID || "").trim();
-  if (!supplierId) {
-    return NextResponse.json({ error: "OP_PANEL_SUPPLIER_ID not set" }, { status: 500 });
-  }
+  const { searchParams } = new URL(req.url);
+  const userId = (searchParams.get("userId") || "").trim();
+  if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
 
   const opPanelBase = (process.env.OP_PANEL_API_BASE || "").trim();
   const opPanelKey = (process.env.OP_PANEL_PROFILE_API_KEY || "").trim();
@@ -98,26 +88,38 @@ async function handleRequest(req: Request, userId: string) {
   const profJson = (await profRes.json()) as { answers?: Record<string, string> };
   const answers = profJson?.answers || {};
 
-  // ---- 2) Load active supplier mappings for OP Panel supplier ----
+  // ---- 2) Load ALL active supplier mappings for ACTIVE projects ----
+  // (No supplierId filtering; we evaluate prescreen per project, then return eligible maps)
+  const prisma = getPrisma();
   const maps = await prisma.projectSupplierMap.findMany({
     where: {
-      supplierId,
       project: { status: "ACTIVE" },
+      allowTraffic: true,
     },
     include: {
+      supplier: { select: { code: true, name: true } },
       project: {
-        include: {
+        select: {
+          code: true,
+          name: true,
+          loi: true, // ✅ LOI comes from Project
           prescreenQuestions: {
-            include: { options: true },
+            select: {
+              title: true,
+              controlType: true,
+              textMinLength: true,
+              textMaxLength: true,
+              options: { select: { label: true, value: true, enabled: true, validate: true } },
+            },
           },
         },
       },
     },
   });
 
-  const appBase = (process.env.APP_PUBLIC_BASE_URL || "").trim() || "https://opinion-elite.com";
+  const appBase =
+    (process.env.APP_PUBLIC_BASE_URL || "").trim() || "https://opinion-elite.com";
 
-  // ---- 3) Eligibility evaluation ----
   const eligible: Array<{
     surveyName: string;
     surveyLink: string;
@@ -125,14 +127,14 @@ async function handleRequest(req: Request, userId: string) {
     rewards: number;
     projectCode: string;
     projectName: string;
+    supplierName?: string;
   }> = [];
 
-  for (const m of maps) {
-    const p: any = m.project;
+  for (const m of maps as any[]) {
+    const p = m.project;
     if (!p) continue;
 
     const questions: any[] = Array.isArray(p.prescreenQuestions) ? p.prescreenQuestions : [];
-
     let ok = true;
 
     for (const q of questions) {
@@ -142,7 +144,7 @@ async function handleRequest(req: Request, userId: string) {
 
       const userAnswer = answers[titleKey];
 
-      // Strict: missing answer => not eligible
+      // strict: missing answer => not eligible
       if (userAnswer == null || String(userAnswer).trim() === "") {
         ok = false;
         break;
@@ -170,6 +172,7 @@ async function handleRequest(req: Request, userId: string) {
       } else {
         const opts: any[] = Array.isArray(q.options) ? q.options : [];
 
+        // Only validate if any option has validate=true
         const hasValidate = opts.some((o) => Boolean(o.validate));
         if (!hasValidate) continue;
 
@@ -205,39 +208,29 @@ async function handleRequest(req: Request, userId: string) {
     const projectName = String(p.name || "");
     const surveyName = `${projectCode} : ${projectName}`;
 
-    const surveyLink = buildSurveyLink({
-      baseUrl: appBase,
-      projectCode,
-      supplierId,
-      redirectionType: String(m.redirectionType || "static"),
-      identifier: userId,
-    });
+    // ✅ Prefer stored supplierUrl (persisted in ProjectSupplierMap)
+    const storedUrl = String(m.supplierUrl || "").trim();
+    const supplierCode = String(m.supplier?.code || "").trim();
+
+    const surveyLink =
+      storedUrl ||
+      buildSupplierUrlFallback({
+        baseUrl: appBase,
+        projectCode,
+        supplierCode,
+        identifier: userId,
+      });
 
     eligible.push({
       surveyName,
       surveyLink,
-      loi: Number((p as any).loi || 0) || 0,
-      rewards: Number((m as any).cpi || 0) || 0,
+      loi: Number(p.loi || 0) || 0,          // ✅ from Project
+      rewards: Number(m.cpi || 0) || 0,      // ✅ from ProjectSupplierMap CPI
       projectCode,
       projectName,
+      supplierName: String(m.supplier?.name || ""),
     });
   }
 
-  return NextResponse.json({ userId, supplierId, items: eligible });
-}
-
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const userId = (searchParams.get("userId") || "").trim();
-  return handleRequest(req, userId);
-}
-
-// OPTIONAL (not required): allow POST { userId: "Adam" }
-export async function POST(req: Request) {
-  let body: any = {};
-  try {
-    body = await req.json();
-  } catch {}
-  const userId = String(body?.userId || "").trim();
-  return handleRequest(req, userId);
+  return NextResponse.json({ userId, items: eligible });
 }

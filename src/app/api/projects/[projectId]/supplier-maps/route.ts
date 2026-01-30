@@ -15,7 +15,6 @@ const RedirectionType = z.enum([
   "DYNAMIC_POSTBACK",
 ]);
 
-// Accept "10" or 10, "true"/"false" etc.
 const BaseSchema = z.object({
   supplierId: z.string().min(1, "supplierId required"),
   supplierQuota: z.coerce.number().int().nonnegative(),
@@ -66,6 +65,14 @@ async function resolveProjectId(projectKey: string) {
   return p?.id ?? null;
 }
 
+/** Build the Supplier Mapping URL that OP Panel will show (persisted in DB). */
+function buildSupplierUrl(opts: { uiBase: string; projectCode: string; supplierCode: string }) {
+  const ui = (opts.uiBase || "").replace(/\/+$/, "");
+  const p = encodeURIComponent(opts.projectCode || "");
+  const s = encodeURIComponent(opts.supplierCode || "");
+  return `${ui}/Survey?projectId=${p}&supplierId=${s}&id=[identifier]`;
+}
+
 /* ---------------------------------- GET ---------------------------------- */
 /** List supplier maps with flattened supplier info + counts (CPU-light). */
 export async function GET(
@@ -78,14 +85,12 @@ export async function GET(
   const projId = await resolveProjectId(projectKey);
   if (!projId) return badJSON("Project not found", 404);
 
-  // 1) Base maps + supplier info
   const maps = await prisma.projectSupplierMap.findMany({
     where: { projectId: projId },
     orderBy: { createdAt: "asc" },
     include: { supplier: { select: { id: true, code: true, name: true } } },
   });
 
-  // 2) Aggregate results from SupplierRedirectEvent (idempotent per pid)
   let bySupplier: Record<string, Record<string, number>> = {};
   try {
     const agg = await prisma.supplierRedirectEvent.groupBy({
@@ -98,7 +103,6 @@ export async function GET(
       if (!row.supplierId || !row.outcome) return acc;
       const sid = row.supplierId;
       acc[sid] ??= {};
-      // map to UI keys
       const key =
         row.outcome === "COMPLETE"
           ? "COMPLETE"
@@ -117,7 +121,7 @@ export async function GET(
       return acc;
     }, {} as Record<string, Record<string, number>>);
   } catch {
-    // ignore aggregation failures; they shouldn't break list view
+    // ignore aggregation failures
   }
 
   const items = maps.map((m) => {
@@ -146,13 +150,14 @@ export async function GET(
       surveyCloseUrl: m.surveyCloseUrl,
       allowTraffic: m.allowTraffic,
       supplierProjectId: m.supplierProjectId,
+      supplierUrl: (m as any).supplierUrl ?? null, // ✅ NEW
       createdAt: m.createdAt,
       updatedAt: m.updatedAt,
       total: complete + terminate + overQuota + qualityTerm + close,
       complete,
       terminate,
       overQuota,
-      dropOut: 0, // (wire DROP_OUT later if you start recording it)
+      dropOut: 0,
       qualityTerm,
     };
   });
@@ -190,14 +195,32 @@ export async function POST(
     }
     const data = parsed.data;
 
-    // Verify supplier exists (simple single-table read)
+    // Verify supplier exists
     const supplier = await prisma.supplier.findUnique({
       where: { id: data.supplierId },
       select: { id: true, code: true, name: true },
     });
     if (!supplier) return badJSON("Supplier not found", 404);
 
-    // Build payload for ProjectSupplierMap (simple single-table write)
+    // Fetch project code for URL
+    const project = await prisma.project.findUnique({
+      where: { id: projId },
+      select: { code: true },
+    });
+    const projectCode = String(project?.code ?? "");
+    if (!projectCode) return badJSON("Project code missing", 400);
+
+    const uiBase =
+      (process.env.APP_PUBLIC_BASE_URL || "").trim() ||
+      (process.env.NEXT_PUBLIC_UI_ORIGIN || "").trim() ||
+      "https://opinion-elite.com";
+
+    const supplierUrl = buildSupplierUrl({
+      uiBase,
+      projectCode,
+      supplierCode: String(supplier.code ?? ""),
+    });
+
     const createData: any = {
       projectId: projId,
       supplierId: data.supplierId,
@@ -207,6 +230,7 @@ export async function POST(
       redirectionType: data.redirectionType,
       allowTraffic: data.allowTraffic ?? false,
       supplierProjectId: data.supplierProjectId ?? null,
+      supplierUrl, // ✅ NEW (persist)
     };
 
     if (
@@ -222,12 +246,10 @@ export async function POST(
       createData.postBackUrl = (data as any).postBackUrl;
     }
 
-    // Single-table create, no include, no transaction
     const created = await prisma.projectSupplierMap.create({
       data: createData,
     });
 
-    // Build response using the supplier we already fetched
     return NextResponse.json(
       {
         item: {
@@ -248,6 +270,7 @@ export async function POST(
           surveyCloseUrl: created.surveyCloseUrl,
           allowTraffic: created.allowTraffic,
           supplierProjectId: created.supplierProjectId,
+          supplierUrl: (created as any).supplierUrl ?? supplierUrl, // ✅ NEW
           createdAt: created.createdAt,
           updatedAt: created.updatedAt,
           total: 0,
@@ -263,7 +286,7 @@ export async function POST(
   } catch (e: any) {
     const msg = String(e?.message || e);
     const hint = msg.includes("Transactions are not supported")
-      ? " Prisma HTTP/Data Proxy on Cloudflare does not support $transaction or nested writes. This route now uses only simple single-table reads/writes (supplier.findUnique, projectSupplierMap.create). If you still see this, please confirm there is no older build or other middleware calling prisma.$transaction in this request."
+      ? " Prisma HTTP/Data Proxy on Cloudflare does not support $transaction or nested writes. This route uses only simple single-table reads/writes."
       : "";
 
     return NextResponse.json(
