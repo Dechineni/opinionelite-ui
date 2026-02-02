@@ -22,15 +22,19 @@ function parseNumber(val: string | undefined | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+// For CHECKBOX answers coming as "A,B,C" or JSON-ish etc.
 function splitMulti(val: string): string[] {
   const v = val.trim();
   if (!v) return [];
+  // Try JSON array first
   if (v.startsWith("[") && v.endsWith("]")) {
     try {
       const arr = JSON.parse(v);
-      if (Array.isArray(arr)) return arr.map(String).map((s) => s.trim()).filter(Boolean);
+      if (Array.isArray(arr))
+        return arr.map(String).map((s) => s.trim()).filter(Boolean);
     } catch {}
   }
+  // Fallback comma/newline separated
   return v
     .split(/[,|\n]/g)
     .map((s) => s.trim())
@@ -50,6 +54,27 @@ function buildSupplierUrlFallback(opts: {
   return u.toString();
 }
 
+/**
+ * Replace common placeholders in stored supplierUrl
+ * Examples supported:
+ *  - [identifier]
+ *  - [id]
+ *  - {identifier}
+ *  - {id}
+ *  - __IDENTIFIER__
+ */
+function applyIdentifier(url: string, userId: string) {
+  const safe = String(url || "").trim();
+  if (!safe) return safe;
+
+  return safe
+    .replaceAll("[identifier]", userId)
+    .replaceAll("[id]", userId)
+    .replaceAll("{identifier}", userId)
+    .replaceAll("{id}", userId)
+    .replaceAll("__IDENTIFIER__", userId);
+}
+
 export async function GET(req: Request) {
   // ---- Auth: OP Panel -> OpinionElite UI ----
   const callerKey = req.headers.get("x-op-panel-key") || "";
@@ -58,7 +83,10 @@ export async function GET(req: Request) {
   }
 
   const { searchParams } = new URL(req.url);
-  const userId = (searchParams.get("userId") || "").trim();
+  // Accept both userId and userid
+  const userId =
+    (searchParams.get("userId") || searchParams.get("userid") || "").trim();
+
   if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
 
   const opPanelBase = (process.env.OP_PANEL_API_BASE || "").trim();
@@ -73,7 +101,11 @@ export async function GET(req: Request) {
 
   const profRes = await fetch(profileUrl.toString(), {
     method: "GET",
-    headers: { Authorization: `Bearer ${opPanelKey}` },
+    headers: {
+      // send both to avoid server env quirks
+      Authorization: `Bearer ${opPanelKey}`,
+      "X-Api-Key": opPanelKey,
+    },
     cache: "no-store",
   });
 
@@ -88,21 +120,20 @@ export async function GET(req: Request) {
   const profJson = (await profRes.json()) as { answers?: Record<string, string> };
   const answers = profJson?.answers || {};
 
-  // ---- 2) Load ALL active supplier mappings for ACTIVE projects ----
-  // (No supplierId filtering; we evaluate prescreen per project, then return eligible maps)
+  // ---- 2) Load ALL supplier mappings for ACTIVE projects that allow traffic ----
   const prisma = getPrisma();
   const maps = await prisma.projectSupplierMap.findMany({
     where: {
-      project: { status: "ACTIVE" },
       allowTraffic: true,
+      project: { status: "ACTIVE" },
     },
     include: {
-      supplier: { select: { code: true, name: true } },
+      supplier: { select: { id: true, code: true, name: true } },
       project: {
         select: {
           code: true,
           name: true,
-          loi: true, // ✅ LOI comes from Project
+          loi: true,
           prescreenQuestions: {
             select: {
               title: true,
@@ -117,17 +148,19 @@ export async function GET(req: Request) {
     },
   });
 
-  const appBase =
-    (process.env.APP_PUBLIC_BASE_URL || "").trim() || "https://opinion-elite.com";
+  const appBase = (process.env.APP_PUBLIC_BASE_URL || "").trim() || "https://opinion-elite.com";
 
   const eligible: Array<{
+    mapId: string;
+    supplierId: string;
+    supplierCode: string;
+    supplierName: string;
     surveyName: string;
     surveyLink: string;
     loi: number;
     rewards: number;
     projectCode: string;
     projectName: string;
-    supplierName?: string;
   }> = [];
 
   for (const m of maps as any[]) {
@@ -154,6 +187,7 @@ export async function GET(req: Request) {
         const min = Number(q.textMinLength || 0) || 0;
         const max = Number(q.textMaxLength || 0) || 0;
 
+        // if no range configured, skip validation
         if (min === 0 && max === 0) continue;
 
         const n = parseNumber(userAnswer);
@@ -176,6 +210,7 @@ export async function GET(req: Request) {
         const hasValidate = opts.some((o) => Boolean(o.validate));
         if (!hasValidate) continue;
 
+        // Allowed options = enabled + validate
         const allowed = new Set(
           opts
             .filter((o) => Boolean(o.enabled) && Boolean(o.validate))
@@ -208,9 +243,12 @@ export async function GET(req: Request) {
     const projectName = String(p.name || "");
     const surveyName = `${projectCode} : ${projectName}`;
 
-    // ✅ Prefer stored supplierUrl (persisted in ProjectSupplierMap)
-    const storedUrl = String(m.supplierUrl || "").trim();
     const supplierCode = String(m.supplier?.code || "").trim();
+    const supplierName = String(m.supplier?.name || "").trim();
+
+    // Prefer stored supplierUrl (persisted in ProjectSupplierMap)
+    const storedUrlRaw = String(m.supplierUrl || "").trim();
+    const storedUrl = applyIdentifier(storedUrlRaw, userId);
 
     const surveyLink =
       storedUrl ||
@@ -222,13 +260,16 @@ export async function GET(req: Request) {
       });
 
     eligible.push({
+      mapId: String(m.id),
+      supplierId: String(m.supplierId || ""),
+      supplierCode,
+      supplierName,
       surveyName,
       surveyLink,
-      loi: Number(p.loi || 0) || 0,          // ✅ from Project
-      rewards: Number(m.cpi || 0) || 0,      // ✅ from ProjectSupplierMap CPI
+      loi: Number(p.loi || 0) || 0,      // from Project
+      rewards: Number(m.cpi || 0) || 0,  // from ProjectSupplierMap CPI
       projectCode,
       projectName,
-      supplierName: String(m.supplier?.name || ""),
     });
   }
 
