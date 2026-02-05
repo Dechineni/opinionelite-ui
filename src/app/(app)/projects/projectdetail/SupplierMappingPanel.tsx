@@ -1,6 +1,6 @@
 // FILE: src/app/(app)/projects/projectdetail/SupplierMappingPanel.tsx
 "use client";
-export const runtime = 'edge';
+export const runtime = "edge";
 
 import React, { useEffect, useMemo, useState } from "react";
 
@@ -33,8 +33,9 @@ type MapRow = {
   qualityTermUrl?: string | null;
   surveyCloseUrl?: string | null;
 
-  // Extras
-  allowTraffic: boolean;
+  // keep in type (server may return it), but UI will not show/edit it
+  allowTraffic?: boolean;
+
   supplierProjectId?: string | null;
 
   // present in GET include; used only to flatten
@@ -83,8 +84,6 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
     qualityTermUrl: "",
     surveyCloseUrl: "",
 
-    // optional (kept for future)
-    allowTraffic: false,
     supplierProjectId: "",
     testLink: "",
   });
@@ -127,9 +126,7 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
   }
 
   async function reloadMaps() {
-    const res = await fetch(`/api/projects/${projectId}/supplier-maps`, {
-      cache: "no-store",
-    });
+    const res = await fetch(`/api/projects/${projectId}/supplier-maps`, { cache: "no-store" });
     if (!res.ok) throw new Error(await res.text());
     const raw = await res.json();
     setRows(normalizeRows(raw));
@@ -158,7 +155,7 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
         const mapsJson = await mRes.json();
         const mapped = normalizeRows(mapsJson);
 
-        let projCode = projectId; // default fallback
+        let projCode = projectId;
         if (pRes && pRes.ok) {
           const pj = await pRes.json();
           const c = (pj?.code ?? pj?.data?.code ?? pj?.project?.code) as string | undefined;
@@ -177,9 +174,7 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
       }
     }
     load();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [projectId]);
 
   // when supplier changes, fetch its URLs and prefill
@@ -227,12 +222,8 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
         .map((s) => ({ ...s, label: `${s.code} — ${s.name}` })),
     [suppliers]
   );
-
   // set of already mapped supplier IDs
-  const mappedSupplierIds = useMemo(
-    () => new Set(rows.map((r) => r.supplierId)),
-    [rows]
-  );
+  const mappedSupplierIds = useMemo(() => new Set(rows.map((r) => r.supplierId)), [rows]);
 
   // handle selection with duplicate check (only when adding)
   function handleSupplierSelect(value: string) {
@@ -257,7 +248,10 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
         clickQuota: editingId ? undefined : 0,
         cpi: Number(form.cpi || 0),
         redirectionType: form.redirectionType,
-        allowTraffic: !!form.allowTraffic,
+
+        // ✅ AllowTraffic is not implemented yet → always keep it enabled
+        allowTraffic: true,
+
         supplierProjectId: form.supplierProjectId || null,
         testLink: form.testLink || null,
       };
@@ -298,7 +292,6 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
         overQuotaUrl: "",
         qualityTermUrl: "",
         surveyCloseUrl: "",
-        allowTraffic: false,
         supplierProjectId: "",
         testLink: "",
       });
@@ -322,7 +315,6 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
       overQuotaUrl: String(r.overQuotaUrl ?? ""),
       qualityTermUrl: String(r.qualityTermUrl ?? ""),
       surveyCloseUrl: String(r.surveyCloseUrl ?? ""),
-      allowTraffic: !!r.allowTraffic,
       supplierProjectId: String(r.supplierProjectId ?? ""),
       testLink: "",
     });
@@ -343,7 +335,6 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
       overQuotaUrl: "",
       qualityTermUrl: "",
       surveyCloseUrl: "",
-      allowTraffic: false,
       supplierProjectId: "",
       testLink: "",
     });
@@ -369,7 +360,6 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      {/* table header */}
       <div className="overflow-auto">
         <table className="min-w-full text-left text-sm">
           <thead className="bg-slate-800 text-white">
@@ -378,30 +368,31 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
               <th className="px-3 py-2">SupplierCode</th>
               <th className="px-3 py-2">SupplierName</th>
               <th className="px-3 py-2">Quota</th>
-              {/* ClickQuota column removed */}
               <th className="px-3 py-2">CPI</th>
               <th className="px-3 py-2">SupplierProjectId</th>
               <th className="px-3 py-2">SupplierUrl</th>
               <th className="px-3 py-2">TestLink</th>
-              <th className="px-3 py-2">AllowTraffic</th>
               <th className="px-3 py-2">Action</th>
             </tr>
           </thead>
+
           <tbody>
             {loading && (
               <tr>
-                <td className="px-3 py-6 text-center text-slate-500" colSpan={10}>
+                <td className="px-3 py-6 text-center text-slate-500" colSpan={9}>
                   Loading…
                 </td>
               </tr>
             )}
+
             {!loading && rows.length === 0 && (
               <tr>
-                <td className="px-3 py-6 text-center text-slate-500" colSpan={10}>
+                <td className="px-3 py-6 text-center text-slate-500" colSpan={9}>
                   No Supplier Mapped
                 </td>
               </tr>
             )}
+
             {!loading &&
               rows.map((r, i) => (
                 <tr key={r.id} className={i % 2 ? "bg-slate-50" : "bg-white"}>
@@ -409,40 +400,12 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
                   <td className="px-3 py-2 font-semibold">{r.supplierCode || "—"}</td>
                   <td className="px-3 py-2">{r.supplierName || "—"}</td>
                   <td className="px-3 py-2">{r.quota ?? 0}</td>
-                  {/* clickQuota hidden */}
                   <td className="px-3 py-2">{r.cpi}</td>
                   <td className="px-3 py-2">{r.supplierProjectId ?? "—"}</td>
                   <td className="px-3 py-2">
                     <SupplierUrlCell {...r} />
                   </td>
                   <td className="px-3 py-2">—</td>
-                  <td className="px-3 py-2">
-                    <input
-                      type="checkbox"
-                      checked={!!r.allowTraffic}
-                      onChange={async (e) => {
-                        const allowTraffic = e.target.checked;
-                        try {
-                          const res = await fetch(
-                            `/api/projects/${projectId}/supplier-maps/${r.id}`,
-                            {
-                              method: "PUT",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ allowTraffic }),
-                            }
-                          );
-                          if (!res.ok) throw new Error(await res.text());
-                          setRows((list) =>
-                            list.map((x) =>
-                              x.id === r.id ? { ...x, allowTraffic } : x
-                            )
-                          );
-                        } catch (err: any) {
-                          alert(err?.message || "Update failed");
-                        }
-                      }}
-                    />
-                  </td>
                   <td className="px-3 py-2">
                     <button
                       type="button"
@@ -458,7 +421,6 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
         </table>
       </div>
 
-      {/* accordion header */}
       <div className="mt-5 border-t border-slate-200 pt-3">
         <button
           type="button"
@@ -492,6 +454,7 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
               ))}
             </select>
           </div>
+
           <div className="col-span-12 md:col-span-6">
             <label className="mb-1 block text-xs font-medium">Supplier Quota*</label>
             <input
@@ -504,7 +467,6 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
             />
           </div>
 
-          {/* CPI (Click Quota field removed) */}
           <div className="col-span-12 md:col-span-6">
             <label className="mb-1 block text-xs font-medium">CPI*</label>
             <input
