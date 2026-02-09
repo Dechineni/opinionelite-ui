@@ -2,9 +2,15 @@
 
 export const runtime = "edge";
 export const preferredRegion = "auto";
+export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, max-age=0",
+  Pragma: "no-cache",
+};
 
 // --- helpers ---------------------------------------------------------------
 const clampInt = (v: unknown, d: number) => {
@@ -32,7 +38,10 @@ export async function GET(
   const projId = await resolveProjectId(projectId);
   if (!projId) {
     // Return empty list instead of 404 so UI can gracefully show "no questions"
-    return NextResponse.json({ items: [] }, { status: 200 });
+    return NextResponse.json(
+      { items: [] },
+      { status: 200, headers: NO_STORE_HEADERS }
+    );
   }
 
   const items = await prisma.prescreenQuestion.findMany({
@@ -41,7 +50,7 @@ export async function GET(
     include: { options: { orderBy: { sortOrder: "asc" } } },
   });
 
-  return NextResponse.json({ items });
+  return NextResponse.json({ items }, { headers: NO_STORE_HEADERS });
 }
 
 // --- POST: create a new question with stable sortOrder ---------------------
@@ -69,14 +78,17 @@ export async function POST(
     const b = await req.json();
     const projId = await resolveProjectId(projectId);
     if (!projId) {
-      return NextResponse.json({ error: "Project not found." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Project not found." },
+        { status: 404, headers: NO_STORE_HEADERS }
+      );
     }
 
     const controlType: string = String(b.controlType || "").toUpperCase();
     if (!controlType) {
       return NextResponse.json(
         { error: "controlType is required (TEXT, RADIO, DROPDOWN, CHECKBOX)." },
-        { status: 400 }
+        { status: 400, headers: NO_STORE_HEADERS }
       );
     }
 
@@ -100,7 +112,9 @@ export async function POST(
     if (controlType === "TEXT") {
       let min = clampInt(b?.text?.minLength, 0);
       let max =
-        b?.text?.maxLength == null ? null : clampInt(b?.text?.maxLength, null as any);
+        b?.text?.maxLength == null
+          ? null
+          : clampInt(b?.text?.maxLength, null as any);
       if (max != null && min > max) [min, max] = [max, min];
 
       baseData.textMinLength = min ?? 0;
@@ -116,7 +130,9 @@ export async function POST(
 
     // 2) If non-TEXT, create options one-by-one (NO createMany → NO tx)
     if (controlType !== "TEXT") {
-      const rawOptions: any[] = Array.isArray(b?.options) ? b.options.slice(0, 200) : [];
+      const rawOptions: any[] = Array.isArray(b?.options)
+        ? b.options.slice(0, 200)
+        : [];
 
       for (let i = 0; i < rawOptions.length; i++) {
         const o = rawOptions[i];
@@ -140,7 +156,10 @@ export async function POST(
       include: { options: { orderBy: { sortOrder: "asc" } } },
     });
 
-    return NextResponse.json(createdFull, { status: 201 });
+    return NextResponse.json(createdFull, {
+      status: 201,
+      headers: NO_STORE_HEADERS,
+    });
   } catch (e: any) {
     const msg = String(e?.message || e);
     const hint = msg.includes("Transactions are not supported")
@@ -148,7 +167,7 @@ export async function POST(
       : "";
     return NextResponse.json(
       { error: "Failed to create prescreen question" + hint, detail: msg },
-      { status: 400 }
+      { status: 400, headers: NO_STORE_HEADERS }
     );
   }
 }

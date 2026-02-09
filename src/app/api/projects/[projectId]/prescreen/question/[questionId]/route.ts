@@ -2,9 +2,15 @@
 
 export const runtime = "edge";
 export const preferredRegion = "auto";
+export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, max-age=0",
+  Pragma: "no-cache",
+};
 
 export async function GET(
   _req: Request,
@@ -22,15 +28,15 @@ export async function GET(
     if (!question) {
       return NextResponse.json(
         { error: "Question not found" },
-        { status: 404 }
+        { status: 404, headers: NO_STORE_HEADERS }
       );
     }
 
-    return NextResponse.json(question);
+    return NextResponse.json(question, { headers: NO_STORE_HEADERS });
   } catch (e: any) {
     return NextResponse.json(
       { error: "Failed to load question", detail: String(e?.message || e) },
-      { status: 400 }
+      { status: 400, headers: NO_STORE_HEADERS }
     );
   }
 }
@@ -117,11 +123,11 @@ export async function PATCH(
       include: { options: { orderBy: { sortOrder: "asc" } } },
     });
 
-    return NextResponse.json(updated);
+    return NextResponse.json(updated, { headers: NO_STORE_HEADERS });
   } catch (e: any) {
     return NextResponse.json(
       { error: "Update failed", detail: String(e?.message || e) },
-      { status: 400 }
+      { status: 400, headers: NO_STORE_HEADERS }
     );
   }
 }
@@ -140,11 +146,11 @@ export async function DELETE(
     // then remove the question
     await prisma.prescreenQuestion.delete({ where: { id: questionId } });
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true }, { headers: NO_STORE_HEADERS });
   } catch (e: any) {
     return NextResponse.json(
       { error: "Delete failed", detail: String(e?.message || e) },
-      { status: 400 }
+      { status: 400, headers: NO_STORE_HEADERS }
     );
   }
 }
