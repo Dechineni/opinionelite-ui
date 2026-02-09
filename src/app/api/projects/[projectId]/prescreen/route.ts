@@ -126,6 +126,9 @@ export async function POST(
             label: String(o?.label ?? o),
             value: String(o?.value ?? o?.label ?? o),
             sortOrder: clampInt(o?.sortOrder, i),
+            enabled: Boolean(o?.enabled ?? false),
+            validate: Boolean(o?.validate ?? false),
+            quota: clampInt(o?.quota, 0),
           },
         });
       }

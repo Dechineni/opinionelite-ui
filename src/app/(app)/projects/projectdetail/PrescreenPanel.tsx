@@ -1370,7 +1370,7 @@ export default function PrescreenPanel({
                           Validate
                         </label>
                       </th>
-                      <th className="w-32 px-4 py-2">Quota</th>
+                      {/* Quota is intentionally hidden for now */}
                     </tr>
                   </thead>
                   <tbody>
@@ -1401,23 +1401,6 @@ export default function PrescreenPanel({
                                 )
                               )
                             }
-                          />
-                        </td>
-                        <td className="px-4 py-2">
-                          <Input
-                            type="number"
-                            min={0}
-                            value={String(o.quota ?? 0)}
-                            onChange={(e) =>
-                              setOpts((prev) =>
-                                prev.map((x) =>
-                                  x.id === o.id
-                                    ? { ...x, quota: Math.max(0, Number(e.target.value || 0)) }
-                                    : x
-                                )
-                              )
-                            }
-                            className="w-24"
                           />
                         </td>
                       </tr>

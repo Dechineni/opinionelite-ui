@@ -16,7 +16,7 @@ export async function GET(
   try {
     const question = await prisma.prescreenQuestion.findUnique({
       where: { id: questionId },
-      include: { options: true },
+      include: { options: { orderBy: { sortOrder: "asc" } } },
     });
 
     if (!question) {
@@ -79,6 +79,11 @@ export async function PATCH(
                 value: o.value !== undefined ? String(o.value) : undefined,
                 sortOrder:
                   o.sortOrder !== undefined ? Number(o.sortOrder) : undefined,
+                enabled:
+                  o.enabled !== undefined ? Boolean(o.enabled) : undefined,
+                validate:
+                  o.validate !== undefined ? Boolean(o.validate) : undefined,
+                quota: o.quota !== undefined ? Number(o.quota) : undefined,
               },
             })
           )
@@ -98,6 +103,9 @@ export async function PATCH(
                 o.sortOrder !== undefined && o.sortOrder !== null
                   ? Number(o.sortOrder)
                   : i,
+              enabled: Boolean(o.enabled ?? false),
+              validate: Boolean(o.validate ?? false),
+              quota: Number(o.quota ?? 0) || 0,
             },
           });
         }
@@ -106,7 +114,7 @@ export async function PATCH(
 
     const updated = await prisma.prescreenQuestion.findUnique({
       where: { id: questionId },
-      include: { options: true },
+      include: { options: { orderBy: { sortOrder: "asc" } } },
     });
 
     return NextResponse.json(updated);
