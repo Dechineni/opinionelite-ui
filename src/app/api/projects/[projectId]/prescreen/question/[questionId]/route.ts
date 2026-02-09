@@ -1,5 +1,3 @@
-// FILE: src/app/api/projects/[projectId]/prescreen/question/[questionId]/route.ts
-
 export const runtime = "edge";
 export const preferredRegion = "auto";
 export const dynamic = "force-dynamic";
@@ -11,6 +9,12 @@ const NO_STORE_HEADERS = {
   "Cache-Control": "no-store, max-age=0",
   Pragma: "no-cache",
 };
+
+function optKey(label: unknown, value: unknown) {
+  const l = String(label ?? "").trim().toLowerCase();
+  const v = String(value ?? "").trim().toLowerCase();
+  return v || l; // prefer value; fallback to label
+}
 
 export async function GET(
   _req: Request,
@@ -75,7 +79,7 @@ export async function PATCH(
         "optionId" in b.options[0];
 
       if (looksLikePatch) {
-        // patch existing options by id
+        // Patch existing options by id
         await Promise.all(
           b.options.map((o: any) =>
             prisma.prescreenOption.update({
@@ -95,23 +99,61 @@ export async function PATCH(
           )
         );
       } else {
-        // replace all options (NO createMany → loop create)
+        // ✅ Replace-all options BUT preserve enabled/validate/quota if not provided by UI
+        const existing = await prisma.prescreenOption.findMany({
+          where: { questionId },
+          select: {
+            id: true,
+            label: true,
+            value: true,
+            enabled: true,
+            validate: true,
+            quota: true,
+          },
+        });
+
+        const existingMap = new Map<string, any>();
+        for (const ex of existing) {
+          existingMap.set(optKey(ex.label, ex.value), ex);
+        }
+
+        // Delete all then recreate (keeping non-transactional approach)
         await prisma.prescreenOption.deleteMany({ where: { questionId } });
 
         for (let i = 0; i < b.options.length; i++) {
           const o = b.options[i];
+
+          const label = String(o?.label ?? o);
+          const value = String(o?.value ?? o?.label ?? o);
+          const sortOrder =
+            o?.sortOrder !== undefined && o?.sortOrder !== null
+              ? Number(o.sortOrder)
+              : i;
+
+          const ex = existingMap.get(optKey(label, value));
+
+          const enabled =
+            o?.enabled !== undefined ? Boolean(o.enabled) : ex?.enabled ?? false;
+
+          const validate =
+            o?.validate !== undefined
+              ? Boolean(o.validate)
+              : ex?.validate ?? false;
+
+          const quota =
+            o?.quota !== undefined
+              ? Number(o.quota)
+              : ex?.quota ?? 0;
+
           await prisma.prescreenOption.create({
             data: {
               questionId,
-              label: String(o.label ?? o),
-              value: String(o.value ?? o.label ?? o),
-              sortOrder:
-                o.sortOrder !== undefined && o.sortOrder !== null
-                  ? Number(o.sortOrder)
-                  : i,
-              enabled: Boolean(o.enabled ?? false),
-              validate: Boolean(o.validate ?? false),
-              quota: Number(o.quota ?? 0) || 0,
+              label,
+              value,
+              sortOrder,
+              enabled,
+              validate,
+              quota: Number.isFinite(quota) ? quota : 0,
             },
           });
         }
@@ -132,7 +174,6 @@ export async function PATCH(
   }
 }
 
-// --- DELETE: remove a question + its options -------------------------------
 export async function DELETE(
   _req: Request,
   ctx: { params: Promise<{ projectId: string; questionId: string }> }
@@ -141,9 +182,7 @@ export async function DELETE(
   const { questionId } = await ctx.params;
 
   try {
-    // remove options first
     await prisma.prescreenOption.deleteMany({ where: { questionId } });
-    // then remove the question
     await prisma.prescreenQuestion.delete({ where: { id: questionId } });
 
     return NextResponse.json({ ok: true }, { headers: NO_STORE_HEADERS });
