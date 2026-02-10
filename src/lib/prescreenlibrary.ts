@@ -57,7 +57,7 @@ export const LIBRARY_QUESTIONS: Record<LibraryProfileKey, LibraryQuestion[]> = {
   health: [
     {
       key: "health_addiction_1",
-      title: "AILMENTS_Addiction",
+      title: "AILMENTS_ADDICTION",
       question:
         "Have you, or someone for whom you provide care, been diagnosed with any of the following medical conditions related to addiction?",
       controlType: "RADIO",
@@ -71,7 +71,7 @@ export const LIBRARY_QUESTIONS: Record<LibraryProfileKey, LibraryQuestion[]> = {
     },
     {
       key: "health_vision_hearing_1",
-      title: "AILMENTS_VisionHearing",
+      title: "AILMENTS_VISION_HEARING",
       question:
         "Have you, or someone for whom you provide care, been diagnosed with any of the following medical conditions related to Vision / Hearing impairments?",
       controlType: "RADIO",
@@ -91,7 +91,7 @@ export const LIBRARY_QUESTIONS: Record<LibraryProfileKey, LibraryQuestion[]> = {
     },
     {
         key: "health_respiratory_1",
-        title: "AILMENTS_Respiratory",
+        title: "AILMENTS_RESPIRATORY",
         question:
           "Have you, or someone for whom you provide care, been diagnosed with any of the following medical conditions related to Allergy / Asthma / Respiratory?",
         controlType: "RADIO",
@@ -535,7 +535,7 @@ export const LIBRARY_QUESTIONS: Record<LibraryProfileKey, LibraryQuestion[]> = {
   gaming: [
     {
         key: "standard_gaming_platforms_1",
-        title: "STANDARD_GAMING_PLATFORMS",
+        title: "STANDARD_GAMING_PLATFORM",
         question:
           "Which gaming platforms do you regularly use?",
         controlType: "RADIO",
@@ -734,111 +734,6 @@ export const LIBRARY_QUESTIONS: Record<LibraryProfileKey, LibraryQuestion[]> = {
         ],
     },
     {
-        key: "standard_gaming_platforms_1",
-        title: "STANDARD_GAMING_PLATFORMS",
-        question:
-          "Which gaming platforms do you regularly use?",
-        controlType: "RADIO",
-        options: [
-            { label: "Microsoft Xbox One"},
-            { label: "Nintendo Switch"},
-            { label: "Sony PlayStation 4"},
-            { label: "Windows based desktop/laptop"},
-            { label: "Apple based desktop/laptop"},
-            { label: "Apple based mobile device (iPod/iPad/iPhone)"},
-            { label: "Microsoft Xbox"},
-            { label: "Microsoft Xbox 360"},
-            { label: "Nintendo DS/Lite"},
-            { label: "Nintendo DSI/DSI XL"},
-            { label: "Nintendo 3DS"},
-            { label: "Nintendo Game Boy Advance/SP"},
-            { label: "Nintendo Game Boy/Color"},
-            { label: "Nintendo 64"},
-            { label: "Nintendo GameCube"},
-            { label: "Nintendo Wii"},
-            { label: "Sega Dreamcast"},
-            { label: "Sony PlayStation"},
-            { label: "Sony PlayStation 2"},
-            { label: "Sony PlayStation 3/Slim"},
-            { label: "Sony PSP"},
-            { label: "Sony PSP Go"},
-            { label: "Other"},
-            { label: "I don't play video/computer games"},
-        ],
-    },
-    {
-        key: "standard_gaming_hours_1",
-        title: "STANDARD_GAMING_HOURS",
-        question:
-          "How many hours per week do you spend playing video/computer games?",
-        controlType: "RADIO",
-        options: [
-            { label: "Less than 1 hour"},
-            { label: "1 to 3 hours"},
-            { label: "4 to 10 hours"},
-            { label: "11 to 15 hours"},
-            { label: "16 to 20 hours"},
-            { label: "21 to 25 hours"},
-            { label: "More than 25 hours"},
-            { label: "None"},
-        ],
-    },
-    {
-        key: "standard_gaming_partners_1",
-        title: "STANDARD_GAMING_PARTNERS",
-        question:
-          "How do you play video/computer games?",
-        controlType: "RADIO",
-        options: [
-            { label: "Alone"},
-            { label: "With others in the same room/house"},
-            { label: "With others through an Internet connection"},
-            { label: "I don't play video/computer games"},
-        ],
-    },
-    {
-        key: "standard_gaming_device_1",
-        title: "STANDARD_GAMING_DEVICE",
-        question:
-          "Which of the following devices do you use to play games?",
-        controlType: "RADIO",
-        options: [
-            { label: "Games Console"},
-            { label: "Computer or Laptop"},
-            { label: "Portable Gaming Device"},
-            { label: "Cellphone/Smartphone or other Handheld Organizer"},
-            { label: "Other"},
-            { label: "I don't play video/computer games"},
-        ]
-    },
-    {
-        key: "standard_gaming_purchase_1",
-        title: "STANDARD_GAMING_PURCHASE",
-        question:
-          "On average, how many computer/video games a month do you purchase?",
-        controlType: "RADIO",
-        options: [
-            { label: "Less than 1 game"},
-            { label: "1 to 2 games"},
-            { label: "3 to 5 games"},
-            { label: "6 to 8 games"},
-            { label: "9 to 10 games"},
-            { label: "More than 10 games"},
-            { label: "I don't buy any video/computer games"},
-        ],
-    },
-    {
-        key: "standard_gaming_online_1",
-        title: "STANDARD_GAMING_ONLINE",
-        question:
-          "Do you play video games with others online? (e.g. Xbox Live or World of Warcraft)?",
-        controlType: "RADIO",
-        options: [
-            { label: "Yes"},
-            { label: "No, I don't"},
-        ],
-    },
-    {
         key: "standard_television_frequency_1",
         title: "STANDARD_TELEVISION_FREQUENCY",
         question:
@@ -890,138 +785,6 @@ export const LIBRARY_QUESTIONS: Record<LibraryProfileKey, LibraryQuestion[]> = {
             { label: "Travel magazines"},
             { label: "Other weekly/monthly magazines"},
             { label: "I don't read newspapers or magazines"},
-        ],
-    },
-    {
-        key: "standard_flight_destination_1",
-        title: "STANDARD_FLIGHT_DESTINATION",
-        question:
-          "When you fly, which types of flights do you take?",
-        controlType: "RADIO",
-        options: [
-            { label: "Domestic"},
-            { label: "International"},
-            { label: "Both domestic and international"},
-            { label: "Neither, I don't travel by plane"},
-        ],
-    },
-    {
-        key: "standard_domestic_airlines_1",
-        title: "STANDARD_DOMESTIC_AIRLINES",
-        question:
-          "Which  domestic airlines have you flown with during the last 12 months?",
-        controlType: "RADIO",
-        options: [
-            { label: "AirTran"},
-            { label: "Alaska Airlines"},
-            { label: "American Airlines"},
-            { label: "Continental Airlines"},
-            { label: "Delta Air Lines"},
-            { label: "Jet Blue"},
-            { label: "Northwest Airlines"},
-            { label: "Southwest Airlines"},
-            { label: "United Airlines"},
-            { label: "US Airways"},
-            { label: "Virgin Atlantic"},
-            { label: "Other"},
-            { label: "I don't travel by plane"},
-        ],
-    },
-    {
-        key: "standard_international_airlines_1",
-        title: "STANDARD_INTERNATIONAL_AIRLINES",
-        question:
-          "Which international airlines have you flown with during the last 12 months?",
-        controlType: "RADIO",
-        options: [
-            { label: "Aegean Aviation"},
-            { label: "Aer Lingus"},
-            { label: "Aero Asia"},
-            { label: "Aeroflot"},
-            { label: "Aerolineas Argentinas"},
-            { label: "Aeromexico"},
-            { label: "Air Algerie"},
-            { label: "Air Berlin"},
-            { label: "Air Canada"},
-            { label: "Air China"},
-            { label: "Air Europa"},
-            { label: "Air France"},
-            { label: "Air India"},
-            { label: "Air New Zealand"},
-            { label: "Air One"},
-            { label: "AirAsia"},
-            { label: "All Nippon"},
-            { label: "Austrian Airlines Group"},
-            { label: "British Airways"},
-            { label: "Cathay Pacific"},
-            { label: "China Airlines"},
-            { label: "easyJet"},
-            { label: "EgyptAir"},
-            { label: "El Al"},
-            { label: "Emirates"},
-            { label: "EVA Air"},
-            { label: "Finnair Group"},
-            { label: "Japan Airlines"},
-            { label: "Kenya Airways"},
-            { label: "Kingfisher Red"},
-            { label: "KLM"},
-            { label: "Korean Air"},
-            { label: "LAN Airlines"},
-            { label: "Lufthansa"},
-            { label: "Mexican de Aviacion"},
-            { label: "Mexicana"},
-            { label: "Norwegian"},
-            { label: "Olympic Airlines"},
-            { label: "Philippine Airlines"},
-            { label: "Qantas Airways"},
-            { label: "Royal Jordanian"},
-            { label: "Ryanair"},
-            { label: "Saudi Arabian Airlines"},
-            { label: "Scandinavian Airlines (SAS)"},
-            { label: "Singapore Airlines"},
-            { label: "Skywest Airlines"},
-            { label: "South African Airways"},
-            { label: "Swissair"},
-            { label: "Tunisair"},
-            { label: "Volaris"},
-            { label: "Other"},
-            { label: "None of the above"},
-        ],
-    },
-    {
-        key: "standard_countries_visited_1",
-        title: "STANDARD_COUNTRIES_VISITED",
-        question:
-          "Which of the following countries/regions have you travelled to in the last 12 months?",
-        controlType: "RADIO",
-        options: [
-            { label: "North America"},
-            { label: "Central America"},
-            { label: "South America"},
-            { label: "Asia"},
-            { label: "Australia or the rest of Oceania"},
-            { label: "Europe"},
-            { label: "Middle East"},
-            { label: "I haven't traveled abroad in the last 12 months"},
-            { label: "Africa"},
-        ],
-    },
-    {
-        key: "standard_hotel_type_1",
-        title: "STANDARD_HOTEL_TYPE",
-        question:
-          "Of these hotel chains, which one(s) have you stayed at during the last 12 months?",
-        controlType: "RADIO",
-        options: [
-            { label: "1 star hotel"},
-            { label: "2 star hotel"},
-            { label: "3 star hotel"},
-            { label: "4 star hotel"},
-            { label: "5 star hotel"},
-            { label: "Bed and Breakfast"},
-            { label: "I have not stayed at a hotel in the last 12 months"},
-            { label: "Other"},
-            { label: "Better than a 5 star hotel"},
         ],
     },
     {
@@ -2055,41 +1818,6 @@ export const LIBRARY_QUESTIONS: Record<LibraryProfileKey, LibraryQuestion[]> = {
 
   personal: [
     {
-        key: "standard_age_1",
-        title: "STANDARD_AGE",
-        question:
-          "What is your age?",
-        controlType: "TEXT",
-        text:{
-            minLength: 1,
-            maxLength: 3,
-            textType: "CUSTOM"
-        }   
-    },
-    {
-        key: "standard_gender_1",
-        title: "STANDARD_GENDER",
-        question:
-          "What is your gender?",
-        controlType: "RADIO",
-        options: [
-            { label: "Male"},
-            { label: "Female"},
-        ]
-    },
-    {
-        key: "standard_zipcode_1",
-        title: "STANDARD_ZIPCODE",
-        question:
-          "What is your zip code?",
-        controlType: "TEXT",
-        text:{
-            minLength: 5,
-            maxLength: 10,
-            textType: "ZIPCODE"
-        }   
-    },
-    {
         key: "standard_hispanic_1",
         title: "STANDARD_HISPANIC",
         question:
@@ -2447,8 +2175,8 @@ export const LIBRARY_QUESTIONS: Record<LibraryProfileKey, LibraryQuestion[]> = {
         ]
     },
     {
-  key: "personal_msa_1",
-  title: "PERSONAL_MSA",
+  key: "standard_msa_1",
+  title: "STANDARD_MSA",
   question: "What is your MSA?",
   controlType: "TEXT",
   text: {
@@ -2497,7 +2225,7 @@ export const LIBRARY_QUESTIONS: Record<LibraryProfileKey, LibraryQuestion[]> = {
 },
 {
         key: "standard_age_and_gender_of_child_1",
-        title: "STANDARD_AGE_AND_GEDER_OF_CHILD",
+        title: "STANDARD_AGE_AND_GENDER_OF_CHILD",
         question:
           "Please indicate the age and gender of your child or children:",
         controlType: "RADIO",
@@ -2539,27 +2267,6 @@ export const LIBRARY_QUESTIONS: Record<LibraryProfileKey, LibraryQuestion[]> = {
             { label: "Female teen age 16"},
             { label: "Male teen age 17"},
             { label: "Female teen age 17"},
-        ]
-    },
-    {
-        key: "standard_education_1",
-        title: "STANDARD_EDUCATION",
-        question:
-          "What is the highest level of education you have completed?",
-        controlType: "RADIO",
-        options: [
-            { label: "3rd Grade or less"},
-            { label: "Middle School - Grades 4 - 8"},
-            { label: "Completed some high school"},
-            { label: "High school graduate"},
-            { label: "Other post high school vocational training"},
-            { label: "Completed some college, but no degree"},
-            { label: "Associate Degree"},
-            { label: "College Degree (such as B.A., B.S.)"},
-            { label: "Completed some graduate, but no degree"},
-            { label: "Masters degree"},
-            { label: "Doctorate degree"},
-            { label: "None of the Above"},
         ]
     },
     {
@@ -2787,76 +2494,6 @@ export const LIBRARY_QUESTIONS: Record<LibraryProfileKey, LibraryQuestion[]> = {
         ]
     },
     {
-        key: "standard_hhi_us_1",
-        title: "STANDARD_HHI_US",
-        question:
-          "How much total combined annual income do all members of your household earn before taxes?",
-        controlType: "RADIO",
-        options: [
-            { label: "Less than $5,000"},
-            { label: "$5,000 to $9,999"},
-            { label: "$10,000 to $14,999"},
-            { label: "$15,000 to $19,999"},
-            { label: "$20,000 to $24,999"},
-            { label: "$25,000 to $29,999"},
-            { label: "$30,000 to $34,999"},
-            { label: "$35,000 to $39,999"},
-            { label: "$40,000 to $44,999"},
-            { label: "$45,000 to $49,999"},
-            { label: "$50,000 to $54,999"},
-            { label: "$55,000 to $59,999"},
-            { label: "$60,000 to $64,999"},
-            { label: "$65,000 to $69,999"},
-            { label: "$70,000 to $74,999"},
-            { label: "$75,000 to $79,999"},
-            { label: "$80,000 to $84,999"},
-            { label: "$85,000 to $89,999"},
-            { label: "$90,000 to $94,999"},
-            { label: "$95,000 to $99,999"},
-            { label: "$100,000 to $124,999"},
-            { label: "$125,000 to $149,999"},
-            { label: "$150,000 to $174,999"},
-            { label: "$175,000 to $199,999"},
-            { label: "$200,000 to $249,999"},
-            { label: "$250,000 and above"},
-            { label: "Prefer not to answer"},
-        ]
-    },
-    {
-        key: "standard_job_title_1",
-        title: "STANDARD_JOB_TITLE",
-        question:
-          "What is your job title, level or responsibility?",
-        controlType: "RADIO",
-        options: [
-            { label: "C-Level (e.g. CEO, CFO), Owner, Partner, President      "},
-            { label: "Vice President (EVP, SVP, AVP, VP) "},
-            { label: "Director (Group Director, Sr. Director, Director) "},                                                       
-            { label: "Manager (Group Manager, Sr. Manager, Manager, Program Manager)  "},                      
-            { label: "Analyst  "},                                           
-            { label: "Assistant or Associate "},                                    
-            { label: "Administrative (Clerical or Support Staff)"},
-            { label: "Consultant"},
-            { label: "Intern"},
-            { label: "Volunteer"},
-            { label: "None of the above"},
-        ]
-    },
-    {
-        key: "standard_sexual_orientation_en_1",
-        title: "STANDARD_SEXUAL_ORIENTATION_EN",
-        question:
-          "What is your sexual orientation?",
-        controlType: "RADIO",
-        options: [
-            { label: "Heterosexual"},
-            { label: "Lesbian"},
-            { label: "Gay"},
-            { label: "Bisexual"},
-            { label: "Prefer not to answer"},
-        ]
-    },
-    {
         key: "standard_religion_1",
         title: "STANDARD_RELIGION",
         question:
@@ -2876,7 +2513,7 @@ export const LIBRARY_QUESTIONS: Record<LibraryProfileKey, LibraryQuestion[]> = {
     },
     {
         key: "standard_financial_product_1",
-        title: "STANDARD_Financial_Product",
+        title: "STANDARD_FINANCIAL_PRODUCT",
         question:
           "Which of the following financial products do you own?",
         controlType: "RADIO",
@@ -2978,58 +2615,6 @@ export const LIBRARY_QUESTIONS: Record<LibraryProfileKey, LibraryQuestion[]> = {
             { label: "I have a webcam and I am willing to use it for an online research opportunity."},
             { label: "I have a webcam and I am willing to use it for an online research opportunity."},
             { label: "I do not have a webcam."},
-        ]
-    },
-    {
-        key: "standard_education_v2_1",
-        title: "STANDARD_EDUCATION_v2",
-        question:
-          "What is the highest level of education you have completed?",
-        controlType: "RADIO",
-        options: [
-            { label: "Some high school or less"},
-            { label: "High school graduate"},
-            { label: "Other post high school vocational training"},
-            { label: "Completed some college, but no degree"},
-            { label: "Associate's degree"},
-            { label: "Bachelor's degree"},
-            { label: "Master's or professional degree"},
-            { label: "Doctorate degree"},
-            { label: "None of the above"},
-        ]
-    },
-    {
-        key: "standard_hhi_1",
-        title: "STANDARD_HHI",
-        question:
-          "What is your current annual household income before taxes?",
-        controlType: "RADIO",
-        options: [
-            { label: "Less than $14,999"},
-            { label: "$15,000 to $19,999"},
-            { label: "$20,000 to $24,999"},
-            { label: "$25,000 to $29,999"},
-            { label: "$30,000 to $34,999"},
-            { label: "$35,000 to $39,999"},
-            { label: "$40,000 to $44,999"},
-            { label: "$45,000 to $49,999"},
-            { label: "$50,000 to $54,999"},
-            { label: "$55,000 to $59,999"},
-            { label: "$60,000 to $64,999"},
-            { label: "$65,000 to $69,999"},
-            { label: "$70,000 to $74,999"},
-            { label: "$75,000 to $79,999"},
-            { label: "$80,000 to $84,999"},
-            { label: "$85,000 to $89,999"},
-            { label: "$90,000 to $94,999"},
-            { label: "$95,000 to $99,999"},
-            { label: "$100,000 to $124,999"},
-            { label: "$125,000 to $149,999"},
-            { label: "$150,000 to $174,999"},
-            { label: "$175,000 to $199,999"},
-            { label: "$200,000 to $249,999"},
-            { label: "$250,000 and above"},
-            { label: "Prefer not to answer"},
         ]
     },
     {
@@ -3388,8 +2973,8 @@ export const LIBRARY_QUESTIONS: Record<LibraryProfileKey, LibraryQuestion[]> = {
 },
 
     {
-        key: "standard__1",
-        title: "STANDARD_",
+        key: "standard_supplemental_income",
+        title: "STANDARD_SUPPLEMENTAL_INCOME",
         question:
           "",
         controlType: "RADIO",
@@ -3609,118 +3194,6 @@ export const LIBRARY_QUESTIONS: Record<LibraryProfileKey, LibraryQuestion[]> = {
             { label: "1001-5000"},
             { label: "Greater than 5000"},
             { label: "I don't work/I don't know"},
-        ],
-    },
-    {
-        key: "standard_industry_construction_1",
-        title: "STANDARD_INDUSTRY_CONSTRUCTION",
-        question:
-          "Which of the following best describes your current profession?",
-        controlType: "RADIO",
-        options: [
-            { label: "Carpentry/Woodworker/Cabinet Maker"},
-            { label: "Drywall/Plaster"},
-            { label: "Electrician"},
-            { label: "Fencing/Decking"},
-            { label: "Flooring"},
-            { label: "Framer"},
-            { label: "General Contractor"},
-            { label: "Handyman/Property Maintenance"},
-            { label: "Home builder"},
-            { label: "Home or Property Restorer"},
-            { label: "HVAC"},
-            { label: "Insulation"},
-            { label: "Landscaper"},
-            { label: "Masonry"},
-            { label: "Painter"},
-            { label: "Plumber"},
-            { label: "Remodeler"},
-            { label: "Roofer"},
-            { label: "Siding/Windows/Doors"},
-            { label: "Other construction profession"},
-            { label: "I don't work in the construction industry."},
-        ],
-    },
-    {
-        key: "standard_industry_it_1",
-        title: "STANDARD_INDUSTRY_IT",
-        question:
-          "Which IT role(s)/function(s) do you operate within?",
-        controlType: "RADIO",
-        options: [
-            { label: "Application Architecture and Integration"},
-            { label: "Application Development"},
-            { label: "Application Quality"},
-            { label: "Audit, Compliance, Privacy"},
-            { label: "Business Analytics"},
-            { label: "Business Applications"},
-            { label: "Cloud Architecture"},
-            { label: "Customer Relationship Management (CRM)"},
-            { label: "Data and Business Intelligence"},
-            { label: "Data Architecture"},
-            { label: "Data Center Architecture"},
-            { label: "Enterprise Resource Planning (ERP)"},
-            { label: "Enterprise/IT Risk Management/Digital Risk"},
-            { label: "Information Security Management or Architecture"},
-            { label: "IT Procurement Manager"},
-            { label: "IT Service and Support Management"},
-            { label: "IT Services Sourcing Manager"},
-            { label: "IT Vendor Manager"},
-            { label: "Mobile and Endpoint Computing Management"},
-            { label: "Mobile Applications"},
-            { label: "Program/Portfolio Management"},
-            { label: "Server/Storage Architecture"},
-            { label: "Software Asset Manager"},
-            { label: "Telecom and Network Infrastructure"},
-            { label: "Other IT role/function"},
-            { label: "I'm not involved in any IT roles or functions"},
-        ],
-    },
-    {
-        key: "standard_industry_healthcare_1",
-        title: "STANDARD_INDUSTRY_HEALTHCARE",
-        question:
-          "Which of the following best describes your current profession?",
-        controlType: "RADIO",
-        options: [
-            { label: "Administrator"},
-            { label: "Chiropractor"},
-            { label: "Dental Hygienist or Assistant"},
-            { label: "Dentist"},
-            { label: "Emergency Medical Technician (EMT)"},
-            { label: "Home health aide"},
-            { label: "Medical assistant"},
-            { label: "Nurse"},
-            { label: "Nursing assistant"},
-            { label: "Optometrist"},
-            { label: "Pharmacist"},
-            { label: "Phlebotomist"},
-            { label: "Physical or Occupational Therapist"},
-            { label: "Physician/Doctor"},
-            { label: "Surgeon"},
-            { label: "Technician (laboratory, radiology, etc.)"},
-            { label: "Therapist or mental health counselor"},
-            { label: "Veterinarian"},
-            { label: "Other healthcare profession"},
-            { label: "I don't work in the healthcare industry"},
-        ],
-    },
-    {
-        key: "standard_industry_hr_1",
-        title: "STANDARD_INDUSTRY_HR",
-        question:
-          "Which of the following best describes your role within human resources?",
-        controlType: "RADIO",
-        options: [
-            { label: "Benefits and Compensation"},
-            { label: "Recruitment/Talent Acquisition"},
-            { label: "Employer-Employee relations"},
-            { label: "Onboarding and Training"},
-            { label: "Learning and Career Development"},
-            { label: "Human Resources Generalist"},
-            { label: "Strategic Leadership"},
-            { label: "Other Human Resources role"},
-            { label: "I don't work in Human Resources"},
         ],
     },
       ],
