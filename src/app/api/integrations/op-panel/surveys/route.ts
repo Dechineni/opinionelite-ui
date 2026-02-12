@@ -1,6 +1,7 @@
 // FILE: src/app/api/integrations/op-panel/surveys/route.ts
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { COUNTRIES } from "@/data/countries";
 
 export const runtime = "edge";
 
@@ -11,6 +12,29 @@ export const runtime = "edge";
  * OP_PANEL_PROFILE_API_KEY=...              (OpinionElite UI -> OP Panel auth)
  * APP_PUBLIC_BASE_URL=https://opinion-elite.com   (fallback to build supplierUrl if missing)
  */
+
+function normalizeCountryName(s: string) {
+  return s
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, ""); // remove accents
+}
+
+const COUNTRY_NAME_TO_CODE = new Map(
+  COUNTRIES.map((c) => [normalizeCountryName(c.name), c.code.toUpperCase()])
+);
+
+function toCountryCodeFromName(nameOrCode: string | null | undefined): string {
+  const v = String(nameOrCode ?? "").trim();
+  if (!v) return "";
+
+  // if user already has code like "IN"
+  if (/^[A-Za-z]{2}$/.test(v)) return v.toUpperCase();
+
+  const key = normalizeCountryName(v);
+  return COUNTRY_NAME_TO_CODE.get(key) || "";
+}
 
 function unauthorized(msg = "Unauthorized") {
   return NextResponse.json({ error: msg }, { status: 401 });
@@ -203,12 +227,11 @@ export async function GET(req: Request) {
     if (questions.length === 0) continue; // existing rule
 
     // ---- (1) Country eligibility ----
-    const projectCountry = p.country != null ? String(p.countryCode) : "";
-    if (projectCountry.trim() !== "") {
-      const pc = normText(projectCountry);
-      const uc = normText(signupCountry);
-      if (!uc || pc !== uc) continue;
-    }
+    const projectCountryCode = String(p.countryCode ?? "").toUpperCase();
+if (projectCountryCode) {
+  const userCountryCode = toCountryCodeFromName(signupCountry);
+  if (!userCountryCode || userCountryCode !== projectCountryCode) continue;
+}
 
     // ---- (2) Age eligibility (conditional) ----
     const ageQ = questions.find((q) => {
