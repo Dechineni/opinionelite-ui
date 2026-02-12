@@ -66,37 +66,61 @@ function normText(v: unknown): string {
   return String(v ?? "").trim().toLowerCase();
 }
 
-function computeAgeYears(birthday: string | null | undefined, now = new Date()): number | null {
+// ✅ NEW: make prescreen title compatible with OP Panel question keys
+function stripNumericSuffix(key: string): string {
+  // e.g. STANDARD_HOBBIES_1001 -> STANDARD_HOBBIES
+  return key.replace(/_\d+$/, "");
+}
+
+// ✅ NEW: normalize answer/options for case-insensitive compare
+function normChoice(v: unknown): string {
+  return String(v ?? "").trim().toLowerCase();
+}
+
+function computeAgeYears(
+  birthday: string | null | undefined,
+  now = new Date()
+): number | null {
   if (!birthday) return null;
-  // Expected formats in OP Panel signup: 'YYYY-MM-DD' (stored as varchar)
   const s = String(birthday).trim();
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return null;
+
   const y = Number(m[1]);
   const mo = Number(m[2]);
   const d = Number(m[3]);
-  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d))
+    return null;
+
   const dob = new Date(Date.UTC(y, mo - 1, d));
   if (Number.isNaN(dob.getTime())) return null;
-  const nowUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+  const nowUTC = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  );
+
   let age = nowUTC.getUTCFullYear() - dob.getUTCFullYear();
   const mDiff = nowUTC.getUTCMonth() - dob.getUTCMonth();
-  if (mDiff < 0 || (mDiff === 0 && nowUTC.getUTCDate() < dob.getUTCDate())) age -= 1;
+  if (mDiff < 0 || (mDiff === 0 && nowUTC.getUTCDate() < dob.getUTCDate()))
+    age -= 1;
+
   if (age < 0 || age > 125) return null;
   return age;
 }
 
 function parseAgeRange(label: string): { min: number; max: number } | null {
   const t = String(label || "").trim();
-  // Typical: "31-40" or "21 - 30"
   const m = t.match(/(\d{1,3})\s*[-–]\s*(\d{1,3})/);
   if (!m) return null;
+
   const a = Number(m[1]);
   const b = Number(m[2]);
   if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+
   const min = Math.min(a, b);
   const max = Math.max(a, b);
   if (min < 0 || max > 125) return null;
+
   return { min, max };
 }
 
@@ -140,7 +164,8 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const userId = (searchParams.get("userId") || "").trim();
-  if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+  if (!userId)
+    return NextResponse.json({ error: "Missing userId" }, { status: 400 });
 
   const opPanelBase = (process.env.OP_PANEL_API_BASE || "").trim();
   const opPanelKey = (process.env.OP_PANEL_PROFILE_API_KEY || "").trim();
@@ -149,7 +174,9 @@ export async function GET(req: Request) {
   }
 
   // ---- 1) Fetch OP Panel answers + signup info (Option B) ----
-  const profileUrl = new URL(`${opPanelBase.replace(/\/$/, "")}/UI/get_profile_answers.php`);
+  const profileUrl = new URL(
+    `${opPanelBase.replace(/\/$/, "")}/UI/get_profile_answers.php`
+  );
   profileUrl.searchParams.set("user_id", userId);
 
   const profRes = await fetch(profileUrl.toString(), {
@@ -168,8 +195,9 @@ export async function GET(req: Request) {
 
   const profJson = (await profRes.json()) as {
     answers?: Record<string, string>;
-    signup?: { country?: string | null; birthday?: string | null; zipcode?: string | null };
+    signup?: { country?: string | null; birthday?: string | null };
   };
+
   const answers = profJson?.answers || {};
   const signupCountry = profJson?.signup?.country ?? null;
   const signupBirthday = profJson?.signup?.birthday ?? null;
@@ -228,10 +256,10 @@ export async function GET(req: Request) {
 
     // ---- (1) Country eligibility ----
     const projectCountryCode = String(p.countryCode ?? "").toUpperCase();
-if (projectCountryCode) {
-  const userCountryCode = toCountryCodeFromName(signupCountry);
-  if (!userCountryCode || userCountryCode !== projectCountryCode) continue;
-}
+    if (projectCountryCode) {
+      const userCountryCode = toCountryCodeFromName(signupCountry);
+      if (!userCountryCode || userCountryCode !== projectCountryCode) continue;
+    }
 
     // ---- (2) Age eligibility (conditional) ----
     const ageQ = questions.find((q) => {
@@ -257,19 +285,26 @@ if (projectCountryCode) {
       }
     }
 
-    // ---- (3) Prescreen answer matching (existing) ----
+    // ---- (3) Prescreen answer matching ----
     let ok = true;
 
     for (const q of questions) {
-      const controlType = String(q.controlType || "TEXT");
-      const titleKey = String(q.title || "").trim();
-      if (!titleKey) continue;
+      const controlType = String(q.controlType || "TEXT").toUpperCase();
+      const titleKeyRaw = String(q.title || "").trim();
+      if (!titleKeyRaw) continue;
 
       // Skip age question here (validated via signup birthday)
       const qText = normText(q?.question);
       if (qText === normText("What is your age?") || qText.includes("your age")) continue;
 
-      const userAnswer = answers[titleKey];
+      // ✅ NEW: try both exact title and suffix-stripped title
+      const titleKey = titleKeyRaw;
+      const titleKey2 = stripNumericSuffix(titleKeyRaw);
+
+      const userAnswer =
+        answers[titleKey] ??
+        (titleKey2 !== titleKey ? answers[titleKey2] : undefined);
+
       if (userAnswer == null || String(userAnswer).trim() === "") {
         ok = false;
         break;
@@ -280,30 +315,47 @@ if (projectCountryCode) {
         const max = Number(q.textMaxLength || 0) || 0;
         if (min === 0 && max === 0) continue;
 
-        const n = parseNumber(userAnswer);
-        if (n == null) { ok = false; break; }
-        if (min && n < min) { ok = false; break; }
-        if (max && n > max) { ok = false; break; }
+        const n = parseNumber(String(userAnswer));
+        if (n == null) {
+          ok = false;
+          break;
+        }
+        if (min && n < min) {
+          ok = false;
+          break;
+        }
+        if (max && n > max) {
+          ok = false;
+          break;
+        }
       } else {
         const opts: any[] = Array.isArray(q.options) ? q.options : [];
         const hasValidate = opts.some((o) => Boolean(o.validate));
         if (!hasValidate) continue;
 
+        // ✅ NEW: case-insensitive allowed set
         const allowed = new Set(
           opts
             .filter((o) => Boolean(o.enabled) && Boolean(o.validate))
-            .map((o) => String(o.label || o.value || "").trim())
+            .map((o) => normChoice(o.label || o.value || ""))
             .filter(Boolean)
         );
+
         if (allowed.size === 0) continue;
 
-        if (controlType === "RADIO") {
-          const v = String(userAnswer).trim();
-          if (!allowed.has(v)) { ok = false; break; }
+        if (controlType === "RADIO" || controlType === "DROPDOWN") {
+          const v = normChoice(userAnswer);
+          if (!allowed.has(v)) {
+            ok = false;
+            break;
+          }
         } else if (controlType === "CHECKBOX") {
-          const picked = splitMulti(String(userAnswer));
+          const picked = splitMulti(String(userAnswer)).map(normChoice);
           const anyMatch = picked.some((x) => allowed.has(x));
-          if (!anyMatch) { ok = false; break; }
+          if (!anyMatch) {
+            ok = false;
+            break;
+          }
         }
       }
     }
