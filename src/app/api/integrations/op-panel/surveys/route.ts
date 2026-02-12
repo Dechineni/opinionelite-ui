@@ -38,6 +38,44 @@ function splitMulti(val: string): string[] {
     .filter(Boolean);
 }
 
+function normText(v: unknown): string {
+  return String(v ?? "").trim().toLowerCase();
+}
+
+function computeAgeYears(birthday: string | null | undefined, now = new Date()): number | null {
+  if (!birthday) return null;
+  // Expected formats in OP Panel signup: 'YYYY-MM-DD' (stored as varchar)
+  const s = String(birthday).trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+  const dob = new Date(Date.UTC(y, mo - 1, d));
+  if (Number.isNaN(dob.getTime())) return null;
+  const nowUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  let age = nowUTC.getUTCFullYear() - dob.getUTCFullYear();
+  const mDiff = nowUTC.getUTCMonth() - dob.getUTCMonth();
+  if (mDiff < 0 || (mDiff === 0 && nowUTC.getUTCDate() < dob.getUTCDate())) age -= 1;
+  if (age < 0 || age > 125) return null;
+  return age;
+}
+
+function parseAgeRange(label: string): { min: number; max: number } | null {
+  const t = String(label || "").trim();
+  // Typical: "31-40" or "21 - 30"
+  const m = t.match(/(\d{1,3})\s*[-–]\s*(\d{1,3})/);
+  if (!m) return null;
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  const min = Math.min(a, b);
+  const max = Math.max(a, b);
+  if (min < 0 || max > 125) return null;
+  return { min, max };
+}
+
 function parseNumber(val: string | undefined | null): number | null {
   if (!val) return null;
   const n = Number(String(val).replace(/[^\d.-]/g, ""));
@@ -59,7 +97,6 @@ function buildSupplierUrlFallback(opts: {
 
 function applyIdentifier(url: string, userId: string) {
   if (!url) return url;
-  // Replace common placeholders used in your UI
   return url
     .replaceAll("[identifier]", encodeURIComponent(userId))
     .replaceAll("{identifier}", encodeURIComponent(userId));
@@ -67,10 +104,6 @@ function applyIdentifier(url: string, userId: string) {
 
 export async function GET(req: Request) {
   // ---- Auth: OP Panel -> OpinionElite UI ----
-  // Accept any of these:
-  //  - x-op-panel-key: <key>
-  //  - x-api-key: <key>
-  //  - Authorization: Bearer <key>
   const expectedCallerKey = (process.env.OP_PANEL_CALLER_KEY || "").trim();
   const headerKey =
     (req.headers.get("x-op-panel-key") || "").trim() ||
@@ -91,7 +124,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "OP Panel API env not set" }, { status: 500 });
   }
 
-  // ---- 1) Fetch OP Panel profile answers (server-to-server) ----
+  // ---- 1) Fetch OP Panel answers + signup info (Option B) ----
   const profileUrl = new URL(`${opPanelBase.replace(/\/$/, "")}/UI/get_profile_answers.php`);
   profileUrl.searchParams.set("user_id", userId);
 
@@ -109,13 +142,15 @@ export async function GET(req: Request) {
     );
   }
 
-  const profJson = (await profRes.json()) as { answers?: Record<string, string> };
+  const profJson = (await profRes.json()) as {
+    answers?: Record<string, string>;
+    signup?: { country?: string | null; birthday?: string | null; zipcode?: string | null };
+  };
   const answers = profJson?.answers || {};
+  const signupCountry = profJson?.signup?.country ?? null;
+  const signupBirthday = profJson?.signup?.birthday ?? null;
 
   // ---- 2) Load supplier mappings for ACTIVE projects ----
-  // IMPORTANT:
-  // - Do NOT filter by allowTraffic (you said it's not implemented yet)
-  // - We will SKIP projects that have ZERO prescreenQuestions
   const prisma = getPrisma();
   const maps = await prisma.projectSupplierMap.findMany({
     where: {
@@ -127,10 +162,12 @@ export async function GET(req: Request) {
         select: {
           code: true,
           name: true,
-          loi: true, // from Project
+          countryCode: true,
+          loi: true,
           prescreenQuestions: {
             select: {
               title: true,
+              question: true,
               controlType: true,
               textMinLength: true,
               textMaxLength: true,
@@ -163,13 +200,41 @@ export async function GET(req: Request) {
     if (!p) continue;
 
     const questions: any[] = Array.isArray(p.prescreenQuestions) ? p.prescreenQuestions : [];
+    if (questions.length === 0) continue; // existing rule
 
-    // ✅ Your requirement:
-    // If a project has NO prescreen questions configured, do not return it for OP Panel.
-    if (questions.length === 0) {
-      continue;
+    // ---- (1) Country eligibility ----
+    const projectCountry = p.country != null ? String(p.countryCode) : "";
+    if (projectCountry.trim() !== "") {
+      const pc = normText(projectCountry);
+      const uc = normText(signupCountry);
+      if (!uc || pc !== uc) continue;
     }
 
+    // ---- (2) Age eligibility (conditional) ----
+    const ageQ = questions.find((q) => {
+      const qText = normText(q?.question);
+      const isAgeText = qText === normText("What is your age?") || qText.includes("your age");
+      return isAgeText && String(q?.controlType || "").toUpperCase() === "RADIO";
+    });
+
+    if (ageQ) {
+      const opts: any[] = Array.isArray(ageQ.options) ? ageQ.options : [];
+      const validated = opts.filter((o) => Boolean(o.enabled) && Boolean(o.validate));
+      if (validated.length > 0) {
+        const age = computeAgeYears(signupBirthday);
+        if (age == null) continue;
+
+        const ranges = validated
+          .map((o) => parseAgeRange(String(o.label || o.value || "")))
+          .filter(Boolean) as Array<{ min: number; max: number }>;
+
+        if (ranges.length === 0) continue;
+        const inAny = ranges.some((r) => age >= r.min && age <= r.max);
+        if (!inAny) continue;
+      }
+    }
+
+    // ---- (3) Prescreen answer matching (existing) ----
     let ok = true;
 
     for (const q of questions) {
@@ -177,9 +242,11 @@ export async function GET(req: Request) {
       const titleKey = String(q.title || "").trim();
       if (!titleKey) continue;
 
-      const userAnswer = answers[titleKey];
+      // Skip age question here (validated via signup birthday)
+      const qText = normText(q?.question);
+      if (qText === normText("What is your age?") || qText.includes("your age")) continue;
 
-      // strict: missing answer => not eligible
+      const userAnswer = answers[titleKey];
       if (userAnswer == null || String(userAnswer).trim() === "") {
         ok = false;
         break;
@@ -188,32 +255,16 @@ export async function GET(req: Request) {
       if (controlType === "TEXT") {
         const min = Number(q.textMinLength || 0) || 0;
         const max = Number(q.textMaxLength || 0) || 0;
-
-        // If no min/max constraints, accept as present
         if (min === 0 && max === 0) continue;
 
         const n = parseNumber(userAnswer);
-        if (n == null) {
-          ok = false;
-          break;
-        }
-        if (min && n < min) {
-          ok = false;
-          break;
-        }
-        if (max && n > max) {
-          ok = false;
-          break;
-        }
+        if (n == null) { ok = false; break; }
+        if (min && n < min) { ok = false; break; }
+        if (max && n > max) { ok = false; break; }
       } else {
         const opts: any[] = Array.isArray(q.options) ? q.options : [];
-
-        // Only validate options if ANY option is marked validate=true
         const hasValidate = opts.some((o) => Boolean(o.validate));
-        if (!hasValidate) {
-          // If validate flags aren't being saved yet, we still consider "answer present" as pass.
-          continue;
-        }
+        if (!hasValidate) continue;
 
         const allowed = new Set(
           opts
@@ -221,22 +272,15 @@ export async function GET(req: Request) {
             .map((o) => String(o.label || o.value || "").trim())
             .filter(Boolean)
         );
-
         if (allowed.size === 0) continue;
 
         if (controlType === "RADIO") {
           const v = String(userAnswer).trim();
-          if (!allowed.has(v)) {
-            ok = false;
-            break;
-          }
+          if (!allowed.has(v)) { ok = false; break; }
         } else if (controlType === "CHECKBOX") {
           const picked = splitMulti(String(userAnswer));
           const anyMatch = picked.some((x) => allowed.has(x));
-          if (!anyMatch) {
-            ok = false;
-            break;
-          }
+          if (!anyMatch) { ok = false; break; }
         }
       }
     }
@@ -249,7 +293,6 @@ export async function GET(req: Request) {
 
     const supplierCode = String(m.supplier?.code || "").trim();
 
-    // Prefer stored supplierUrl if present, but ensure identifier is filled
     const storedUrlRaw = String(m.supplierUrl || "").trim();
     const storedUrl = storedUrlRaw ? applyIdentifier(storedUrlRaw, userId) : "";
 
