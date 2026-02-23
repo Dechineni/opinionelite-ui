@@ -12,6 +12,7 @@ import {
   ChevronDown,
   Menu,
   UserCog,
+  LifeBuoy,
 } from "lucide-react";
 
 export type Role = "admin" | "manager";
@@ -42,7 +43,7 @@ function buildMenu(role: Role): RootItem[] {
       key: "project",
       label: "Project",
       icon: FileText,
-      children: [
+      children: [ 
         { key: "project-list", label: "Project List", href: "/projects/new/projectlist" },
         {
           key: "project-create",
@@ -86,6 +87,29 @@ function buildMenu(role: Role): RootItem[] {
         { key: "report-tsign", label: "TSign", href: "/report/tsign" },
       ],
     },
+    {
+  key: "support",
+  label: "Support",
+  icon: LifeBuoy,
+  children: [ 
+    //{
+      //key: "support-ip-tracker",
+      //label: "IP Tracker",
+      //href: "/support/ip-tracker",
+    //},
+    {
+      key: "support-reconciliation",
+      label: "Reconciliation",
+      href: "/support/reconciliation",
+    },
+    //{
+      //key: "support-redirect-status",
+      //label: "Redirect-status",
+      //href: "/support/redirect-status",
+    //},
+    
+  ],
+},
   ];
 
   if (role === "admin") {
@@ -202,6 +226,7 @@ export default function Sidebar({
     };
   });
 };
+
   const handleNav = (href: string) => (e: React.MouseEvent) => {
     if (onNavigate) {
       e.preventDefault();
