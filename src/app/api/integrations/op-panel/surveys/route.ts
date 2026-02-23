@@ -18,7 +18,7 @@ function normalizeCountryName(s: string) {
     .trim()
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, ""); // remove accents
+    .replace(/[\u0300-\u036f]/g, "");
 }
 
 const COUNTRY_NAME_TO_CODE = new Map(
@@ -31,7 +31,6 @@ function toCountryCodeFromName(nameOrCode: string | null | undefined): string {
 
   // if user already has code like "IN"
   if (/^[A-Za-z]{2}$/.test(v)) return v.toUpperCase();
-
   const key = normalizeCountryName(v);
   return COUNTRY_NAME_TO_CODE.get(key) || "";
 }
@@ -136,18 +135,18 @@ function buildSupplierUrlFallback(opts: {
   supplierCode: string;
   identifier: string;
 }) {
-  const u = new URL(`${opts.baseUrl.replace(/\/$/, "")}/Survey`);
+  const u = new URL(`${opts.baseUrl.replace(/\/$/, "")}/Prescreen`);
   u.searchParams.set("projectId", opts.projectCode);
   u.searchParams.set("supplierId", opts.supplierCode);
   u.searchParams.set("id", opts.identifier);
   return u.toString();
 }
 
-function applyIdentifier(url: string, userId: string) {
+function applyIdentifier(url: string, identifier: string) {
   if (!url) return url;
   return url
-    .replaceAll("[identifier]", encodeURIComponent(userId))
-    .replaceAll("{identifier}", encodeURIComponent(userId));
+    .replaceAll("[identifier]", encodeURIComponent(identifier))
+    .replaceAll("{identifier}", encodeURIComponent(identifier));
 }
 
 export async function GET(req: Request) {
@@ -163,7 +162,7 @@ export async function GET(req: Request) {
   }
 
   const { searchParams } = new URL(req.url);
-  const userId = (searchParams.get("userId") || "").trim();
+  const userId = (searchParams.get("userId") || "").trim(); // OP Panel username
   if (!userId)
     return NextResponse.json({ error: "Missing userId" }, { status: 400 });
 
@@ -173,7 +172,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "OP Panel API env not set" }, { status: 500 });
   }
 
-  // ---- 1) Fetch OP Panel answers + signup info (Option B) ----
+  // Fetch OP Panel answers + signup info
   const profileUrl = new URL(
     `${opPanelBase.replace(/\/$/, "")}/UI/get_profile_answers.php`
   );
@@ -195,14 +194,16 @@ export async function GET(req: Request) {
 
   const profJson = (await profRes.json()) as {
     answers?: Record<string, string>;
-    signup?: { country?: string | null; birthday?: string | null };
+    signup?: { id?: number | null; country?: string | null; birthday?: string | null };
   };
 
   const answers = profJson?.answers || {};
   const signupCountry = profJson?.signup?.country ?? null;
   const signupBirthday = profJson?.signup?.birthday ?? null;
 
-  // ---- 2) Load supplier mappings for ACTIVE projects ----
+  // ✅ IMPORTANT: use signup.id as identifier in the URL
+  const identifier = String(profJson?.signup?.id ?? "").trim() || userId;
+
   const prisma = getPrisma();
   const maps = await prisma.projectSupplierMap.findMany({
     where: {
@@ -252,16 +253,16 @@ export async function GET(req: Request) {
     if (!p) continue;
 
     const questions: any[] = Array.isArray(p.prescreenQuestions) ? p.prescreenQuestions : [];
-    if (questions.length === 0) continue; // existing rule
+    if (questions.length === 0) continue;
 
-    // ---- (1) Country eligibility ----
+    // Country eligibility
     const projectCountryCode = String(p.countryCode ?? "").toUpperCase();
     if (projectCountryCode) {
       const userCountryCode = toCountryCodeFromName(signupCountry);
       if (!userCountryCode || userCountryCode !== projectCountryCode) continue;
     }
 
-    // ---- (2) Age eligibility (conditional) ----
+    // Age eligibility (optional)
     const ageQ = questions.find((q) => {
       const qText = normText(q?.question);
       const isAgeText = qText === normText("What is your age?") || qText.includes("your age");
@@ -285,7 +286,7 @@ export async function GET(req: Request) {
       }
     }
 
-    // ---- (3) Prescreen answer matching ----
+    // Prescreen matching
     let ok = true;
 
     for (const q of questions) {
@@ -293,17 +294,14 @@ export async function GET(req: Request) {
       const titleKeyRaw = String(q.title || "").trim();
       if (!titleKeyRaw) continue;
 
-      // Skip age question here (validated via signup birthday)
       const qText = normText(q?.question);
       if (qText === normText("What is your age?") || qText.includes("your age")) continue;
 
-      // ✅ NEW: try both exact title and suffix-stripped title
-      const titleKey = titleKeyRaw;
       const titleKey2 = stripNumericSuffix(titleKeyRaw);
 
       const userAnswer =
-        answers[titleKey] ??
-        (titleKey2 !== titleKey ? answers[titleKey2] : undefined);
+        answers[titleKeyRaw] ??
+        (titleKey2 !== titleKeyRaw ? answers[titleKey2] : undefined);
 
       if (userAnswer == null || String(userAnswer).trim() === "") {
         ok = false;
@@ -316,24 +314,14 @@ export async function GET(req: Request) {
         if (min === 0 && max === 0) continue;
 
         const n = parseNumber(String(userAnswer));
-        if (n == null) {
-          ok = false;
-          break;
-        }
-        if (min && n < min) {
-          ok = false;
-          break;
-        }
-        if (max && n > max) {
-          ok = false;
-          break;
-        }
+        if (n == null) { ok = false; break; }
+        if (min && n < min) { ok = false; break; }
+        if (max && n > max) { ok = false; break; }
       } else {
         const opts: any[] = Array.isArray(q.options) ? q.options : [];
         const hasValidate = opts.some((o) => Boolean(o.validate));
         if (!hasValidate) continue;
 
-        // ✅ NEW: case-insensitive allowed set
         const allowed = new Set(
           opts
             .filter((o) => Boolean(o.enabled) && Boolean(o.validate))
@@ -345,17 +333,11 @@ export async function GET(req: Request) {
 
         if (controlType === "RADIO" || controlType === "DROPDOWN") {
           const v = normChoice(userAnswer);
-          if (!allowed.has(v)) {
-            ok = false;
-            break;
-          }
+          if (!allowed.has(v)) { ok = false; break; }
         } else if (controlType === "CHECKBOX") {
           const picked = splitMulti(String(userAnswer)).map(normChoice);
           const anyMatch = picked.some((x) => allowed.has(x));
-          if (!anyMatch) {
-            ok = false;
-            break;
-          }
+          if (!anyMatch) { ok = false; break; }
         }
       }
     }
@@ -369,7 +351,7 @@ export async function GET(req: Request) {
     const supplierCode = String(m.supplier?.code || "").trim();
 
     const storedUrlRaw = String(m.supplierUrl || "").trim();
-    const storedUrl = storedUrlRaw ? applyIdentifier(storedUrlRaw, userId) : "";
+    const storedUrl = storedUrlRaw ? applyIdentifier(storedUrlRaw, identifier) : "";
 
     const surveyLink =
       storedUrl ||
@@ -377,7 +359,7 @@ export async function GET(req: Request) {
         baseUrl: appBase,
         projectCode,
         supplierCode,
-        identifier: userId,
+        identifier,
       });
 
     eligible.push({
