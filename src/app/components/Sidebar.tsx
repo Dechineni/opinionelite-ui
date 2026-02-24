@@ -12,6 +12,7 @@ import {
   ChevronDown,
   Menu,
   UserCog,
+  LifeBuoy
 } from "lucide-react";
 
 export type Role = "admin" | "manager";
@@ -86,6 +87,18 @@ function buildMenu(role: Role): RootItem[] {
         { key: "report-tsign", label: "TSign", href: "/report/tsign" },
       ],
     },
+    {
+  key: "support",
+  label: "Support",
+  icon: LifeBuoy,
+  children: [ 
+    {
+      key: "support-reconciliation",
+      label: "Reconciliation",
+      href: "/support/reconciliation",
+    },    
+  ],
+},
   ];
 
   if (role === "admin") {
