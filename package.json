@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "gen:countries": "node scripts/generate-countries.mjs",
+    "db:dev": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
     "cf:build": "prisma generate && next-on-pages",
     "postinstall": "prisma generate"
   },
