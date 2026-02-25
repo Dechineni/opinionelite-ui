@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,6 +5,277 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model Client {
+  id            String         @id @default(cuid())
+  code          String         @unique @default(dbgenerated("('C'::text || (nextval('client_code_seq'::regclass))::text)"))
+  name          String
+  contactPerson String
+  email         String?
+  contactNumber String?
+  countryCode   String
+  website       String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  projects      Project[]
+  projectGroups ProjectGroup[]
+}
+
+model Supplier {
+  id                    String                  @id @default(cuid())
+  code                  String                  @unique @default(dbgenerated("('S'::text || lpad((nextval('supplier_code_seq'::regclass))::text, 4, '0'::text))"))
+  name                  String
+  website               String?
+  countryCode           String
+  email                 String?
+  contactNumber         String?
+  panelSize             Int?
+  completeUrl           String
+  terminateUrl          String
+  overQuotaUrl          String
+  qualityTermUrl        String
+  surveyCloseUrl        String
+  about                 String?
+  allowedCountries      String[]
+  api                   Boolean                 @default(false)
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  projectMappings       ProjectSupplierMap[]
+  SupplierRedirectEvent SupplierRedirectEvent[]
+  reconciliations       Reconciliation[]
+}
+
+model ProjectGroup {
+  id            String    @id @default(cuid())
+  clientId      String
+  name          String
+  description   String?
+  dynamicThanks Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  projects      Project[]
+  client        Client    @relation(fields: [clientId], references: [id])
+}
+
+model Project {
+  id                    String                  @id @default(cuid())
+  code                  String                  @unique @default(dbgenerated("('SR'::text || lpad((nextval('project_code_seq'::regclass))::text, 4, '0'::text))"))
+  clientId              String
+  groupId               String?
+  name                  String
+  managerEmail          String
+  category              String
+  status                ProjectStatus           @default(ACTIVE)
+  description           String?
+  countryCode           String
+  languageCode          String
+  currency              String                  @default("USD")
+  loi                   Int
+  ir                    Float
+  sampleSize            Int
+  clickQuota            Int
+  projectCpi            Decimal                 @db.Decimal(10, 2)
+  supplierCpi           Decimal?                @db.Decimal(10, 2)
+  startDate             DateTime
+  endDate               DateTime
+  preScreen             Boolean                 @default(false)
+  exclude               Boolean                 @default(false)
+  geoLocation           Boolean                 @default(false)
+  dynamicThanksUrl      Boolean                 @default(false)
+  uniqueIp              Boolean                 @default(false)
+  uniqueIpDepth         Int?
+  tSign                 Boolean                 @default(false)
+  speeder               Boolean                 @default(false)
+  speederDepth          Int?
+  mobile                Boolean                 @default(true)
+  tablet                Boolean                 @default(false)
+  desktop               Boolean                 @default(false)
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  surveyLinkType        SurveyLinkType?         @default(SINGLE)
+  surveyLiveUrl         String?
+  surveyTestUrl         String?
+  surveyName            String?
+  prescreenAnswers      PrescreenAnswer[]
+  prescreenQuestions    PrescreenQuestion[]     @relation("ProjectPrescreenQuestions")
+  client                Client                  @relation(fields: [clientId], references: [id])
+  group                 ProjectGroup?           @relation(fields: [groupId], references: [id])
+  supplierMappings      ProjectSupplierMap[]
+  respondents           Respondent[]
+  SupplierRedirectEvent SupplierRedirectEvent[]
+  SurveyRedirect        SurveyRedirect[]
+  reconciliations       Reconciliation[]
+}
+
+/// A supplier mapped to a project (1 row per supplier per project)
+model ProjectSupplierMap {
+  id                String                  @id @default(cuid())
+  /// FKs
+  projectId         String
+  supplierId        String
+  /// Quotas & pricing
+  quota             Int
+  clickQuota        Int
+  cpi               Decimal                 @db.Decimal(10, 2)
+  /// Redirection mode
+  redirectionType   SupplierRedirectionType
+  /// STATIC_REDIRECT: (no URL stored here — supplier hits your live survey URL)
+  /// STATIC_POSTBACK: (no URL stored here — you’ll post back to supplier)
+  /// DYNAMIC_POSTBACK:
+  postBackUrl       String?
+  /// DYNAMIC_REDIRECT (the 5 result URLs)
+  completeUrl       String?
+  terminateUrl      String?
+  overQuotaUrl      String?
+  qualityTermUrl    String?
+  surveyCloseUrl    String?
+  /// Misc / UI helpers
+  supplierProjectId String?
+  allowTraffic      Boolean                 @default(false)
+  testLinkEnabled   Boolean                 @default(false)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  supplierUrl       String?
+  project           Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  supplier          Supplier                @relation(fields: [supplierId], references: [id])
+
+  @@unique([projectId, supplierId])
+  @@index([projectId])
+  @@index([supplierId])
+}
+
+model PrescreenQuestion {
+  id            String               @id @default(cuid())
+  projectId     String
+  title         String
+  question      String
+  controlType   PrescreenControlType
+  textMinLength Int?                 @default(0)
+  textMaxLength Int?
+  textType      PrescreenTextType?
+  sortOrder     Int                  @default(0)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  answers       PrescreenAnswer[]
+  options       PrescreenOption[]
+  project       Project              @relation("ProjectPrescreenQuestions", fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model PrescreenOption {
+  id         String            @id @default(cuid())
+  questionId String
+  label      String
+  value      String
+  sortOrder  Int               @default(0)
+  enabled    Boolean           @default(false)
+  validate   Boolean           @default(false)
+  quota      Int               @default(0)
+  question   PrescreenQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+}
+
+model Respondent {
+  id                    String                  @id @default(cuid())
+  projectId             String
+  externalId            String
+  supplierId            String?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  answers               PrescreenAnswer[]
+  project               Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  SupplierRedirectEvent SupplierRedirectEvent[]
+  SurveyRedirect        SurveyRedirect[]
+
+  @@unique([projectId, externalId, supplierId], map: "respondent_project_ext_supplier_unique")
+  @@index([projectId])
+}
+
+model PrescreenAnswer {
+  id             String            @id @default(cuid())
+  projectId      String
+  respondentId   String
+  questionId     String
+  /// Store answers in flexible fields
+  /// For TEXT:    answerText
+  /// For RADIO/DROPDOWN: answerValue (single)
+  /// For CHECKBOX: selectedValues (array)
+  answerText     String?
+  answerValue    String?
+  selectedValues String[]
+  answeredAt     DateTime          @default(now())
+  project        Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  question       PrescreenQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  respondent     Respondent        @relation(fields: [respondentId], references: [id], onDelete: Cascade)
+
+  @@unique([respondentId, questionId])
+  @@index([projectId])
+}
+
+model SurveyRedirect {
+  /// 20-char unique id you pass to the client as pid
+  id           String          @id
+  projectId    String
+  /// Link it back to the respondent if we were able to resolve/create one
+  respondentId String?
+  /// For convenience/auditing
+  supplierId   String?
+  externalId   String?
+  destination  String
+  createdAt    DateTime        @default(now())
+  result       RedirectResult?
+  project      Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  respondent   Respondent?     @relation(fields: [respondentId], references: [id])
+
+  @@unique([projectId, supplierId, externalId], name: "SurveyRedirect_nat_unique", map: "SurveyRedirect_nat_unique")
+  @@index([projectId])
+  @@index([respondentId])
+}
+
+model SupplierRedirectEvent {
+  id           String          @id @default(cuid())
+  projectId    String
+  supplierId   String?
+  respondentId String?
+  pid          String?
+  outcome      RedirectOutcome
+  createdAt    DateTime        @default(now())
+  project      Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  respondent   Respondent?     @relation(fields: [respondentId], references: [id])
+  supplier     Supplier?       @relation(fields: [supplierId], references: [id])
+
+  @@index([projectId, supplierId, outcome])
+  @@index([pid])
+}
+
+model Reconciliation {
+  id String @id @default(cuid())
+
+  // Search Identifier (client shared identifier)
+  respondentId String @unique
+
+  // References (cuid ids)
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  projectCode        String
+  projectName        String
+  supplierName       String
+  supplierIdentifier String
+
+  // Latest known outcome for this respondentId
+  outcome     RedirectOutcome?
+  lastEventAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([supplierId])
+  @@index([supplierIdentifier])
+  @@index([outcome])
 }
 
 enum ProjectStatus {
@@ -21,132 +286,9 @@ enum ProjectStatus {
   BID
 }
 
-model Client {
-  id            String         @id @default(cuid())
-  code          String         @unique @default(dbgenerated("('C' || nextval('client_code_seq')::text)"))
-  name          String
-  contactPerson String
-  email         String?
-  contactNumber String?
-  countryCode   String
-  website       String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  projectGroups ProjectGroup[]
-  projects      Project[]
-}
-
-model Supplier {
-  id            String  @id @default(cuid())
-  code          String  @unique @default(dbgenerated("'S' || lpad(nextval('supplier_code_seq')::text, 4, '0')"))
-  name          String
-  website       String?
-  countryCode   String
-  email         String?
-  contactNumber String?
-  panelSize     Int?
-
-  completeUrl    String
-  terminateUrl   String
-  overQuotaUrl   String
-  qualityTermUrl String
-  surveyCloseUrl String
-
-  about            String?
-  allowedCountries String[] // Postgres text[]
-  api              Boolean  @default(false)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // NEW: inverse side of ProjectSupplierMap.supplier
-  projectMappings       ProjectSupplierMap[]
-  SupplierRedirectEvent SupplierRedirectEvent[]
-}
-
-model ProjectGroup {
-  id            String  @id @default(cuid())
-  clientId      String
-  client        Client  @relation(fields: [clientId], references: [id])
-  name          String
-  description   String?
-  dynamicThanks Boolean @default(false)
-
-  projects Project[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-// add this enum (optional but nice)
 enum SurveyLinkType {
   SINGLE
   MULTI
-}
-
-model Project {
-  id       String        @id @default(cuid())
-  code     String        @unique @default(dbgenerated("('SR' || lpad(nextval('project_code_seq')::text, 4, '0'))"))
-  clientId String
-  client   Client        @relation(fields: [clientId], references: [id])
-  groupId  String?
-  group    ProjectGroup? @relation(fields: [groupId], references: [id])
-
-  name         String
-  managerEmail String
-  category     String
-  status       ProjectStatus @default(ACTIVE)
-  description  String?
-
-  countryCode  String
-  languageCode String
-  currency     String @default("USD")
-
-  loi        Int
-  ir         Float
-  sampleSize Int
-  clickQuota Int
-
-  projectCpi  Decimal  @db.Decimal(10, 2)
-  supplierCpi Decimal? @db.Decimal(10, 2)
-
-  startDate DateTime
-  endDate   DateTime
-
-  // NEW — survey links
-  surveyLinkType SurveyLinkType? @default(SINGLE)
-  surveyLiveUrl  String?
-  surveyTestUrl  String?
-
-  // filters
-  preScreen        Boolean @default(false)
-  exclude          Boolean @default(false)
-  geoLocation      Boolean @default(false)
-  dynamicThanksUrl Boolean @default(false)
-  uniqueIp         Boolean @default(false)
-  uniqueIpDepth    Int?
-  tSign            Boolean @default(false)
-  speeder          Boolean @default(false)
-  speederDepth     Int?
-
-  // devices
-  mobile  Boolean @default(true)
-  tablet  Boolean @default(false)
-  desktop Boolean @default(false)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // NEW: inverse side of ProjectSupplierMap.project
-  supplierMappings ProjectSupplierMap[]
-
-  // back-relation for prescreen questions
-  prescreenQuestions PrescreenQuestion[] @relation("ProjectPrescreenQuestions")
-
-  respondents           Respondent[]
-  prescreenAnswers      PrescreenAnswer[]
-  SurveyRedirect        SurveyRedirect[]
-  SupplierRedirectEvent SupplierRedirectEvent[]
 }
 
 /// Four redirection modes shown in the UI
@@ -157,55 +299,6 @@ enum SupplierRedirectionType {
   DYNAMIC_POSTBACK
 }
 
-/// A supplier mapped to a project (1 row per supplier per project)
-model ProjectSupplierMap {
-  id String @id @default(cuid())
-
-  /// FKs
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-
-  supplierId String
-  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-
-  /// Quotas & pricing
-  quota      Int // Supplier quota
-  clickQuota Int // Click quota
-  cpi        Decimal @db.Decimal(10, 2)
-
-  /// Redirection mode
-  redirectionType SupplierRedirectionType
-
-  supplierUrl String?  @db.Text // persist "Supplier Mapping URL" shown in UI
-
-  /// STATIC_REDIRECT: (no URL stored here — supplier hits your live survey URL)
-  /// STATIC_POSTBACK: (no URL stored here — you’ll post back to supplier)
-  /// DYNAMIC_POSTBACK:
-  postBackUrl String? // shown only when DYNAMIC_POSTBACK
-
-  /// DYNAMIC_REDIRECT (the 5 result URLs)
-  completeUrl    String?
-  terminateUrl   String?
-  overQuotaUrl   String?
-  qualityTermUrl String?
-  surveyCloseUrl String?
-
-  /// Misc / UI helpers
-  supplierProjectId String? // if you want to keep a per-supplier external id
-  allowTraffic      Boolean @default(false)
-  testLinkEnabled   Boolean @default(false)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  /// Ensure a supplier can only be mapped once per project
-  @@unique([projectId, supplierId])
-  /// Handy index for list pages
-  @@index([projectId])
-  @@index([supplierId])
-}
-
-// ---------- Enums ----------
 enum PrescreenControlType {
   TEXT
   RADIO
@@ -220,91 +313,6 @@ enum PrescreenTextType {
   CUSTOM
 }
 
-// ---------- Models ----------
-model PrescreenQuestion {
-  id        String  @id @default(cuid())
-  projectId String
-  project   Project @relation("ProjectPrescreenQuestions", fields: [projectId], references: [id], onDelete: Cascade)
-
-  title       String
-  question    String
-  controlType PrescreenControlType
-
-  // TEXT-only config (nullable for non-TEXT)
-  textMinLength Int?               @default(0)
-  textMaxLength Int?
-  textType      PrescreenTextType?
-
-  // For ordering within the project’s prescreen
-  sortOrder Int @default(0)
-
-  // Options (for RADIO / DROPDOWN / CHECKBOX)
-  options PrescreenOption[]
-
-  answers PrescreenAnswer[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model PrescreenOption {
-  id         String            @id @default(cuid())
-  questionId String
-  question   PrescreenQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
-
-  label     String
-  value     String // store canonical value you send to suppliers
-  sortOrder Int    @default(0)
-  enabled   Boolean @default(false)
-  validate  Boolean @default(false)
-  quota     Int     @default(0)
-}
-
-model Respondent {
-  id        String  @id @default(cuid())
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  externalId String
-  supplierId String? // supplier is part of the identity; it can be optional if you always pass it
-
-  answers PrescreenAnswer[]
-
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @updatedAt
-  SurveyRedirect        SurveyRedirect[]
-  SupplierRedirectEvent SupplierRedirectEvent[]
-
-  // This is what enables `where: { projectId_externalId_supplierId: {...} }`
-  @@unique([projectId, externalId, supplierId], map: "respondent_project_ext_supplier_unique")
-  @@index([projectId])
-}
-
-model PrescreenAnswer {
-  id        String  @id @default(cuid())
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  respondentId String
-  respondent   Respondent @relation(fields: [respondentId], references: [id], onDelete: Cascade)
-
-  questionId String
-  question   PrescreenQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
-
-  /// Store answers in flexible fields
-  /// For TEXT:    answerText
-  /// For RADIO/DROPDOWN: answerValue (single)
-  /// For CHECKBOX: selectedValues (array)
-  answerText     String?
-  answerValue    String?
-  selectedValues String[] @db.Text
-
-  answeredAt DateTime @default(now())
-
-  @@unique([respondentId, questionId]) // one latest answer per question per respondent
-  @@index([projectId])
-}
-
 enum RedirectResult {
   COMPLETE
   TERMINATE
@@ -313,33 +321,6 @@ enum RedirectResult {
   CLOSE
 }
 
-model SurveyRedirect {
-  /// 20-char unique id you pass to the client as pid
-  id        String  @id
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  /// Link it back to the respondent if we were able to resolve/create one
-  respondentId String?
-  respondent   Respondent? @relation(fields: [respondentId], references: [id], onDelete: SetNull)
-
-  /// For convenience/auditing
-  supplierId  String?
-  externalId  String? // the incoming "id" from the supplier link
-  destination String // the final URL we redirected to (after token replacement)
-  result      RedirectResult?
-  createdAt   DateTime        @default(now())
-
-  @@index([projectId])
-  @@index([respondentId])
-
-  // speeds up the reuse guard
-  @@index([projectId, supplierId, externalId])
-  @@unique([projectId, supplierId, externalId], name: "SurveyRedirect_nat_unique")
-}
-
-// schema.prisma – add below your existing models
-
 enum RedirectOutcome {
   COMPLETE
   TERMINATE
@@ -347,25 +328,4 @@ enum RedirectOutcome {
   DROP_OUT
   QUALITY_TERM
   SURVEY_CLOSE
-}
-
-model SupplierRedirectEvent {
-  id        String  @id @default(cuid())
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  // Helpful link-backs (optional but nice to have)
-  supplierId   String?
-  supplier     Supplier?   @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  respondentId String?
-  respondent   Respondent? @relation(fields: [respondentId], references: [id], onDelete: SetNull)
-
-  // CHANGED: make pid non-null and unique so we can upsert idempotently
-  pid       String  @unique
-  
-  outcome   RedirectOutcome
-  createdAt DateTime        @default(now())
-
-  @@index([projectId, supplierId, outcome])
-  @@index([pid])
 }
