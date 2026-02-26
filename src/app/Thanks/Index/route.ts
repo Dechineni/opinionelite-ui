@@ -16,51 +16,36 @@ const isP2002 = (e: any) => {
 function mapAuth(aRaw: string | null | undefined) {
   const a = (aRaw || "").toLowerCase().trim();
   if (a === "c" || a === "10")
-    return {
-      redirectResult: "COMPLETE" as const,
-      eventOutcome: "COMPLETE" as const,
-    };
+    return { redirectResult: "COMPLETE" as const, eventOutcome: "COMPLETE" as const };
   if (a === "t" || a === "20")
-    return {
-      redirectResult: "TERMINATE" as const,
-      eventOutcome: "TERMINATE" as const,
-    };
+    return { redirectResult: "TERMINATE" as const, eventOutcome: "TERMINATE" as const };
   if (a === "q" || a === "40")
-    return {
-      redirectResult: "OVERQUOTA" as const,
-      eventOutcome: "OVER_QUOTA" as const,
-    };
+    return { redirectResult: "OVERQUOTA" as const, eventOutcome: "OVER_QUOTA" as const };
   if (a === "f" || a === "30")
-    return {
-      redirectResult: "QUALITYTERM" as const,
-      eventOutcome: "QUALITY_TERM" as const,
-    };
+    return { redirectResult: "QUALITYTERM" as const, eventOutcome: "QUALITY_TERM" as const };
   if (a === "sc" || a === "70")
-    return {
-      redirectResult: "CLOSE" as const,
-      eventOutcome: "SURVEY_CLOSE" as const,
-    };
+    return { redirectResult: "CLOSE" as const, eventOutcome: "SURVEY_CLOSE" as const };
   return { redirectResult: null, eventOutcome: null };
 }
 
-function fillIdentifier(rawUrl: string, supplierIdentifier: string) {
+function fillIdentifier(rawUrl: string, identifier: string) {
   try {
     const u = new URL(rawUrl);
     u.searchParams.forEach((v, k) => {
       if (/\[identifier\]/i.test(v)) {
-        u.searchParams.set(k, v.replace(/\[identifier\]/gi, supplierIdentifier));
+        u.searchParams.set(k, v.replace(/\[identifier\]/gi, identifier));
       }
       if (["id", "rid"].includes(k.toLowerCase()) && v.toLowerCase() === "identifier") {
-        u.searchParams.set(k, supplierIdentifier);
+        u.searchParams.set(k, identifier);
       }
     });
     let s = u.toString();
-    s = s.replace(/\[identifier\]/gi, supplierIdentifier);
+    s = s.replace(/\[identifier\]/gi, identifier);
     return s;
   } catch {
     return rawUrl
-      .replace(/\[identifier\]/gi, supplierIdentifier)
-      .replace(/(id|rid)=identifier/gi, `$1=${supplierIdentifier}`);
+      .replace(/\[identifier\]/gi, identifier)
+      .replace(/(id|rid)=identifier/gi, `$1=${identifier}`);
   }
 }
 
@@ -117,7 +102,7 @@ export async function GET(req: Request) {
     if (!redirect) {
       return NextResponse.json(
         { ok: false, error: "Redirect context not found. (pid/externalId mismatch)" },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
@@ -140,7 +125,6 @@ export async function GET(req: Request) {
       | null = null;
 
     if (supplierId) {
-      // Try as internal id first
       supplierRecord = await prisma.supplier.findUnique({
         where: { id: supplierId },
         select: {
@@ -154,7 +138,6 @@ export async function GET(req: Request) {
         },
       });
 
-      // If not found, fall back to supplier code ("S1002")
       if (!supplierRecord) {
         supplierRecord = await prisma.supplier.findUnique({
           where: { code: supplierId },
@@ -186,9 +169,7 @@ export async function GET(req: Request) {
         } catch (e) {
           if (isP2002(e)) {
             const found = await prisma.respondent.findUnique({
-              where: {
-                projectId_externalId_supplierId: { projectId, externalId, supplierId },
-              },
+              where: { projectId_externalId_supplierId: { projectId, externalId, supplierId } },
               select: { id: true },
             });
             respondentId = found?.id ?? null;
@@ -224,19 +205,15 @@ export async function GET(req: Request) {
         }
       }
 
-      prisma.surveyRedirect
-        .update({ where: { id: pid }, data: { respondentId } })
-        .catch(() => {});
+      prisma.surveyRedirect.update({ where: { id: pid }, data: { respondentId } }).catch(() => {});
     }
 
     // Persist outcome on SurveyRedirect
     if (redirect.result !== mapped.redirectResult) {
-      await prisma.surveyRedirect
-        .update({ where: { id: pid }, data: { result: mapped.redirectResult } })
-        .catch(() => {});
+      await prisma.surveyRedirect.update({ where: { id: pid }, data: { result: mapped.redirectResult } }).catch(() => {});
     }
 
-    // Write SupplierRedirectEvent (best-effort, but awaited so it actually runs)
+    // Write SupplierRedirectEvent
     if (projectId) {
       try {
         await prisma.supplierRedirectEvent.create({
@@ -249,19 +226,25 @@ export async function GET(req: Request) {
           },
         });
       } catch (e) {
-        // Don't break the redirect flow if logging fails
         console.log("prisma:error", e);
       }
     }
 
-    // Optional supplier bounce
+    // ✅ If COMPLETE: redirect back to OP Panel complete page
     let nextUrl: string | null = null;
-    if (supplierRecord) {
+    if (mapped.redirectResult === "COMPLETE") {
+      const opPanelBase =
+        (process.env.OP_PANEL_API_BASE || "").trim() || "https://opinionelite.com";
+      const u = new URL("/UI/complete.php", opPanelBase.replace(/\/$/, "") + "/");
+      u.searchParams.set("pid", pid);
+      // Optional: include externalId (often your OP Panel signup id like 102)
+      if (externalId) u.searchParams.set("id", externalId);
+      nextUrl = u.toString();
+    } else if (supplierRecord) {
+      // Optional supplier bounce for non-complete outcomes (existing behavior)
       const r = mapped.redirectResult;
       const tpl =
-        r === "COMPLETE"
-          ? supplierRecord.completeUrl
-          : r === "TERMINATE"
+        r === "TERMINATE"
           ? supplierRecord.terminateUrl
           : r === "OVERQUOTA"
           ? supplierRecord.overQuotaUrl
@@ -272,8 +255,9 @@ export async function GET(req: Request) {
           : null;
 
       if (tpl) {
-        // Use the DB id (cuid) as the identifier in the supplier URL
-        nextUrl = fillIdentifier(tpl, supplierRecord.id);
+        // Use externalId (OP Panel-safe id) when available
+        const ident = externalId ?? respondentId ?? pid;
+        nextUrl = fillIdentifier(tpl, ident);
       }
     }
 
