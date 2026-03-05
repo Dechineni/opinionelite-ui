@@ -3,6 +3,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+export const runtime = 'edge';
+ 
 // POST /api/reconciliation
 export async function POST(req: NextRequest) {
   try {
