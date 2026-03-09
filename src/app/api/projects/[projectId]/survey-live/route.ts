@@ -19,14 +19,13 @@ function id20(): string {
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   const bytes = new Uint8Array(20);
 
-  // Use Web Crypto if available (Edge/Workers/Browser)
-  if (typeof globalThis !== "undefined" &&
-      (globalThis as any).crypto &&
-      typeof (globalThis as any).crypto.getRandomValues === "function") {
+  if (
+    typeof globalThis !== "undefined" &&
+    (globalThis as any).crypto &&
+    typeof (globalThis as any).crypto.getRandomValues === "function"
+  ) {
     (globalThis as any).crypto.getRandomValues(bytes);
   } else {
-    // Build-time / non-web fallback — not cryptographically strong,
-    // but sufficient for a unique redirect id during local builds.
     for (let i = 0; i < bytes.length; i++) {
       bytes[i] = Math.floor(Math.random() * 256);
     }
@@ -37,9 +36,12 @@ function id20(): string {
   return s;
 }
 
-/** Replace tokens like [identifier], [projectId], [supplierId] */
+/** Replace tokens like [identifier], {identifier}, [projectId], [supplierId], [externalId] */
 function replaceTokens(template: string, map: Record<string, string>) {
-  return template.replace(/\[([^\]]+)\]/g, (_, k) => map[k] ?? "");
+  // Support both [token] and {token}
+  return template
+    .replace(/\[([^\]]+)\]/g, (_, k) => map[k] ?? "")
+    .replace(/\{([^}]+)\}/g, (_, k) => map[k] ?? "");
 }
 
 /** Simple scheme whitelist */
@@ -78,12 +80,15 @@ async function loadProjectBasicsWithTimeout(
       where: { OR: [{ id: key }, { code: key }] },
       select: { id: true, surveyLiveUrl: true },
     }),
-    new Promise<null>((_, rej) => setTimeout(() => rej(new Error("db-timeout")), ms)),
+    new Promise<null>((_, rej) =>
+      setTimeout(() => rej(new Error("db-timeout")), ms)
+    ),
   ]) as Promise<{ id: string; surveyLiveUrl: string | null }>;
 }
 
 /** Env flag: set REDIRECT_LOG="off" to skip DB log writes */
-const LOG_REDIRECT = (process.env.REDIRECT_LOG || "on").toLowerCase() !== "off";
+const LOG_REDIRECT =
+  (process.env.REDIRECT_LOG || "on").toLowerCase() !== "off";
 
 export async function GET(
   req: Request,
@@ -94,7 +99,7 @@ export async function GET(
 
   const url = new URL(req.url);
   const supplierId = (url.searchParams.get("supplierId") || "").trim();
-  const identifier = (url.searchParams.get("id") || "").trim();
+  const externalId = (url.searchParams.get("id") || "").trim(); // OP Panel user id (e.g. 102)
 
   // 0) cache
   const cached = memGet(`live:${projectId}`);
@@ -133,15 +138,15 @@ export async function GET(
     }
   }
 
-  // 1.5) best-effort respondent ensure
-  if (haveRealId && identifier) {
+  // 1.5) best-effort respondent ensure (uses externalId)
+  if (haveRealId && externalId) {
     try {
       if (supplierId) {
         const found = await prisma.respondent.findUnique({
           where: {
             projectId_externalId_supplierId: {
               projectId: projectIdReal,
-              externalId: identifier,
+              externalId,
               supplierId,
             },
           },
@@ -150,7 +155,7 @@ export async function GET(
         if (!found) {
           try {
             await prisma.respondent.create({
-              data: { projectId: projectIdReal, externalId: identifier, supplierId },
+              data: { projectId: projectIdReal, externalId, supplierId },
             });
           } catch (e) {
             if (!isUniqueViolation(e)) throw e;
@@ -158,13 +163,13 @@ export async function GET(
         }
       } else {
         const found = await prisma.respondent.findFirst({
-          where: { projectId: projectIdReal, externalId: identifier, supplierId: null },
+          where: { projectId: projectIdReal, externalId, supplierId: null },
           select: { id: true },
         });
         if (!found) {
           try {
             await prisma.respondent.create({
-              data: { projectId: projectIdReal, externalId: identifier, supplierId: null },
+              data: { projectId: projectIdReal, externalId, supplierId: null },
             });
           } catch (e) {
             if (!isUniqueViolation(e)) throw e;
@@ -177,11 +182,19 @@ export async function GET(
   }
 
   // 2) Prepare redirect URL
-  const pid = id20(); // our unique id for this redirect
+  const pid = id20(); // ✅ our unique id for this redirect (the [identifier] value)
+
+  // Detect whether template actually uses identifier placeholder
+  const hasIdentifierToken =
+    /\[identifier\]/i.test(template) || /\{identifier\}/i.test(template);
+
+  // ✅ Replace [identifier] (or {identifier}) with pid.
+  // Keep external id separately available as [externalId] if needed.
   const replaced = replaceTokens(template, {
     projectId: projectIdReal,
     supplierId,
-    identifier, // only used if template contains [identifier]
+    identifier: pid,        // ✅ THIS is the key fix
+    externalId: externalId, // optional token if you ever need it
   });
 
   // 3) Absolute URL
@@ -199,11 +212,20 @@ export async function GET(
     absolute = new URL(replaced, base);
   }
   if (!isAllowedScheme(absolute)) {
-    return NextResponse.json({ error: "Live URL must use http(s) scheme." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Live URL must use http(s) scheme." },
+      { status: 400 }
+    );
   }
 
-  // 4) only set "rid" to pid; do NOT add "pid" anymore
-  absolute.searchParams.set("rid", pid);
+  // 4) Fallback behavior:
+  // - If template had [identifier]/{identifier}, we already injected pid where needed.
+  // - If template did NOT have placeholder, add rid=pid ONLY if rid is missing.
+  if (!hasIdentifierToken) {
+    if (!absolute.searchParams.has("rid")) {
+      absolute.searchParams.set("rid", pid);
+    }
+  }
 
   // 5) Log redirect (idempotent by primary key id=pid)
   if (LOG_REDIRECT && haveRealId) {
@@ -213,8 +235,8 @@ export async function GET(
       create: {
         id: pid,
         projectId: projectIdReal,
-        supplierId: supplierId || null,
-        externalId: identifier || null, // original supplier id (e.g., 387/388)
+        supplierId: supplierId || null,  // may be Supplier.code like S1007
+        externalId: externalId || null,  // OP Panel user id (e.g. 102)
         destination: absolute.toString(),
       },
     });
