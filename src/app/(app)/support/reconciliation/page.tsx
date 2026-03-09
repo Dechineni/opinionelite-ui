@@ -1,145 +1,145 @@
+//src/app/(app)/support/reconciliation/page.tsx
+ 
 "use client";
-
+ 
 import { useState } from "react";
 import { Download } from "lucide-react";
-
+ 
 interface TableRow {
-  id: number;
-  code: string;
-  name: string;
+  id: string; // Use respondentId as unique id
+  projectCode: string;
+  projectName: string;
   supplier: string;
-  supId: string;
-  userId: string;
+  supplierIdentifier: string;
+  userIdentifier: string;
 }
-
+ 
 export default function ReconciliationPage() {
   const [pageSize, setPageSize] = useState(10);
   const [identifiers, setIdentifiers] = useState("");
   const [showAlert, setShowAlert] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const [openRow, setOpenRow] = useState<number | null>(null);
+  const [openRow, setOpenRow] = useState<string | null>(null);
   const [filteredData, setFilteredData] = useState<TableRow[]>([]);
   const [isSearched, setIsSearched] = useState(false);
-  const [rowStatuses, setRowStatuses] = useState<Record<number, string>>({}); // Track status per row
-
-  const tableData: TableRow[] = [
-    {
-      id: 1,
-      code: "PC001", 
-      name: "Test Project",
-      supplier: "ABC Supplier",
-      supId: "SUP123",
-      userId: "USER456",
-    },
-    {
-      id: 2,
-      code: "PC002",
-      name: "Finance Audit",
-      supplier: "Global Vendor",
-      supId: "SUP789",
-      userId: "USER111",
-    },
-    {
-      id: 3,
-      code: "PC003",
-      name: "Healthcare Survey",
-      supplier: "MedSource",
-      supId: "SUP456",
-      userId: "USER222",
-    },
-    {
-      id: 4,
-      code: "PC004",
-      name: "Retail Analysis",
-      supplier: "Retail Solutions",
-      supId: "SUP678",
-      userId: "USER555",
-    },
-    {
-      id: 5,
-      code: "PC005",
-      name: "Education Research",
-      supplier: "EduTech",
-      supId: "SUP876",
-      userId: "USER666",
-    },
-  ];
-
-  const handleSearch = () => {
-    if (!identifiers.trim()) {
-      setShowAlert(true);
-      return;
+  const [rowStatuses, setRowStatuses] = useState<Record<string, string>>({}); // Track status per row
+ 
+  // Removed static tableData. Data will be fetched from API.
+ 
+  const handleSearch = async () => {
+  if (!identifiers.trim()) {
+    setShowAlert(true);
+    return;
+  }
+ 
+  const searchTerms = identifiers
+    .split(",")
+    .map((term) => term.trim())
+    .filter((term) => term.length > 0);
+ 
+  // Track existing IDs (prevents duplicates)
+  const existingIds = new Set(filteredData.map((row) => row.id));
+ 
+  const results: TableRow[] = [];
+  const newStatus: Record<string, string> = { ...rowStatuses };
+ 
+  for (const id of searchTerms) {
+    // Skip if already exists
+    if (existingIds.has(id)) continue;
+ 
+    try {
+      const res = await fetch("/api/reconciliation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ searchIdentifier: id }),
+      });
+ 
+      if (res.ok) {
+        const data = await res.json();
+        const respondentId = data.userIdentifier || id;
+ 
+        // double safety check
+        if (existingIds.has(respondentId)) continue;
+ 
+        const row: TableRow = {
+          id: respondentId,
+          projectCode: data.projectCode || "-",
+          projectName: data.projectName || "-",
+          supplier: data.supplier || "-",
+          supplierIdentifier: data.supplierIdentifier || "-",
+          userIdentifier: respondentId,
+        };
+ 
+        results.push(row);
+        newStatus[respondentId] = "Status";
+        existingIds.add(respondentId);
+      }
+    } catch (e) {
+      console.error("Fetch error:", e);
     }
-
-    // Parse identifiers - split by comma and trim whitespace
-    const searchTerms = identifiers
-      .split(",")
-      .map((term) => term.trim().toUpperCase())
-      .filter((term) => term.length > 0);
-
-    // Filter table data by matching codes
-    const filtered = tableData.filter((row) =>
-      searchTerms.includes(row.code.toUpperCase())
-    );
-
-    // Append new results to existing filtered data, avoiding duplicates
-    const existingIds = new Set(filteredData.map((row) => row.id));
-    const newRows = filtered.filter((row) => !existingIds.has(row.id));
-    const updatedFilteredData = [...filteredData, ...newRows];
-
-    setFilteredData(updatedFilteredData);
-    setIsSearched(true);
-
-    // Add row statuses only for new rows
-    const newStatus: Record<number, string> = { ...rowStatuses };
-    newRows.forEach((row) => {
-      newStatus[row.id] = "Status";
-    });
-    setRowStatuses(newStatus);
-  };
-
+  }
+ 
+  // Merge without duplicates
+  setFilteredData((prev) => [...prev, ...results]);
+  setRowStatuses(newStatus);
+  setIsSearched(true);
+};
+ 
   const handleClear = () => {
     setIdentifiers("");
   };
-
+ 
   const handleClearClick = () => {
     handleClear();
   };
-
-  const handleStatusChange = (rowId: number, newStatus: string) => {
+ 
+  const handleStatusChange = (rowId: string, newStatus: string) => {
     setRowStatuses({
       ...rowStatuses,
       [rowId]: newStatus,
     });
     setOpenRow(null);
   };
-
-  const handleReconcile = () => {
-    // Assign status based on project code
-    const newStatus: Record<number, string> = {};
-    displayData.forEach((row) => {
-      // PC001, PC002, PC003 -> Complete
-      // PC004, PC005 -> Quality Terminate
-      if (["PC001", "PC002", "PC003"].includes(row.code)) {
-        newStatus[row.id] = "Complete";
-      } else if (["PC004", "PC005"].includes(row.code)) {
-        newStatus[row.id] = "Quality Terminate";
-      }
-    });
-    setRowStatuses(newStatus);
+ 
+    const handleReconcile = async () => {
+    // For all rows, fetch outcomes in parallel and update status
+    const newStatus: Record<string, string> = { ...rowStatuses };
+    await Promise.all(
+      displayData.map(async (row) => {
+        try {
+          const res = await fetch("/api/reconciliation", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            // Added `action: "reconcile"` so the backend knows to save to the database
+            body: JSON.stringify({
+              searchIdentifier: row.userIdentifier,
+              action: "reconcile"
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            // use the human-friendly status label returned by the backend
+            newStatus[row.id] = data.status || "Status";
+          }
+        } catch (e) {
+          // Ignore errors for now
+        }
+      })
+    );
+    setRowStatuses({ ...newStatus });
   };
-
+ 
   const displayData = isSearched ? filteredData : [];
-
+ 
   return (
-    // ✅ CONSTRAIN PAGE TO APP LAYOUT
+    // CONSTRAIN PAGE TO APP LAYOUT
     <div className="p-4 bg-slate-100 min-h-screen overflow-x-hidden">
       {/* Header */}
       <h1 className="mb-3 text-base font-bold text-black">
         Reconciliation
       </h1>
-
-      {/* Card */}
+ 
+   
       <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm max-w-full">
         <div className="flex flex-col gap-3 lg:flex-row">
           {/* Search Identifiers */}
@@ -155,12 +155,12 @@ export default function ReconciliationPage() {
               className="mt-auto w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-teal-400 focus:ring-1 focus:ring-teal-400"
             />
           </div>
-
+ 
           {/* Buttons */}
           <div className="flex flex-col">
             {/* empty label space */}
             <div className="mb-1 h-[20px]" />
-
+ 
             <div className="mt-auto flex flex-wrap gap-2">
               <button
                 onClick={handleSearch}
@@ -174,12 +174,12 @@ export default function ReconciliationPage() {
               >
                 Clear
               </button>
-              <button 
+              <button
                 onClick={handleReconcile}
                 disabled={displayData.length === 0}
                 className={`rounded-md px-4 py-2 text-sm text-white ${
-                  displayData.length === 0 
-                    ? "bg-gray-400 cursor-not-allowed" 
+                  displayData.length === 0
+                    ? "bg-gray-400 cursor-not-allowed"
                     : "bg-teal-600 hover:bg-teal-700"
                 }`}
               >
@@ -188,7 +188,7 @@ export default function ReconciliationPage() {
             </div>
           </div>
         </div>
-
+ 
         {/* Controls */}
         <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-wrap items-center gap-3 text-sm font-semibold">
@@ -205,15 +205,15 @@ export default function ReconciliationPage() {
               ))}
             </select>
           </div>
-
+ 
           <input
             type="text"
             placeholder="Search..."
             className="w-full md:w-60 rounded-md border border-gray-300 px-3 py-1.5"
           />
         </div>
-
-        {/* ✅ TABLE SCROLL CONTAINED */}
+ 
+        {/* TABLE SCROLL CONTAINED */}
         <div className="mt-3 overflow-x-auto max-w-full pb-2">
           <table className="w-full border-collapse text-sm">
             <thead className="bg-slate-800 text-white">
@@ -224,12 +224,12 @@ export default function ReconciliationPage() {
                 <th className="px-6 py-3 text-left">Supplier</th>
                 <th className="px-6 py-3 text-left">SupplierIdentifier</th>
                 <th className="px-6 py-3 text-left">UserIdentifier</th>
-
-                {/* ✅ STATUS HEADER */}
+ 
+                {/* STATUS HEADER */}
                 <th className="px-6 py-3 text-left">Status</th>
               </tr>
             </thead>
-
+ 
             <tbody>
               {displayData.length === 0 ? (
                 <tr>
@@ -241,15 +241,15 @@ export default function ReconciliationPage() {
                   </td>
                 </tr>
               ) : (
-                displayData.map((row) => (
+                displayData.map((row, idx) => (
                   <tr key={row.id} className="border-b">
-                    <td className="px-6 py-3">{row.id}</td>
-                    <td className="px-6 py-3">{row.code}</td>
-                    <td className="px-6 py-3">{row.name}</td>
+                    <td className="px-6 py-3">{idx + 1}</td>
+                    <td className="px-6 py-3">{row.projectCode}</td>
+                    <td className="px-6 py-3">{row.projectName}</td>
                     <td className="px-6 py-3">{row.supplier}</td>
-                    <td className="px-6 py-3">{row.supId}</td>
-                    <td className="px-6 py-3">{row.userId}</td>
-
+                    <td className="px-6 py-3">{row.supplierIdentifier}</td>
+                    <td className="px-6 py-3">{row.userIdentifier}</td>
+ 
                     {/* STATUS DROPDOWN - Per Row */}
                     <td className="px-6 py-3 relative overflow-visible">
                       <div className="relative inline-block">
@@ -260,7 +260,7 @@ export default function ReconciliationPage() {
                           {rowStatuses[row.id] || "Status"}
                           <span className="text-xs">▼</span>
                         </button>
-
+ 
                         {openRow === row.id && (
                           <div className="absolute right-0 top-full mt-1 w-44 rounded-md border bg-white shadow-lg z-50">
                             <button
@@ -271,7 +271,7 @@ export default function ReconciliationPage() {
                             >
                               Complete
                             </button>
-
+ 
                             <button
                               onClick={() => {
                                 handleStatusChange(row.id, "Quality Terminate");
@@ -291,7 +291,7 @@ export default function ReconciliationPage() {
           </table>
         </div>
       </div>
-
+ 
       {/* Alert Modal */}
       {showAlert && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -308,8 +308,8 @@ export default function ReconciliationPage() {
           </div>
         </div>
       )}
-
-
+ 
+ 
     </div>
   );
 }
