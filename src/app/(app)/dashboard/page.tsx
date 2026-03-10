@@ -1,116 +1,177 @@
-// FILE: src/app/page.tsx
+//src/app/(app)/dashboard/page.tsx
 // Dashboard UI – tuned to match the screenshot (tight cards, 3x stat grid left, conversions card right,
 // dark section headers, two-by-two chart/table grid). Tailwind border colors fixed.
-//
-// Install deps:
-//   pnpm add recharts
+// Install deps: //pnpm add recharts
 
 "use client";
-export const runtime = 'edge';
+export const runtime = "edge";
 
-import React from "react";
-// import { Search } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { CalendarCheck, ClipboardX, FileX } from "lucide-react";
 
-// ---------- Sample data (replace with API later) ----------
-const STATS = [
-  { label: "Welcome to", value: "Opinion Elite" },
-];
+type ProjectStatus =
+  | "ACTIVE"
+  | "INACTIVE"
+  | "CLOSED";
 
-// ---------- UI primitives ----------
-function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <div className={`rounded-xl border border-slate-200 bg-white p-4 shadow-sm ${className}`}>{children}</div>;
-}
+type ApiProject = {
+  c: number;
+  id: string;
+  code: string;
+  name: string;
+};
 
-function StatCard({ label, value }: { label: string; value: number | string }) {
+type ApiResp = {
+  items: ApiProject[];
+  total: number;
+  statusCounts: Record<ProjectStatus, number>;
+};
+
+/* ---------- Card Header ---------- */
+const CardHeader = ({ title }: { title: string }) => (
+  <div className="bg-slate-700 text-white px-4 py-2 rounded-t-xl font-semibold text-sm">
+    {title}
+  </div>
+);
+
+/* ---------- Status Card ---------- */
+function StatusCard({
+  label,
+  value,
+  type,
+}: {
+  label: string;
+  value: number;
+  type: "active" | "inactive" | "closed";
+}) {
+  const styles = {
+    active: {
+      bg: "bg-emerald-100",
+      icon: <CalendarCheck className="text-emerald-600" size={20} />,
+    },
+    inactive: {
+      bg: "bg-orange-100",
+      icon: <ClipboardX className="text-orange-500" size={20} />,
+    },
+    closed: {
+      bg: "bg-gray-100",
+      icon: <FileX className="text-gray-500" size={20} />,
+    },
+  };
+
+  const s = styles[type];
+
   return (
-    <Card className="p-3">
-      <div className="flex items-center gap-4">
-        <div className="grid h-12 w-12 place-items-center rounded-xl bg-emerald-50">
-          <div className="h-6 w-6 rounded-md bg-gradient-to-br from-emerald-400 to-cyan-400" />
-        </div>
-        <div>
-          <div className="text-slate-600">{label}</div>
-          <div className="text-1xl font-semibold text-slate-900">{value}</div>
-        </div>
+    <div className="bg-white rounded-xl p-4 flex items-center justify-between shadow">
+      
+      {/* Left icon */}
+      <div className={`p-2 rounded-lg ${s.bg}`}>
+        {s.icon}
       </div>
-    </Card>
+
+      {/* Right text */}
+      <div className="flex flex-col items-end">
+        <span className="text-sm text-blue-900">{label}</span>
+        <span className="text-xl font-semibold text-black">{value}</span>
+      </div>
+
+    </div>
   );
 }
 
-// function DonutGauge({ value }: { value: number }) {
-//   const size = 140;
-//   const stroke = 12;
-//   const radius = (size - stroke) / 2;
-//   const circumference = 2 * Math.PI * radius;
-//   const dash = Math.max(0, Math.min(1, value / 100)) * circumference;
-//   return (
-//     <div className="flex flex-col items-center">
-//       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-//         <circle cx={size / 2} cy={size / 2} r={radius} stroke="#E5E7EB" strokeWidth={stroke} fill="none" />
-//         <circle
-//           cx={size / 2}
-//           cy={size / 2}
-//           r={radius}
-//           stroke="#0ea5e9"
-//           strokeWidth={stroke}
-//           strokeLinecap="round"
-//           fill="none"
-//           strokeDasharray={`${dash} ${circumference - dash}`}
-//           transform={`rotate(-90 ${size / 2} ${size / 2})`}
-//         />
-//         <text x="50%" y="52%" textAnchor="middle" className="fill-slate-800 text-xl font-semibold">
-//           {value.toFixed(2)}%
-//         </text>
-//       </svg>
-//       <div className="mt-1 text-xs text-slate-600">Conversion Ratio</div>
-//     </div>
-//   );
-// }
-
-// ---------- Page ----------
+/* ---------- Dashboard ---------- */
 export default function DashboardPage() {
-  const todayComplete = 1324;
-  const totalClick = 10359;
-  const conv = (todayComplete / Math.max(1, totalClick)) * 100;
+  const [rows, setRows] = useState<ApiProject[]>([]);
+  const [counts, setCounts] = useState<Record<ProjectStatus, number>>({
+    ACTIVE: 0,
+    INACTIVE: 0,
+    CLOSED: 0,
+  });
+
+  useEffect(() => {
+    fetch("/api/projects?page=1&pageSize=5")
+      .then((r) => r.json())
+      .then((d: ApiResp) => {
+        setRows(d.items || []);
+        setCounts(
+          d.statusCounts || {
+            ACTIVE: 0,
+            INACTIVE: 0,
+            CLOSED: 0,
+          }
+        );
+      })
+      .catch((err) => {
+        console.error("Failed to load dashboard data:", err);
+      });
+  }, []);
 
   return (
-    <div className="space-y-4">
-      {/* ===== Top: Stats (left) + Conversions Today (right) ===== */}
-      <div className="grid grid-cols-12 gap-4">
-        {/* Left: 3-wide stat grid (two rows) */}
-        <div className="col-span-12 xl:col-span-8">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {STATS.slice(0, 3).map((s) => (
-              <StatCard key={s.label} label={s.label} value={s.value} />
-            ))}
-          </div>
-          {/* <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {STATS.slice(3).map((s) => (
-              <StatCard key={s.label} label={s.label} value={s.value} />
-            ))}
-          </div> */}
-        </div>
+    <div className="p-6 space-y-6 bg-gray-50">
 
-        {/* Right: Conversions Today
-        <div className="col-span-12 xl:col-span-4">
-          <Card className="h-full">
-            <div className="mb-2 text-sm font-semibold text-slate-800">Conversions Today</div>
-            <div className="grid grid-cols-2 items-center gap-2">
-              <DonutGauge value={conv} />
-              <div className="space-y-3">
-                <div>
-                  <div className="text-3xl font-semibold">{todayComplete.toLocaleString()}</div>
-                  <div className="text-sm text-slate-600">Today Complete</div>
-                </div>
-                <div>
-                  <div className="text-3xl font-semibold">{totalClick.toLocaleString()}</div>
-                  <div className="text-sm text-slate-600">Total Click</div>
-                </div>
-              </div>
-            </div>
-          </Card>
-        </div> */}
+      {/* ---------- Recent Active Surveys (TOP) ---------- */}
+      <div className="bg-white rounded-xl shadow overflow-hidden">
+        <CardHeader title="Recent Active Surveys" />
+
+        <div className="p-4">
+          <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="text-left py-2 text-blue-900">
+                  ProjectCode
+                </th>
+
+                <th className="text-left text-blue-900">
+                  Name
+                </th>
+
+                <th className="text-right text-blue-900" style={{ width: "80px" }}>
+                  Count
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-b border-gray-200 last:border-0">
+                  <td className="py-2 font-semibold text-black">
+                    <a
+                      href={`/projects/projectdetail?id=${encodeURIComponent(
+                        r.id
+                      )}`}
+                      className="font-semibold text-black hover:text-emerald-700 hover:underline transition-colors"
+                    >
+                      {r.code}
+                    </a>
+                  </td>
+
+                  <td>{r.name}</td>
+
+                  <td className="text-right" style={{ width: "80px" }}>
+                    {r.c ?? 0}
+                  </td>
+                </tr>
+              ))}
+
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="py-6 text-center text-gray-500 italic">
+                    No recent active surveys
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
+
+      {/* ---------- Stat Cards (BOTTOM) ---------- */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatusCard label="Active" value={counts.ACTIVE} type="active" />
+        <StatusCard label="InActive" value={counts.INACTIVE} type="inactive" />
+        <StatusCard label="Closed" value={counts.CLOSED} type="closed" />
+      </div>
+
     </div>
   );
 }
