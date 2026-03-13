@@ -4,6 +4,10 @@ export const runtime = "edge";
 
 import React, { useEffect, useMemo, useState } from "react";
 
+import Link from "next/link";
+
+import { Copy } from "lucide-react";
+
 type SupplierLite = { id: string; code: string; name: string };
 
 type RedirectionType =
@@ -56,6 +60,8 @@ const isStaticRedirect = (t: RedirectionType) => t === "STATIC_REDIRECT";
 export default function SupplierMappingPanel({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<MapRow[]>([]);
+  const [selectedSupplier, setSelectedSupplier] = useState<any>(null);
+  const [supplierDialogOpen, setSupplierDialogOpen] = useState(false);
   const [suppliers, setSuppliers] = useState<SupplierLite[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,6 +96,10 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
 
   const update = (k: keyof typeof form, v: any) =>
     setForm((s) => ({ ...s, [k]: v }));
+
+  const copyToClipboard = (text: string) => {
+  navigator.clipboard.writeText(text);
+};
 
   // helper to flatten rows from API
   function normalizeRows(input: any): MapRow[] {
@@ -131,6 +141,47 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
     const raw = await res.json();
     setRows(normalizeRows(raw));
   }
+
+  async function openSupplierDetails(supplierId: string) {
+  try {
+    const supplierRes = await fetch(`/api/supplier/${supplierId}`, {
+      cache: "no-store",
+    });
+
+    const mapRes = await fetch(`/api/projects/${projectId}/supplier-maps`, {
+      cache: "no-store",
+    });
+
+    const supplier = await supplierRes.json();
+    const maps = await mapRes.json();
+
+    const list = Array.isArray(maps) ? maps : maps?.items ?? [];
+
+    const mapping = list.find((r: any) => r.supplierId === supplierId);
+
+    const merged = {
+      code: supplier.code,
+      name: supplier.name,
+      countryCode: supplier.countryCode,
+      contactNumber: supplier.contactNumber,
+      email: supplier.email,
+      website: supplier.website,
+
+      redirectionType: mapping?.redirectionType,
+
+      completeUrl: mapping?.completeUrl,
+      terminateUrl: mapping?.terminateUrl,
+      overQuotaUrl: mapping?.overQuotaUrl,
+      qualityTermUrl: mapping?.qualityTermUrl,
+      surveyCloseUrl: mapping?.surveyCloseUrl,
+    };
+
+    setSelectedSupplier(merged);
+    setSupplierDialogOpen(true);
+  } catch (err) {
+    console.error("Supplier details error:", err);
+  }
+}
 
   // fetch suppliers + maps + project (for project code)
   useEffect(() => {
@@ -397,7 +448,12 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
               rows.map((r, i) => (
                 <tr key={r.id} className={i % 2 ? "bg-slate-50" : "bg-white"}>
                   <td className="px-3 py-2">{i + 1}</td>
-                  <td className="px-3 py-2 font-semibold">{r.supplierCode || "—"}</td>
+                  
+                  <td className="px-3 py-2 font-semibold text-emerald-600 cursor-pointer hover:underline"
+  onClick={() => openSupplierDetails(r.supplierId)}
+>
+  {r.supplierCode || "—"}
+</td>
                   <td className="px-3 py-2">{r.supplierName || "—"}</td>
                   <td className="px-3 py-2">{r.quota ?? 0}</td>
                   <td className="px-3 py-2">{r.cpi}</td>
@@ -569,6 +625,209 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
           </div>
         </div>
       )}
+      {supplierDialogOpen && selectedSupplier && (
+
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+
+```
+<div className="w-[650px] rounded-lg bg-white shadow-xl border border-slate-200 overflow-hidden">
+
+  {/* Header */}
+  <div className="flex items-center justify-between bg-slate-900 px-6 py-3">
+    <h2 className="text-white font-semibold">Supplier Details</h2>
+
+    <button
+      onClick={() => setSupplierDialogOpen(false)}
+      className="text-white text-lg font-bold hover:text-gray-300"
+    >
+      ✕
+    </button>
+  </div>
+
+  {/* Body */}
+  <div className="p-6 text-sm">
+
+    <div className="grid grid-cols-2 gap-10">
+
+      {/* Left Column */}
+      <div className="space-y-3">
+
+        <div className="grid grid-cols-[180px_10px_1fr]">
+          <span className="font-semibold text-black">Supplier Code</span>
+          <span>:</span>
+          <span>{selectedSupplier.code || "—"}</span>
+        </div>
+
+        <div className="grid grid-cols-[180px_10px_1fr]">
+          <span className="font-semibold text-black">Supplier Name</span>
+          <span>:</span>
+          <span>{selectedSupplier.name || "—"}</span>
+        </div>
+
+        <div className="grid grid-cols-[180px_10px_1fr]">
+          <span className="font-semibold text-black">Country</span>
+          <span>:</span>
+          <span>{selectedSupplier.countryCode || "—"}</span>
+        </div>
+
+        <div className="grid grid-cols-[180px_10px_1fr]">
+          <span className="font-semibold text-black">Redirection Type</span>
+          <span>:</span>
+          <span>{selectedSupplier.redirectionType || "—"}</span>
+        </div>
+
+      </div>
+
+      {/* Right Column */}
+      <div className="space-y-3">
+
+        <div className="grid grid-cols-[180px_10px_1fr]">
+          <span className="font-semibold text-black">Contact Number</span>
+          <span>:</span>
+          <span>{selectedSupplier.contactNumber || "—"}</span>
+        </div>
+
+        <div className="grid grid-cols-[180px_10px_1fr]">
+          <span className="font-semibold text-black">Email Id</span>
+          <span>:</span>
+          <span>{selectedSupplier.email || "—"}</span>
+        </div>
+
+        <div className="grid grid-cols-[180px_10px_1fr]">
+  <span className="font-semibold text-black">Website</span>
+  <span>:</span>
+
+  <span>
+    {selectedSupplier.website ? (
+      <a
+        href={selectedSupplier.website}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-emerald-600 hover:underline break-all"
+      >
+        {selectedSupplier.website}
+      </a>
+    ) : (
+      "—"
+    )}
+  </span>
+</div>
+
+      </div>
+
+    </div>
+
+    {/* Divider */}
+    <div className="my-5 border-t border-gray-300"></div>
+
+    {/* Redirect URLs */}
+    <div className="space-y-3">
+
+      <div className="grid grid-cols-[180px_10px_1fr]">
+  <span className="font-semibold text-black">Complete</span>
+  <span>:</span>
+
+  <div className="flex items-center gap-2">
+    {selectedSupplier.completeUrl && (
+      <Copy
+        size={16}
+        className="text-emerald-600 cursor-pointer hover:text-emerald-700"
+        onClick={() => copyToClipboard(selectedSupplier.completeUrl)}
+      />
+    )}
+
+    <span className="break-all">
+      {selectedSupplier.completeUrl || "—"}
+    </span>
+  </div>
+</div>
+
+      <div className="grid grid-cols-[180px_10px_1fr]">
+  <span className="font-semibold text-black">Terminate</span>
+  <span>:</span>
+
+  <div className="flex items-center gap-2">
+    {selectedSupplier.terminateUrl && (
+      <Copy
+        size={16}
+        className="text-emerald-600 cursor-pointer hover:text-emerald-700"
+        onClick={() => copyToClipboard(selectedSupplier.terminateUrl)}
+      />
+    )}
+
+    <span className="break-all">
+      {selectedSupplier.terminateUrl || "—"}
+    </span>
+  </div>
+</div>
+
+      <div className="grid grid-cols-[180px_10px_1fr]">
+  <span className="font-semibold text-black">Over Quota</span>
+  <span>:</span>
+
+  <div className="flex items-center gap-2">
+    {selectedSupplier.overQuotaUrl && (
+      <Copy
+        size={16}
+        className="text-emerald-600 cursor-pointer hover:text-emerald-700"
+        onClick={() => copyToClipboard(selectedSupplier.overQuotaUrl)}
+      />
+    )}
+
+    <span className="break-all">
+      {selectedSupplier.overQuotaUrl || "—"}
+    </span>
+  </div>
+</div>
+
+      <div className="grid grid-cols-[180px_10px_1fr]">
+  <span className="font-semibold text-black">Quality Terms</span>
+  <span>:</span>
+
+  <div className="flex items-center gap-2">
+    {selectedSupplier.qualityTermUrl && (
+      <Copy
+        size={16}
+        className="text-emerald-600 cursor-pointer hover:text-emerald-700"
+        onClick={() => copyToClipboard(selectedSupplier.qualityTermUrl)}
+      />
+    )}
+
+    <span className="break-all">
+      {selectedSupplier.qualityTermUrl || "—"}
+    </span>
+  </div>
+</div>
+
+      <div className="grid grid-cols-[180px_10px_1fr]">
+  <span className="font-semibold text-black">Survey Close</span>
+  <span>:</span>
+
+  <div className="flex items-center gap-2">
+    {selectedSupplier.surveyCloseUrl && (
+      <Copy
+        size={16}
+        className="text-emerald-600 cursor-pointer hover:text-emerald-700"
+        onClick={() => copyToClipboard(selectedSupplier.surveyCloseUrl)}
+      />
+    )}
+
+    <span className="break-all">
+      {selectedSupplier.surveyCloseUrl || "—"}
+    </span>
+  </div>
+</div>
+
+    </div>
+
+  </div>
+
+</div>
+```
+
+  </div>
+)}
+
     </div>
   );
 }

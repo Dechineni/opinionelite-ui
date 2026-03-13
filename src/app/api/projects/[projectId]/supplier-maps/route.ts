@@ -88,7 +88,14 @@ export async function GET(
   const maps = await prisma.projectSupplierMap.findMany({
     where: { projectId: projId },
     orderBy: { createdAt: "asc" },
-    include: { supplier: { select: { id: true, code: true, name: true } } },
+    include: { supplier: { select: { id: true, 
+                                     code: true, 
+                                     name: true,
+                                     countryCode: true,
+                                     contactNumber: true,
+                                     email: true,
+                                     website: true,
+                                    } } },
   });
 
   let bySupplier: Record<string, Record<string, number>> = {};
@@ -138,6 +145,10 @@ export async function GET(
       supplierId: m.supplierId,
       supplierCode: m.supplier?.code ?? "",
       supplierName: m.supplier?.name ?? "",
+      supplierCountry: m.supplier?.countryCode ?? "",
+      contactNumber: m.supplier?.contactNumber ?? "",
+      email: m.supplier?.email ?? "",
+      website: m.supplier?.website ?? "",
       supplierQuota: m.quota,
       clickQuota: m.clickQuota,
       cpi: m.cpi?.toString(),
