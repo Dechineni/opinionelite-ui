@@ -5,7 +5,7 @@ export const runtime = 'edge';
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { COUNTRIES } from "@/data/countries";
-import { Plus, X } from "lucide-react";
+import { X } from "lucide-react";
 
 /* ----------------------------- tiny UI helpers ----------------------------- */
 const Label = ({
@@ -140,6 +140,8 @@ export default function AddSupplier() {
   const [error, setError] = useState<string | null>(null);
   const [successOpen, setSuccessOpen] = useState(false);
   const [createdCode, setCreatedCode] = useState<string | undefined>(undefined);
+  const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
 
   const update = (k: keyof typeof form, v: any) => setForm((s) => ({ ...s, [k]: v }));
 
@@ -148,22 +150,45 @@ export default function AddSupplier() {
     []
   );
 
-  // add/remove allowed countries
-  const [pendingCountry, setPendingCountry] = useState("");
-  const addAllowed = () => {
-    if (!pendingCountry) return;
-    if (form.allowedCountries.includes(pendingCountry)) return;
-    update("allowedCountries", [...form.allowedCountries, pendingCountry]);
-    setPendingCountry("");
-  };
+  const filteredCountries = COUNTRY_OPTS.filter((c) =>
+    c.name.toLowerCase().includes(countrySearch.toLowerCase())
+  );
+
+  /* ----------------------- country selection helpers ----------------------- */
+
   const removeAllowed = (code: string) =>
     update(
       "allowedCountries",
       form.allowedCountries.filter((c) => c !== code)
     );
 
+  const toggleCountry = (code: string) => {
+    if (form.allowedCountries.includes(code)) {
+      update(
+        "allowedCountries",
+        form.allowedCountries.filter((c) => c !== code)
+      );
+    } else {
+      update("allowedCountries", [...form.allowedCountries, code]);
+    }
+  };
+
+  const toggleAllCountries = () => {
+    if (form.allowedCountries.length === COUNTRY_OPTS.length) {
+      update("allowedCountries", []);
+    } else {
+      update(
+        "allowedCountries",
+        COUNTRY_OPTS.map((c) => c.code)
+      );
+    }
+  };
+
+  /* -------------------------------- submit -------------------------------- */
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     setError(null);
     setSaving(true);
 
@@ -395,27 +420,55 @@ export default function AddSupplier() {
         <div className="mt-8 grid grid-cols-12 gap-6">
           <div className="col-span-12 xl:col-span-6">
             <Label required>Allowed Countries</Label>
-            <div className="flex items-center gap-2">
-              <Select
-                value={pendingCountry}
-                onChange={(e) => setPendingCountry(e.target.value)}
-                className="w-80"
-              >
-                <option value="">Select</option>
-                {COUNTRY_OPTS.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.name}
-                  </option>
-                ))}
-              </Select>
+
+            <div className="relative w-80">
               <button
                 type="button"
-                onClick={addAllowed}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
-                title="Add"
+                onClick={() =>
+                  setCountryDropdownOpen(!countryDropdownOpen)
+                }
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-left"
               >
-                <Plus size={16} /> Add
+                Select
               </button>
+
+              {countryDropdownOpen && (
+                <div className="absolute z-50 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg p-2 max-h-72 overflow-auto">
+
+                  <input
+                    type="text"
+                    placeholder="Search"
+                    value={countrySearch}
+                    onChange={(e) => setCountrySearch(e.target.value)}
+                    className="w-full mb-2 rounded border border-slate-200 px-2 py-1 text-sm"
+                  />
+
+                  <label className="flex items-center gap-2 text-sm mb-2">
+                    <input
+                      type="checkbox"
+                      checked={
+                        form.allowedCountries.length === COUNTRY_OPTS.length
+                      }
+                      onChange={toggleAllCountries}
+                    />
+                    All
+                  </label>
+
+                  {filteredCountries.map((c) => (
+                    <label
+                      key={c.code}
+                      className="flex items-center gap-2 text-sm py-1 px-1 hover:bg-slate-100 rounded"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={form.allowedCountries.includes(c.code)}
+                        onChange={() => toggleCountry(c.code)}
+                      />
+                      {c.name}
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
