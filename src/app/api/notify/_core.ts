@@ -258,6 +258,19 @@ export async function handleProviderNotification(opts: {
 
   // Only persist final outcomes for completion/terminate/quota
   if (mapped.redirectResult && mapped.eventOutcome) {
+    // ✅ NEW: if already COMPLETE, ignore later non-complete notifications (terminate/quota/etc.)
+    if ((redirect.result as any) === "COMPLETE" && mapped.redirectResult !== "COMPLETE") {
+      return NextResponse.json({
+        ok: true,
+        provider,
+        event,
+        pid: redirect.id,
+        persisted: false,
+        ignored: true,
+        reason: "already complete",
+      });
+    }
+
     // Update SurveyRedirect.result (upgrade-only)
     if (shouldUpdateResult(redirect.result as any, mapped.redirectResult)) {
       await prisma.surveyRedirect.update({
