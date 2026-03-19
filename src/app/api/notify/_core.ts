@@ -11,23 +11,47 @@ const looksLikePid = (s: string) => /^[0-9A-Za-z]{20}$/.test(s);
 
 const ALLOWED_EVENTS = new Set<NotifyEvent>(["completion", "terminate", "quota", "survey"]);
 
-function mapEventToOutcome(ev: NotifyEvent) {
+type RedirectResult = "COMPLETE" | "TERMINATE" | "OVERQUOTA" | "QUALITYTERM" | "CLOSE" | null;
+type EventOutcome = "COMPLETE" | "TERMINATE" | "OVER_QUOTA" | "QUALITY_TERM" | "SURVEY_CLOSE" | null;
+
+function mapEventToOutcome(ev: NotifyEvent): { redirectResult: RedirectResult; eventOutcome: EventOutcome } {
   // Your internal DB enums:
   // RedirectResult: COMPLETE/TERMINATE/OVERQUOTA/QUALITYTERM/CLOSE
   // RedirectOutcome: COMPLETE/TERMINATE/OVER_QUOTA/DROP_OUT/QUALITY_TERM/SURVEY_CLOSE
   switch (ev) {
     case "completion":
-      return { redirectResult: "COMPLETE" as const, eventOutcome: "COMPLETE" as const };
+      return { redirectResult: "COMPLETE", eventOutcome: "COMPLETE" };
     case "terminate":
-      return { redirectResult: "TERMINATE" as const, eventOutcome: "TERMINATE" as const };
+      return { redirectResult: "TERMINATE", eventOutcome: "TERMINATE" };
     case "quota":
-      return { redirectResult: "OVERQUOTA" as const, eventOutcome: "OVER_QUOTA" as const };
+      return { redirectResult: "OVERQUOTA", eventOutcome: "OVER_QUOTA" };
     case "survey":
     default:
       // “survey” notification usually means “routed / started”, not final status.
       // We won’t overwrite final result for this.
       return { redirectResult: null, eventOutcome: null };
   }
+}
+
+/**
+ * Prevent "downgrades" when multiple callbacks arrive.
+ * Priority: COMPLETE > OVERQUOTA > TERMINATE > (others, if used later)
+ */
+function shouldUpdateResult(current: RedirectResult, incoming: RedirectResult): boolean {
+  if (!incoming) return false;
+  if (!current) return true;
+  if (current === incoming) return false;
+
+  const rank: Record<Exclude<RedirectResult, null>, number> = {
+    COMPLETE: 3,
+    OVERQUOTA: 2,
+    TERMINATE: 1,
+    QUALITYTERM: 1,
+    CLOSE: 1,
+  };
+
+  // Only upgrade if incoming has higher rank
+  return rank[incoming] > rank[current];
 }
 
 function readSecretHeader(req: Request): string {
@@ -145,11 +169,29 @@ function extractRid(payload: Record<string, any>): string {
 
   if (direct) return direct;
 
-  // Toluna-specific but safe for others: parse "AdditionalData"
+  // Toluna-style: parse "AdditionalData"
   const fromAdditional = extractRidFromAdditionalData(payload.AdditionalData ?? payload.additionalData);
   if (fromAdditional) return fromAdditional;
 
   return "";
+}
+
+async function resolveSupplierId(prisma: ReturnType<typeof getPrisma>, supplierIdOrCode: string | null) {
+  if (!supplierIdOrCode) return null;
+
+  // Try as ID (cuid)
+  const byId = await prisma.supplier.findUnique({
+    where: { id: supplierIdOrCode },
+    select: { id: true },
+  });
+  if (byId) return byId.id;
+
+  // Try as code (S1007)
+  const byCode = await prisma.supplier.findUnique({
+    where: { code: supplierIdOrCode },
+    select: { id: true },
+  });
+  return byCode?.id ?? null;
 }
 
 /**
@@ -162,7 +204,7 @@ export async function handleProviderNotification(opts: {
 }) {
   const { provider, event, req } = opts;
 
-  // Event guard (protect core from misuse)
+  // Event guard
   if (!ALLOWED_EVENTS.has(event)) {
     return NextResponse.json({ ok: false, error: "Invalid event" }, { status: 400 });
   }
@@ -185,12 +227,26 @@ export async function handleProviderNotification(opts: {
   const redirect = looksLikePid(ridIn)
     ? await prisma.surveyRedirect.findUnique({
         where: { id: ridIn },
-        select: { id: true, projectId: true, supplierId: true, respondentId: true, externalId: true, result: true },
+        select: {
+          id: true,
+          projectId: true,
+          supplierId: true,
+          respondentId: true,
+          externalId: true,
+          result: true,
+        },
       })
     : await prisma.surveyRedirect.findFirst({
         where: { externalId: ridIn },
         orderBy: { createdAt: "desc" },
-        select: { id: true, projectId: true, supplierId: true, respondentId: true, externalId: true, result: true },
+        select: {
+          id: true,
+          projectId: true,
+          supplierId: true,
+          respondentId: true,
+          externalId: true,
+          result: true,
+        },
       });
 
   if (!redirect) {
@@ -202,45 +258,47 @@ export async function handleProviderNotification(opts: {
 
   // Only persist final outcomes for completion/terminate/quota
   if (mapped.redirectResult && mapped.eventOutcome) {
-    // Update SurveyRedirect.result
-    if (redirect.result !== mapped.redirectResult) {
+    // Update SurveyRedirect.result (upgrade-only)
+    if (shouldUpdateResult(redirect.result as any, mapped.redirectResult)) {
       await prisma.surveyRedirect.update({
         where: { id: redirect.id },
-        data: { result: mapped.redirectResult },
+        data: { result: mapped.redirectResult as any },
       });
     }
 
     // Resolve supplier id if supplierId is code (S1007) instead of cuid
-    let supplierIdForEvent: string | null = null;
-    if (redirect.supplierId) {
-      const byId = await prisma.supplier.findUnique({ where: { id: redirect.supplierId }, select: { id: true } });
-      if (byId) supplierIdForEvent = byId.id;
-      if (!supplierIdForEvent) {
-        const byCode = await prisma.supplier.findUnique({ where: { code: redirect.supplierId }, select: { id: true } });
-        if (byCode) supplierIdForEvent = byCode.id;
-      }
-    }
+    const supplierIdForEvent = await resolveSupplierId(prisma, redirect.supplierId);
 
-    // Create SupplierRedirectEvent (best-effort; never throw to provider)
-    await prisma.supplierRedirectEvent
-      .create({
-        data: {
-          projectId: redirect.projectId,
-          supplierId: supplierIdForEvent,
-          respondentId: redirect.respondentId ?? null,
+    // Idempotency: avoid duplicate event rows for same pid+outcome (best-effort)
+    try {
+      const already = await prisma.supplierRedirectEvent.findFirst({
+        where: {
           pid: redirect.id,
           outcome: mapped.eventOutcome as any,
         },
-      })
-      .catch((e) => {
-        // keep provider response OK, but log for debugging
-        console.warn("[notify] supplierRedirectEvent insert failed", {
-          provider,
-          event,
-          pid: redirect.id,
-          error: String(e?.message || e),
-        });
+        select: { id: true },
       });
+
+      if (!already) {
+        await prisma.supplierRedirectEvent.create({
+          data: {
+            projectId: redirect.projectId,
+            supplierId: supplierIdForEvent,
+            respondentId: redirect.respondentId ?? null,
+            pid: redirect.id,
+            outcome: mapped.eventOutcome as any,
+          },
+        });
+      }
+    } catch (e: any) {
+      // Keep provider response OK, but log for debugging
+      console.warn("[notify] supplierRedirectEvent upsert-like flow failed", {
+        provider,
+        event,
+        pid: redirect.id,
+        error: String(e?.message || e),
+      });
+    }
   }
 
   return NextResponse.json({
