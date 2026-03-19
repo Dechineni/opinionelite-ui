@@ -210,7 +210,9 @@ export async function GET(req: Request) {
 
     // Persist outcome on SurveyRedirect
     if (redirect.result !== mapped.redirectResult) {
-      await prisma.surveyRedirect.update({ where: { id: pid }, data: { result: mapped.redirectResult } }).catch(() => {});
+      await prisma.surveyRedirect
+        .update({ where: { id: pid }, data: { result: mapped.redirectResult } })
+        .catch(() => {});
     }
 
     // Write SupplierRedirectEvent
@@ -230,21 +232,20 @@ export async function GET(req: Request) {
       }
     }
 
-    // ✅ If COMPLETE: redirect back to OP Panel complete page
+    // Next hop:
+    // Business wants supplier-side callback FIRST for ALL outcomes (including COMPLETE).
+    // If supplier URL missing for COMPLETE, fall back to OP Panel complete page.
     let nextUrl: string | null = null;
-    if (mapped.redirectResult === "COMPLETE") {
-      const opPanelBase =
-        (process.env.OP_PANEL_API_BASE || "").trim() || "https://opinionelite.com";
-      const u = new URL("/UI/complete.php", opPanelBase.replace(/\/$/, "") + "/");
-      u.searchParams.set("pid", pid);
-      // Optional: include externalId (often your OP Panel signup id like 102)
-      if (externalId) u.searchParams.set("id", externalId);
-      nextUrl = u.toString();
-    } else if (supplierRecord) {
-      // Optional supplier bounce for non-complete outcomes (existing behavior)
+
+    // Prefer Respondent.id (unique cuid) for supplier callbacks, then pid, then externalId.
+    const supplierIdent = respondentId ?? pid ?? externalId ?? "";
+
+    if (supplierRecord) {
       const r = mapped.redirectResult;
       const tpl =
-        r === "TERMINATE"
+        r === "COMPLETE"
+          ? supplierRecord.completeUrl
+          : r === "TERMINATE"
           ? supplierRecord.terminateUrl
           : r === "OVERQUOTA"
           ? supplierRecord.overQuotaUrl
@@ -255,10 +256,18 @@ export async function GET(req: Request) {
           : null;
 
       if (tpl) {
-        // Use externalId (OP Panel-safe id) when available
-        const ident = externalId ?? respondentId ?? pid;
-        nextUrl = fillIdentifier(tpl, ident);
+        nextUrl = fillIdentifier(tpl, supplierIdent);
       }
+    }
+
+    // If COMPLETE and supplier doesn't have a completeUrl configured, fall back to OP Panel complete page.
+    if (!nextUrl && mapped.redirectResult === "COMPLETE") {
+      const opPanelBase =
+        (process.env.OP_PANEL_API_BASE || "").trim() || "https://opinionelite.com";
+      const u = new URL("/UI/complete.php", opPanelBase.replace(/\/$/, "") + "/");
+      u.searchParams.set("pid", pid);
+      if (externalId) u.searchParams.set("id", externalId);
+      nextUrl = u.toString();
     }
 
     const thanksUrl = new URL("/Thanks", url.origin);
