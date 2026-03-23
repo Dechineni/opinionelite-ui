@@ -213,6 +213,7 @@ export async function GET(req: Request) {
       supplier: { select: { code: true, name: true } },
       project: {
         select: {
+          id: true,
           code: true,
           name: true,
           countryCode: true,
@@ -237,6 +238,39 @@ export async function GET(req: Request) {
 
   const appBase =
     (process.env.APP_PUBLIC_BASE_URL || "").trim() || "https://opinion-elite.com";
+
+  const attemptedKeys = new Set<string>();
+  const pairs = (maps as any[])
+    .map((m) => {
+      const projectId = String(m?.project?.id || "").trim();
+      const supplierCode = String(m?.supplier?.code || "").trim();
+      return projectId && supplierCode ? `${projectId}::${supplierCode}` : "";
+    })
+    .filter(Boolean);
+
+  if (identifier && pairs.length > 0) {
+    const projectIds = Array.from(new Set((maps as any[])
+      .map((m) => String(m?.project?.id || "").trim())
+      .filter(Boolean)));
+    const supplierCodes = Array.from(new Set((maps as any[])
+      .map((m) => String(m?.supplier?.code || "").trim())
+      .filter(Boolean)));
+
+    const priorAttempts = await prisma.surveyRedirect.findMany({
+      where: {
+        externalId: identifier,
+        projectId: { in: projectIds },
+        supplierId: { in: supplierCodes },
+      },
+      select: { projectId: true, supplierId: true },
+    });
+
+    for (const row of priorAttempts) {
+      const projectId = String(row.projectId || "").trim();
+      const supplierCode = String(row.supplierId || "").trim();
+      if (projectId && supplierCode) attemptedKeys.add(`${projectId}::${supplierCode}`);
+    }
+  }
 
   const eligible: Array<{
     surveyName: string;
@@ -344,11 +378,15 @@ export async function GET(req: Request) {
 
     if (!ok) continue;
 
+    const projectId = String(p.id || "").trim();
     const projectCode = String(p.code || "");
     const projectName = String(p.name || "");
     const surveyName = `${projectCode} : ${projectName}`;
 
     const supplierCode = String(m.supplier?.code || "").trim();
+    if (projectId && supplierCode && attemptedKeys.has(`${projectId}::${supplierCode}`)) {
+      continue;
+    }
 
     const storedUrlRaw = String(m.supplierUrl || "").trim();
     const storedUrl = storedUrlRaw ? applyIdentifier(storedUrlRaw, identifier) : "";

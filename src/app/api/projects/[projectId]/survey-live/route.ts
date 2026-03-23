@@ -50,13 +50,13 @@ function isAllowedScheme(u: URL) {
 }
 
 /* ----------------------- ultra-light memory cache ----------------------- */
-type CacheEntry = { v: string; exp: number };
+type CacheEntry = { v: { id: string; template: string }; exp: number };
 type MemCache = Map<string, CacheEntry>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const G: any = globalThis as any;
 const MEM_TTL_MS = 5 * 60 * 1000; // 5 min
 const mem: MemCache = (G.__surveyLiveCache ??= new Map<string, CacheEntry>());
-function memGet(k: string): string | null {
+function memGet(k: string): { id: string; template: string } | null {
   const e = mem.get(k);
   if (!e) return null;
   if (Date.now() > e.exp) {
@@ -65,7 +65,7 @@ function memGet(k: string): string | null {
   }
   return e.v;
 }
-function memPut(k: string, v: string) {
+function memPut(k: string, v: { id: string; template: string }) {
   mem.set(k, { v, exp: Date.now() + MEM_TTL_MS });
 }
 
@@ -78,12 +78,12 @@ async function loadProjectBasicsWithTimeout(
   return Promise.race([
     prisma.project.findFirst({
       where: { OR: [{ id: key }, { code: key }] },
-      select: { id: true, surveyLiveUrl: true },
+      select: { id: true, code: true, surveyLiveUrl: true },
     }),
     new Promise<null>((_, rej) =>
       setTimeout(() => rej(new Error("db-timeout")), ms)
     ),
-  ]) as Promise<{ id: string; surveyLiveUrl: string | null }>;
+  ]) as Promise<{ id: string; code: string; surveyLiveUrl: string | null }>;
 }
 
 /** Env flag: set REDIRECT_LOG="off" to skip DB log writes */
@@ -107,15 +107,20 @@ export async function GET(
   // 1) read project
   let projectIdReal = projectId;
   let haveRealId = false;
-  let template = cached ?? "";
+  let projectCodeReal = projectId;
+  let template = cached?.template ?? "";
 
-  if (!cached) {
+  if (cached) {
+    projectIdReal = cached.id;
+    haveRealId = true;
+  } else {
     try {
       const project = await loadProjectBasicsWithTimeout(prisma, projectId);
       if (!project) {
         return NextResponse.json({ error: "Project not found." }, { status: 404 });
       }
       projectIdReal = project.id;
+      projectCodeReal = project.code;
       haveRealId = true;
       template = (project.surveyLiveUrl || "").trim();
       if (!template) {
@@ -124,8 +129,9 @@ export async function GET(
           { status: 400 }
         );
       }
-      memPut(`live:${projectId}`, template);
-      memPut(`live:${project.id}`, template);
+      memPut(`live:${projectId}`, { id: project.id, template });
+      memPut(`live:${project.id}`, { id: project.id, template });
+      memPut(`live:${project.code}`, { id: project.id, template });
     } catch (e: any) {
       if (!cached) {
         const msg =
@@ -135,6 +141,30 @@ export async function GET(
         return NextResponse.json({ error: msg }, { status: 504 });
       }
       // fall back to cached template
+    }
+  }
+
+  if (haveRealId && externalId && supplierId) {
+    const priorAttempt = await prisma.surveyRedirect.findFirst({
+      where: {
+        projectId: projectIdReal,
+        supplierId,
+        externalId,
+      },
+      select: { id: true, result: true },
+    });
+
+    if (priorAttempt) {
+      return NextResponse.json(
+        {
+          error: "Survey already attempted.",
+          projectId: projectCodeReal || projectIdReal,
+          supplierId,
+          priorPid: priorAttempt.id,
+          priorResult: priorAttempt.result ?? null,
+        },
+        { status: 409 }
+      );
     }
   }
 
