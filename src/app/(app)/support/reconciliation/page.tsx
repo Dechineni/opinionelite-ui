@@ -67,7 +67,7 @@ export default function ReconciliationPage() {
           };
 
           results.push(row);
-          newStatus[pid] = data.status || "Status";
+          newStatus[pid] = "Status";// always default on search
           existingIds.add(pid);
         }
       } catch (e) {

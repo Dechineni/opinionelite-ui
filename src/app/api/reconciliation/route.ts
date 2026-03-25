@@ -80,6 +80,13 @@ async function creditOpPanelReward(args: {
     return { ok: false as const, status: res.status, body };
   }
 
+  console.log('[reconciliation] OP Panel reward credited successfully', {
+    pid: args.pid,
+    signupId: args.signupId,
+    rewardAmount: args.rewardAmount,
+    body,
+  });
+
   return { ok: true as const, body };
 }
 
@@ -92,7 +99,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing searchIdentifier' }, { status: 400 });
     }
 
-    // Find SurveyRedirect by pid (SurveyRedirect.id) and filter by eligible results
     const surveyRedirect = await prisma.surveyRedirect.findFirst({
       where: {
         id: searchIdentifier,
@@ -118,7 +124,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Load project data as required (by id)
     const project = await prisma.project.findUnique({
       where: { id: surveyRedirect.projectId },
       select: { id: true, code: true, name: true },
@@ -126,97 +131,116 @@ export async function POST(req: NextRequest) {
 
     const supplier = await resolveSupplierBySurveyRedirectCodeOrId(surveyRedirect.supplierId);
 
-    // Set status label based on SurveyRedirect.result
+    // Default status during search should remain "Status"
     let statusLabel = 'Status';
-    if (surveyRedirect.result === 'COMPLETE') statusLabel = 'Complete';
-    else if (surveyRedirect.result === 'TERMINATE') statusLabel = 'Quality Terminate';
 
-    // When explicitly reconciling, persist to Reconciliation table by pid.
-    // Any failure here should NOT break the response used by the UI.
-    if (action === 'reconcile' && project && supplier?.id) {
+    if (action === 'reconcile') {
+      if (surveyRedirect.result === 'COMPLETE') statusLabel = 'Complete';
+      else if (surveyRedirect.result === 'TERMINATE') statusLabel = 'Quality Terminate';
+    }
+
+    if (action === 'reconcile') {
       try {
-        let outcome: 'COMPLETE' | 'TERMINATE' | null = null;
-
-        if (surveyRedirect.result === 'COMPLETE') {
-          outcome = 'COMPLETE';
-        } else if (surveyRedirect.result === 'TERMINATE') {
-          outcome = 'TERMINATE';
-        }
-
-        console.log(
-          'Before upsert - pid:',
-          surveyRedirect.id,
-          'outcome:',
-          outcome,
-          'supplierId:',
-          supplier.id
-        );
-
-        await prisma.reconciliation.upsert({
-          where: { pid: surveyRedirect.id },
-          create: {
+        if (!project) {
+          console.error('[reconciliation] project not found', {
             pid: surveyRedirect.id,
-            projectId: project.id,
-            supplierId: supplier.id,
-            projectCode: project.code,
-            projectName: project.name,
-            supplierName: supplier.name,
-            supplierIdentifier: supplier.code ?? surveyRedirect.supplierId ?? '',
-            outcome,
-            lastEventAt: new Date(),
-          },
-          update: {
-            projectId: project.id,
-            supplierId: supplier.id,
-            projectCode: project.code,
-            projectName: project.name,
-            supplierName: supplier.name,
-            supplierIdentifier: supplier.code ?? surveyRedirect.supplierId ?? '',
-            outcome,
-            lastEventAt: new Date(),
-          },
-        });
-
-        console.log(
-          'After upsert - pid:',
-          surveyRedirect.id,
-          'successfully persisted to reconciliation table'
-        );
-
-        if (surveyRedirect.result === 'COMPLETE' && surveyRedirect.externalId) {
-          const map = await prisma.projectSupplierMap.findUnique({
-            where: {
-              projectId_supplierId: {
-                projectId: project.id,
-                supplierId: supplier.id,
-              },
-            },
-            select: { cpi: true },
+            projectId: surveyRedirect.projectId,
           });
+        } else if (!supplier?.id) {
+          console.error('[reconciliation] supplier not resolved', {
+            pid: surveyRedirect.id,
+            supplierId: surveyRedirect.supplierId,
+          });
+        } else {
+          let outcome: 'COMPLETE' | 'TERMINATE' | null = null;
 
-          const rewardAmount = Number(map?.cpi ?? 0);
+          if (surveyRedirect.result === 'COMPLETE') {
+            outcome = 'COMPLETE';
+          } else if (surveyRedirect.result === 'TERMINATE') {
+            outcome = 'TERMINATE';
+          }
 
-          if (rewardAmount > 0) {
-            await creditOpPanelReward({
-              signupId: String(surveyRedirect.externalId),
-              pid: surveyRedirect.id,
-              projectCode: project.code,
-              projectName: project.name,
-              supplierCode: supplier.code,
-              supplierName: supplier.name,
-              rewardAmount,
-            });
-          } else {
-            console.warn('[reconciliation] reward credit skipped: invalid CPI', {
+          await prisma.reconciliation.upsert({
+            where: { pid: surveyRedirect.id },
+            create: {
               pid: surveyRedirect.id,
               projectId: project.id,
               supplierId: supplier.id,
-              rewardAmount,
-            });
+              projectCode: project.code,
+              projectName: project.name,
+              supplierName: supplier.name,
+              supplierIdentifier: supplier.code ?? surveyRedirect.supplierId ?? '',
+              outcome,
+              lastEventAt: new Date(),
+            },
+            update: {
+              projectId: project.id,
+              supplierId: supplier.id,
+              projectCode: project.code,
+              projectName: project.name,
+              supplierName: supplier.name,
+              supplierIdentifier: supplier.code ?? surveyRedirect.supplierId ?? '',
+              outcome,
+              lastEventAt: new Date(),
+            },
+          });
+
+          console.log('[reconciliation] upsert successful', {
+            pid: surveyRedirect.id,
+            outcome,
+          });
+
+          // Reward credit only for COMPLETE
+          if (surveyRedirect.result === 'COMPLETE') {
+            if (!surveyRedirect.externalId) {
+              console.error('[reconciliation] reward skipped: externalId missing', {
+                pid: surveyRedirect.id,
+              });
+            } else {
+              const map = await prisma.projectSupplierMap.findUnique({
+                where: {
+                  projectId_supplierId: {
+                    projectId: project.id,
+                    supplierId: supplier.id,
+                  },
+                },
+                select: { cpi: true },
+              });
+
+              const rewardAmount = Number(map?.cpi ?? 0);
+
+              console.log('[reconciliation] reward lookup', {
+                pid: surveyRedirect.id,
+                projectId: project.id,
+                supplierId: supplier.id,
+                externalId: surveyRedirect.externalId,
+                mapCpi: map?.cpi,
+                rewardAmount,
+              });
+
+              if (rewardAmount > 0) {
+                await creditOpPanelReward({
+                  signupId: String(surveyRedirect.externalId),
+                  pid: surveyRedirect.id,
+                  projectCode: project.code,
+                  projectName: project.name,
+                  supplierCode: supplier.code,
+                  supplierName: supplier.name,
+                  rewardAmount,
+                });
+              } else {
+                console.error('[reconciliation] reward skipped: CPI missing or invalid', {
+                  pid: surveyRedirect.id,
+                  projectId: project.id,
+                  supplierId: supplier.id,
+                  rewardAmount,
+                });
+              }
+            }
           }
         }
       } catch (writeError) {
-        console.error('Failed to upsert reconciliation record', writeError);
+        console.error('[reconciliation] Failed to reconcile', writeError);
       }
     }
 
@@ -225,7 +249,7 @@ export async function POST(req: NextRequest) {
       projectName: project?.name || null,
       supplier: supplier?.name || null,
       supplierIdentifier: supplier?.code || surveyRedirect.supplierId || null,
-      userIdentifier: surveyRedirect.id, // return pid to UI
+      userIdentifier: surveyRedirect.id, // pid
       status: statusLabel,
       outcome: surveyRedirect.result || null,
     });
