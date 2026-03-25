@@ -250,8 +250,8 @@ model SupplierRedirectEvent {
 model Reconciliation {
   id String @id @default(cuid())
 
-  // Search Identifier (client shared identifier)
-  respondentId String @unique
+  // Search Identifier (survey attempt pid)
+  pid String @unique
 
   // References (cuid ids)
   projectId String
@@ -265,7 +265,7 @@ model Reconciliation {
   supplierName       String
   supplierIdentifier String
 
-  // Latest known outcome for this respondentId
+  // Latest known outcome for this pid
   outcome     RedirectOutcome?
   lastEventAt DateTime?
 

@@ -82,19 +82,20 @@ async function creditOpPanelReward(args: {
 
   return { ok: true as const, body };
 }
- 
+
 // POST /api/reconciliation
 export async function POST(req: NextRequest) {
   try {
     const { searchIdentifier, action } = await req.json();
+
     if (!searchIdentifier) {
       return NextResponse.json({ error: 'Missing searchIdentifier' }, { status: 400 });
     }
- 
-    // Find SurveyRedirect by SearchIdentifier (RespondentId) and filter by result
+
+    // Find SurveyRedirect by pid (SurveyRedirect.id) and filter by eligible results
     const surveyRedirect = await prisma.surveyRedirect.findFirst({
       where: {
-        respondentId: searchIdentifier,
+        id: searchIdentifier,
         result: {
           in: ['COMPLETE', 'TERMINATE'],
         },
@@ -109,63 +110,78 @@ export async function POST(req: NextRequest) {
         result: true,
       },
     });
-   
+
     if (!surveyRedirect) {
-      return NextResponse.json({ error: 'SurveyRedirect not found or not eligible' }, { status: 404 });
+      return NextResponse.json(
+        { error: 'SurveyRedirect not found or not eligible' },
+        { status: 404 }
+      );
     }
- 
+
     // Load project data as required (by id)
     const project = await prisma.project.findUnique({
       where: { id: surveyRedirect.projectId },
       select: { id: true, code: true, name: true },
     });
- 
+
     const supplier = await resolveSupplierBySurveyRedirectCodeOrId(surveyRedirect.supplierId);
 
-    // Return the values, using result from SurveyRedirect only
-    // Set status label based on result
+    // Set status label based on SurveyRedirect.result
     let statusLabel = 'Status';
     if (surveyRedirect.result === 'COMPLETE') statusLabel = 'Complete';
     else if (surveyRedirect.result === 'TERMINATE') statusLabel = 'Quality Terminate';
- 
-    // When explicitly reconciling, persist to Reconciliation table.
+
+    // When explicitly reconciling, persist to Reconciliation table by pid.
     // Any failure here should NOT break the response used by the UI.
-    if (action === 'reconcile' && surveyRedirect.respondentId && project && supplier?.id) {
+    if (action === 'reconcile' && project && supplier?.id) {
       try {
-        let outcome: any = null;
+        let outcome: 'COMPLETE' | 'TERMINATE' | null = null;
+
         if (surveyRedirect.result === 'COMPLETE') {
           outcome = 'COMPLETE';
         } else if (surveyRedirect.result === 'TERMINATE') {
           outcome = 'TERMINATE';
         }
- 
-        console.log('Before upsert - respondentId:', surveyRedirect.respondentId, 'outcome:', outcome, 'supplierId:', supplier?.id);
-         
+
+        console.log(
+          'Before upsert - pid:',
+          surveyRedirect.id,
+          'outcome:',
+          outcome,
+          'supplierId:',
+          supplier.id
+        );
+
         await prisma.reconciliation.upsert({
-         where: { respondentId: surveyRedirect.respondentId },
+          where: { pid: surveyRedirect.id },
           create: {
-           respondentId: surveyRedirect.respondentId,
-           projectId: project.id,
-           supplierId: supplier.id,
-           projectCode: project.code,
-           projectName: project.name,
-           supplierName: supplier.name,
-           supplierIdentifier: supplier.code ?? surveyRedirect.supplierId ?? '',
-           outcome: outcome,
-           lastEventAt: new Date(),
-         },
-         update: {
-           projectId: project.id,
-           supplierId: supplier.id,
-           projectCode: project.code,
-           projectName: project.name,
-           supplierName: supplier.name,
-           supplierIdentifier: supplier.code ?? surveyRedirect.supplierId ?? '',
-           outcome: outcome,
-           lastEventAt: new Date(),
-         },
+            pid: surveyRedirect.id,
+            projectId: project.id,
+            supplierId: supplier.id,
+            projectCode: project.code,
+            projectName: project.name,
+            supplierName: supplier.name,
+            supplierIdentifier: supplier.code ?? surveyRedirect.supplierId ?? '',
+            outcome,
+            lastEventAt: new Date(),
+          },
+          update: {
+            projectId: project.id,
+            supplierId: supplier.id,
+            projectCode: project.code,
+            projectName: project.name,
+            supplierName: supplier.name,
+            supplierIdentifier: supplier.code ?? surveyRedirect.supplierId ?? '',
+            outcome,
+            lastEventAt: new Date(),
+          },
         });
-        console.log('After upsert - respondentId:', surveyRedirect.respondentId, 'successfully persisted to reconciliation table');
+
+        console.log(
+          'After upsert - pid:',
+          surveyRedirect.id,
+          'successfully persisted to reconciliation table'
+        );
 
         if (surveyRedirect.result === 'COMPLETE' && surveyRedirect.externalId) {
           const map = await prisma.projectSupplierMap.findUnique({
@@ -179,6 +195,7 @@ export async function POST(req: NextRequest) {
           });
 
           const rewardAmount = Number(map?.cpi ?? 0);
+
           if (rewardAmount > 0) {
             await creditOpPanelReward({
               signupId: String(surveyRedirect.externalId),
@@ -199,19 +216,16 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch (writeError) {
-        console.error(
-          'Failed to upsert reconciliation record',
-          writeError,
-        );
+        console.error('Failed to upsert reconciliation record', writeError);
       }
     }
- 
+
     return NextResponse.json({
       projectCode: project?.code || null,
       projectName: project?.name || null,
       supplier: supplier?.name || null,
       supplierIdentifier: supplier?.code || surveyRedirect.supplierId || null,
-      userIdentifier: surveyRedirect.respondentId,
+      userIdentifier: surveyRedirect.id, // return pid to UI
       status: statusLabel,
       outcome: surveyRedirect.result || null,
     });
@@ -220,9 +234,10 @@ export async function POST(req: NextRequest) {
       typeof error === 'object' && error && 'message' in error
         ? (error as any).message
         : String(error);
+
     return NextResponse.json(
       { error: 'Internal server error', details: message },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }
