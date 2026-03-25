@@ -25,6 +25,26 @@ const COUNTRY_NAME_TO_CODE = new Map(
   COUNTRIES.map((c) => [normalizeCountryName(c.name), c.code.toUpperCase()])
 );
 
+// Add common aliases / 3-letter inputs coming from OP Panel
+const COUNTRY_ALIAS_TO_CODE = new Map<string, string>([
+  ["usa", "US"],
+  ["us", "US"],
+  ["united states", "US"],
+  ["united states of america", "US"],
+
+  ["uk", "GB"],
+  ["gbr", "GB"],
+  ["great britain", "GB"],
+  ["united kingdom", "GB"],
+
+  ["uae", "AE"],
+  ["are", "AE"],
+  ["united arab emirates", "AE"],
+
+  ["ind", "IN"],
+  ["india", "IN"],
+]);
+
 function toCountryCodeFromName(nameOrCode: string | null | undefined): string {
   const v = String(nameOrCode ?? "").trim();
   if (!v) return "";
@@ -32,6 +52,11 @@ function toCountryCodeFromName(nameOrCode: string | null | undefined): string {
   // if user already has code like "IN"
   if (/^[A-Za-z]{2}$/.test(v)) return v.toUpperCase();
   const key = normalizeCountryName(v);
+
+  // Common aliases first
+  const alias = COUNTRY_ALIAS_TO_CODE.get(key);
+  if (alias) return alias;
+
   return COUNTRY_NAME_TO_CODE.get(key) || "";
 }
 
