@@ -145,28 +145,30 @@ export async function GET(
   }
 
   if (haveRealId && externalId && supplierId) {
-    const priorAttempt = await prisma.surveyRedirect.findFirst({
-      where: {
-        projectId: projectIdReal,
-        supplierId,
-        externalId,
-      },
-      select: { id: true, result: true },
-    });
+  const priorAttempt = await prisma.surveyRedirect.findFirst({
+    where: {
+      projectId: projectIdReal,
+      supplierId,
+      externalId,
+      result: { not: null },
+    },
+    select: { id: true, result: true },
+    orderBy: { createdAt: "desc" },
+  });
 
-    if (priorAttempt) {
-      return NextResponse.json(
-        {
-          error: "Survey already attempted.",
-          projectId: projectCodeReal || projectIdReal,
-          supplierId,
-          priorPid: priorAttempt.id,
-          priorResult: priorAttempt.result ?? null,
-        },
-        { status: 409 }
-      );
-    }
+  if (priorAttempt) {
+    return NextResponse.json(
+      {
+        error: "Survey already attempted.",
+        projectId: projectCodeReal || projectIdReal,
+        supplierId,
+        priorPid: priorAttempt.id,
+        priorResult: priorAttempt.result,
+      },
+      { status: 409 }
+    );
   }
+}
 
   // 1.5) best-effort respondent ensure (uses externalId)
   if (haveRealId && externalId) {
