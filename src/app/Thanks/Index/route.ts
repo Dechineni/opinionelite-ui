@@ -237,8 +237,9 @@ export async function GET(req: Request) {
     // If supplier URL missing for COMPLETE, fall back to OP Panel complete page.
     let nextUrl: string | null = null;
 
-    // Prefer Respondent.id (unique cuid) for supplier callbacks, then pid, then externalId.
-    const supplierIdent = respondentId ?? pid ?? externalId ?? "";
+    // Supplier-side callback URLs should receive Supplier.id as the identifier.
+    // If supplier is not resolved for any reason, fall back safely.
+    const supplierIdent = supplierRecord?.id || pid || externalId || "";
 
     if (supplierRecord) {
       const r = mapped.redirectResult;
