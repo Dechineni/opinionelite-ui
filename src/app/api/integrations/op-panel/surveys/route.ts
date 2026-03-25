@@ -286,6 +286,7 @@ export async function GET(req: Request) {
         externalId: identifier,
         projectId: { in: projectIds },
         supplierId: { in: supplierCodes },
+        result: { not: null },
       },
       select: { projectId: true, supplierId: true },
     });
