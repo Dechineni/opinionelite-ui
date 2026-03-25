@@ -38,7 +38,6 @@ function id20(): string {
 
 /** Replace tokens like [identifier], {identifier}, [projectId], [supplierId], [externalId] */
 function replaceTokens(template: string, map: Record<string, string>) {
-  // Support both [token] and {token}
   return template
     .replace(/\[([^\]]+)\]/g, (_, k) => map[k] ?? "")
     .replace(/\{([^}]+)\}/g, (_, k) => map[k] ?? "");
@@ -54,8 +53,9 @@ type CacheEntry = { v: { id: string; template: string }; exp: number };
 type MemCache = Map<string, CacheEntry>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const G: any = globalThis as any;
-const MEM_TTL_MS = 5 * 60 * 1000; // 5 min
+const MEM_TTL_MS = 5 * 60 * 1000;
 const mem: MemCache = (G.__surveyLiveCache ??= new Map<string, CacheEntry>());
+
 function memGet(k: string): { id: string; template: string } | null {
   const e = mem.get(k);
   if (!e) return null;
@@ -65,6 +65,7 @@ function memGet(k: string): { id: string; template: string } | null {
   }
   return e.v;
 }
+
 function memPut(k: string, v: { id: string; template: string }) {
   mem.set(k, { v, exp: Date.now() + MEM_TTL_MS });
 }
@@ -99,12 +100,10 @@ export async function GET(
 
   const url = new URL(req.url);
   const supplierId = (url.searchParams.get("supplierId") || "").trim();
-  const externalId = (url.searchParams.get("id") || "").trim(); // OP Panel user id (e.g. 102)
+  const externalId = (url.searchParams.get("id") || "").trim();
 
-  // 0) cache
   const cached = memGet(`live:${projectId}`);
 
-  // 1) read project
   let projectIdReal = projectId;
   let haveRealId = false;
   let projectCodeReal = projectId;
@@ -119,16 +118,19 @@ export async function GET(
       if (!project) {
         return NextResponse.json({ error: "Project not found." }, { status: 404 });
       }
+
       projectIdReal = project.id;
       projectCodeReal = project.code;
       haveRealId = true;
       template = (project.surveyLiveUrl || "").trim();
+
       if (!template) {
         return NextResponse.json(
           { error: "Live survey URL is not configured for this project." },
           { status: 400 }
         );
       }
+
       memPut(`live:${projectId}`, { id: project.id, template });
       memPut(`live:${project.id}`, { id: project.id, template });
       memPut(`live:${project.code}`, { id: project.id, template });
@@ -140,37 +142,47 @@ export async function GET(
             : "Failed to resolve project survey link.";
         return NextResponse.json({ error: msg }, { status: 504 });
       }
-      // fall back to cached template
     }
   }
 
+  // Look for existing SurveyRedirect by natural key
+  let reusableRedirect: { id: string; result: string | null } | null = null;
+
   if (haveRealId && externalId && supplierId) {
-  const priorAttempt = await prisma.surveyRedirect.findFirst({
-    where: {
-      projectId: projectIdReal,
-      supplierId,
-      externalId,
-      result: { not: null },
-    },
-    select: { id: true, result: true },
-    orderBy: { createdAt: "desc" },
-  });
-
-  if (priorAttempt) {
-    return NextResponse.json(
-      {
-        error: "Survey already attempted.",
-        projectId: projectCodeReal || projectIdReal,
+    const existingRedirect = await prisma.surveyRedirect.findFirst({
+      where: {
+        projectId: projectIdReal,
         supplierId,
-        priorPid: priorAttempt.id,
-        priorResult: priorAttempt.result,
+        externalId,
       },
-      { status: 409 }
-    );
-  }
-}
+      select: {
+        id: true,
+        result: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
-  // 1.5) best-effort respondent ensure (uses externalId)
+    if (existingRedirect) {
+      // final result means already attempted
+      if (existingRedirect.result) {
+        return NextResponse.json(
+          {
+            error: "Survey already attempted.",
+            projectId: projectCodeReal || projectIdReal,
+            supplierId,
+            priorPid: existingRedirect.id,
+            priorResult: existingRedirect.result,
+          },
+          { status: 409 }
+        );
+      }
+
+      // null result means stale/in-progress row → reuse it
+      reusableRedirect = existingRedirect;
+    }
+  }
+
+  // best-effort respondent ensure
   if (haveRealId && externalId) {
     try {
       if (supplierId) {
@@ -184,6 +196,7 @@ export async function GET(
           },
           select: { id: true },
         });
+
         if (!found) {
           try {
             await prisma.respondent.create({
@@ -198,6 +211,7 @@ export async function GET(
           where: { projectId: projectIdReal, externalId, supplierId: null },
           select: { id: true },
         });
+
         if (!found) {
           try {
             await prisma.respondent.create({
@@ -213,23 +227,19 @@ export async function GET(
     }
   }
 
-  // 2) Prepare redirect URL
-  const pid = id20(); // ✅ our unique id for this redirect (the [identifier] value)
+  // Reuse old pid if null-result row exists
+  const pid = reusableRedirect?.id || id20();
 
-  // Detect whether template actually uses identifier placeholder
   const hasIdentifierToken =
     /\[identifier\]/i.test(template) || /\{identifier\}/i.test(template);
 
-  // ✅ Replace [identifier] (or {identifier}) with pid.
-  // Keep external id separately available as [externalId] if needed.
   const replaced = replaceTokens(template, {
     projectId: projectIdReal,
     supplierId,
-    identifier: pid,        // ✅ THIS is the key fix
-    externalId: externalId, // optional token if you ever need it
+    identifier: pid,
+    externalId,
   });
 
-  // 3) Absolute URL
   let absolute: URL;
   try {
     absolute = new URL(replaced);
@@ -243,6 +253,7 @@ export async function GET(
     }
     absolute = new URL(replaced, base);
   }
+
   if (!isAllowedScheme(absolute)) {
     return NextResponse.json(
       { error: "Live URL must use http(s) scheme." },
@@ -250,30 +261,74 @@ export async function GET(
     );
   }
 
-  // 4) Fallback behavior:
-  // - If template had [identifier]/{identifier}, we already injected pid where needed.
-  // - If template did NOT have placeholder, add rid=pid ONLY if rid is missing.
   if (!hasIdentifierToken) {
     if (!absolute.searchParams.has("rid")) {
       absolute.searchParams.set("rid", pid);
     }
   }
 
-  // 5) Log redirect (idempotent by primary key id=pid)
   if (LOG_REDIRECT && haveRealId) {
-    await prisma.surveyRedirect.upsert({
-      where: { id: pid },
-      update: { destination: absolute.toString() },
-      create: {
-        id: pid,
-        projectId: projectIdReal,
-        supplierId: supplierId || null,  // may be Supplier.code like S1007
-        externalId: externalId || null,  // OP Panel user id (e.g. 102)
-        destination: absolute.toString(),
-      },
-    });
+    try {
+      if (reusableRedirect) {
+        await prisma.surveyRedirect.update({
+          where: { id: reusableRedirect.id },
+          data: {
+            destination: absolute.toString(),
+          },
+        });
+      } else {
+        await prisma.surveyRedirect.create({
+          data: {
+            id: pid,
+            projectId: projectIdReal,
+            supplierId: supplierId || null,
+            externalId: externalId || null,
+            destination: absolute.toString(),
+          },
+        });
+      }
+    } catch (e) {
+      if (isUniqueViolation(e)) {
+        // In case of race condition, reuse existing null-result row
+        const existingRedirect = await prisma.surveyRedirect.findFirst({
+          where: {
+            projectId: projectIdReal,
+            supplierId,
+            externalId,
+          },
+          select: { id: true, result: true },
+          orderBy: { createdAt: "desc" },
+        });
+
+        if (existingRedirect?.result) {
+          return NextResponse.json(
+            {
+              error: "Survey already attempted.",
+              projectId: projectCodeReal || projectIdReal,
+              supplierId,
+              priorPid: existingRedirect.id,
+              priorResult: existingRedirect.result,
+            },
+            { status: 409 }
+          );
+        }
+
+        if (existingRedirect) {
+          await prisma.surveyRedirect.update({
+            where: { id: existingRedirect.id },
+            data: {
+              destination: absolute.toString(),
+            },
+          });
+
+          absolute.searchParams.set("rid", existingRedirect.id);
+          return NextResponse.redirect(absolute.toString(), { status: 302 });
+        }
+      }
+
+      throw e;
+    }
   }
 
-  // 6) Redirect
   return NextResponse.redirect(absolute.toString(), { status: 302 });
 }
