@@ -58,6 +58,9 @@ export default function AddClient() {
     email: "",
     contactNumber: "",
     website: "",
+    apiUrl: "",
+    apiKey: "",
+    secretKey: "",
   });
   const update = (k: keyof typeof form, v: any) => setForm((s) => ({ ...s, [k]: v }));
 
@@ -81,6 +84,10 @@ export default function AddClient() {
           email: form.email || null,
           contactNumber: form.contactNumber || null,
           website: form.website || null,
+          apiUrl: form.apiUrl || null,
+          apiKey: form.apiKey || null,
+          secretKey: form.secretKey || null,
+
         }),
       });
       if (!res.ok) {
@@ -173,6 +180,34 @@ export default function AddClient() {
               onChange={(e) => update("website", e.target.value)}
             />
           </Field>
+
+          {/* API URL */}
+<Field className="md:col-span-6 xl:col-span-6">
+  <Label>API URL</Label>
+  <Input
+    type="url"
+    value={form.apiUrl}
+    onChange={(e) => update("apiUrl", e.target.value)}
+  />
+</Field>
+
+{/* API Key */}
+<Field className="md:col-span-6 xl:col-span-6">
+  <Label>API Key</Label>
+  <Input
+    value={form.apiKey}
+    onChange={(e) => update("apiKey", e.target.value)}
+  />
+</Field>
+
+{/* Secret Key */}
+<Field className="md:col-span-6 xl:col-span-6">
+  <Label>Secret Key</Label>
+  <Input
+    value={form.secretKey}
+    onChange={(e) => update("secretKey", e.target.value)}
+  />
+</Field>
         </div>
 
         {error && (
