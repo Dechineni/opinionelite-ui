@@ -125,7 +125,12 @@ export default function ApiSurvey() {
     }
   };
 
-  const selectedClient = clients.find((c) => c.id === selectedClientId) || null;
+  const onReset = () => {
+    setSelectedClientId("");
+    setSelectedCountry("");
+    setRows([]);
+    setError(null);
+  };
 
   return (
     <div className="space-y-4">
@@ -166,7 +171,7 @@ export default function ApiSurvey() {
             </Select>
           </div>
 
-          <div className="col-span-12 md:col-span-6 xl:col-span-4 flex items-end">
+          <div className="col-span-12 md:col-span-6 xl:col-span-4 flex items-end gap-3">
             <button
               type="button"
               onClick={onView}
@@ -175,20 +180,17 @@ export default function ApiSurvey() {
             >
               {isViewing ? "Loading..." : "View"}
             </button>
+
+            <button
+              type="button"
+              onClick={onReset}
+              disabled={isViewing}
+              className="rounded-lg border border-slate-300 bg-white px-5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            >
+              Reset
+            </button>
           </div>
         </div>
-
-        {selectedClient && (
-          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            <div>
-              <span className="font-medium">Selected Client:</span> {selectedClient.name}
-            </div>
-            <div className="mt-1">
-              <span className="font-medium">API URL:</span>{" "}
-              {selectedClient.apiUrl || "-"}
-            </div>
-          </div>
-        )}
 
         {error && (
           <div className="mt-4 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">
