@@ -207,7 +207,7 @@ export default function ApiSurvey() {
                     colSpan={7}
                     className="border border-slate-200 px-3 py-8 text-center text-slate-500"
                   >
-                    No surveys loaded yet
+                    No Records found
                   </td>
                 </tr>
               ) : (
