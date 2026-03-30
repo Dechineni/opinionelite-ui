@@ -16,6 +16,12 @@ model Client {
   contactNumber String?
   countryCode   String
   website       String?
+
+// NEW: API-provider support
+  apiUrl        String?
+  apiKey        String?
+  secretKey     String?
+
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   projects      Project[]

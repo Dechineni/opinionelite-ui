@@ -19,26 +19,40 @@ export async function GET(req: Request) {
 
     const q = (searchParams.get("q") ?? "").trim();
     const activeParam = searchParams.get("active"); // "true" | "false" | null
-    const mode = searchParams.get("mode");          // "lite" for dropdowns
+    const mode = searchParams.get("mode"); // "lite" for dropdowns
+    const apiOnly = searchParams.get("apiOnly"); // "1" to return only API-enabled clients
     const page = toInt(searchParams.get("page"), 1);
-    const pageSize = clamp(toInt(searchParams.get("pageSize"), 10), 1, 100); // cap
+    const pageSize = clamp(toInt(searchParams.get("pageSize"), 10), 1, 100);
 
     const base: Prisma.ClientWhereInput = q
       ? {
           OR: [
-            { code:        { contains: q, mode: "insensitive" } as any },
-            { name:        { contains: q, mode: "insensitive" } as any },
+            { code: { contains: q, mode: "insensitive" } as any },
+            { name: { contains: q, mode: "insensitive" } as any },
             { countryCode: { contains: q, mode: "insensitive" } as any },
           ],
         }
       : {};
 
-    const where: Prisma.ClientWhereInput =
+    const activeWhere: Prisma.ClientWhereInput =
       activeParam === "true"
-        ? { ...base, projects: { some: {} } }
+        ? { projects: { some: {} } }
         : activeParam === "false"
-        ? { ...base, projects: { none: {} } }
-        : base;
+        ? { projects: { none: {} } }
+        : {};
+
+    const apiWhere: Prisma.ClientWhereInput =
+      apiOnly === "1"
+        ? {
+            apiUrl: {
+              not: null,
+            },
+          }
+        : {};
+
+    const where: Prisma.ClientWhereInput = {
+      AND: [base, activeWhere, apiWhere],
+    };
 
     const lite = mode === "lite";
 
@@ -47,12 +61,21 @@ export async function GET(req: Request) {
         prisma.client.findMany({
           where,
           orderBy: { name: "asc" },
-          select: { id: true, name: true },
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            countryCode: true,
+            apiUrl: true,
+            apiKey: true,
+            secretKey: true,
+          },
           skip: (page - 1) * pageSize,
           take: pageSize,
         }),
         prisma.client.count({ where }),
       ]);
+
       return NextResponse.json({ items, total });
     }
 
@@ -62,10 +85,25 @@ export async function GET(req: Request) {
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * pageSize,
         take: pageSize,
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          contactPerson: true,
+          email: true,
+          contactNumber: true,
+          countryCode: true,
+          website: true,
+          apiUrl: true,
+          apiKey: true,
+          secretKey: true,
+          createdAt: true,
+          updatedAt: true,
+        },
       }),
       prisma.client.count({ where }),
-      prisma.client.count({ where: { ...base, projects: { some: {} } } }),
-      prisma.client.count({ where: { ...base, projects: { none: {} } } }),
+      prisma.client.count({ where: { AND: [base, { projects: { some: {} } }] } }),
+      prisma.client.count({ where: { AND: [base, { projects: { none: {} } }] } }),
     ]);
 
     return NextResponse.json({
@@ -95,12 +133,14 @@ export async function POST(req: Request) {
         contactNumber: b.contactNumber ?? null,
         countryCode: b.countryCode ?? b.country ?? "US",
         website: b.website ?? null,
+        apiUrl: b.apiUrl ?? null,
+        apiKey: b.apiKey ?? null,
+        secretKey: b.secretKey ?? null,
       },
     });
 
     return NextResponse.json(created, { status: 201 });
   } catch (err: any) {
-    // Map a couple of common Prisma errors to 400s
     const code = err?.code as string | undefined;
     if (code === "P2002") {
       return NextResponse.json(

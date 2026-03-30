@@ -16,6 +16,9 @@ const CLIENT_SELECT = {
   contactNumber: true,
   countryCode: true,
   website: true,
+  apiUrl: true,
+  apiKey: true,
+  secretKey: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -48,12 +51,14 @@ export async function GET(
   const where = whereFrom(req, id);
 
   try {
-    // findUnique with tight select (fast + small payload)
     const item = await prisma.client.findUnique({ where, select: CLIENT_SELECT });
     if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(item);
   } catch (e: any) {
-    return NextResponse.json({ error: "Fetch failed", detail: String(e) }, { status: 400 });
+    return NextResponse.json(
+      { error: "Fetch failed", detail: String(e) },
+      { status: 400 }
+    );
   }
 }
 
@@ -69,15 +74,17 @@ export async function PATCH(
   const where = whereFrom(req, id);
   const b = await req.json();
 
-  // Build a minimal data object; `clean` removes undefined keys
   const data = clean({
-    code: b.code,                              // allow changing client code (if unique)
+    code: b.code, // allow changing client code (if unique)
     name: b.name ?? b.clientName,
     contactPerson: b.contactPerson,
     email: b.email,
     contactNumber: b.contactNumber,
     countryCode: b.countryCode ?? b.country,
     website: b.website,
+    apiUrl: b.apiUrl ?? null,
+    apiKey: b.apiKey ?? null,
+    secretKey: b.secretKey ?? null,
   });
 
   try {
@@ -91,7 +98,16 @@ export async function PATCH(
     if (e?.code === "P2025") {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    return NextResponse.json({ error: "Update failed", detail: String(e) }, { status: 400 });
+    if (e?.code === "P2002") {
+      return NextResponse.json(
+        { error: "Duplicate client (unique constraint)" },
+        { status: 400 }
+      );
+    }
+    return NextResponse.json(
+      { error: "Update failed", detail: String(e) },
+      { status: 400 }
+    );
   }
 }
 
@@ -108,12 +124,14 @@ export async function DELETE(
 
   try {
     await prisma.client.delete({ where });
-    // 204 keeps the payload empty (slightly cheaper)
     return new NextResponse(null, { status: 204 });
   } catch (e: any) {
     if (e?.code === "P2025") {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    return NextResponse.json({ error: "Delete failed", detail: String(e) }, { status: 400 });
+    return NextResponse.json(
+      { error: "Delete failed", detail: String(e) },
+      { status: 400 }
+    );
   }
 }

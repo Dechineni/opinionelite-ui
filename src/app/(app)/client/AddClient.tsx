@@ -1,6 +1,6 @@
 // FILE: src/app/(app)/client/AddClient.tsx
 "use client";
-export const runtime = 'edge';
+export const runtime = "edge";
 
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -58,6 +58,9 @@ export default function AddClient() {
     email: "",
     contactNumber: "",
     website: "",
+    apiUrl: "",
+    apiKey: "",
+    secretKey: "",
   });
   const update = (k: keyof typeof form, v: any) => setForm((s) => ({ ...s, [k]: v }));
 
@@ -81,6 +84,9 @@ export default function AddClient() {
           email: form.email || null,
           contactNumber: form.contactNumber || null,
           website: form.website || null,
+          apiUrl: form.apiUrl || null,
+          apiKey: form.apiKey || null,
+          secretKey: form.secretKey || null,
         }),
       });
       if (!res.ok) {
@@ -102,7 +108,6 @@ export default function AddClient() {
 
   const closeSuccess = () => {
     setSuccessOpen(false);
-    // go to your client list page; tweak the path if needed
     router.replace("/client/new/clientlist");
     router.refresh();
   };
@@ -171,6 +176,36 @@ export default function AddClient() {
               type="url"
               value={form.website}
               onChange={(e) => update("website", e.target.value)}
+            />
+          </Field>
+
+          <Field className="xl:col-span-6">
+            <Label>API URL</Label>
+            <Input
+              type="url"
+              value={form.apiUrl}
+              onChange={(e) => update("apiUrl", e.target.value)}
+              placeholder="https://api.example.com"
+            />
+          </Field>
+
+          <Field>
+            <Label>API Key</Label>
+            <Input
+              type="text"
+              value={form.apiKey}
+              onChange={(e) => update("apiKey", e.target.value)}
+              placeholder="Enter API key"
+            />
+          </Field>
+
+          <Field>
+            <Label>Secret Key</Label>
+            <Input
+              type="text"
+              value={form.secretKey}
+              onChange={(e) => update("secretKey", e.target.value)}
+              placeholder="Enter secret key"
             />
           </Field>
         </div>
