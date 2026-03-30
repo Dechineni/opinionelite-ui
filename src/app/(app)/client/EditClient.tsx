@@ -1,6 +1,6 @@
 // FILE: src/app/(app)/client/EditClient.tsx
 "use client";
-export const runtime = 'edge';
+export const runtime = "edge";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -8,13 +8,16 @@ import { COUNTRIES } from "@/data/countries";
 
 type ClientDto = {
   id: string;
-  code: string;             // e.g. C0001
+  code: string; // e.g. C0001
   name: string;
   contactPerson: string | null;
-  countryCode: string;      // ISO-2
+  countryCode: string; // ISO-2
   email: string | null;
   contactNumber: string | null;
   website: string | null;
+  apiUrl: string | null;
+  apiKey: string | null;
+  secretKey: string | null;
 };
 
 const Label = ({ children, required = false }: { children: React.ReactNode; required?: boolean }) => (
@@ -67,6 +70,9 @@ export default function EditClient({ clientId }: { clientId: string }) {
     email: "",
     contactNumber: "",
     website: "",
+    apiUrl: "",
+    apiKey: "",
+    secretKey: "",
     code: "", // read-only display
   });
 
@@ -96,6 +102,9 @@ export default function EditClient({ clientId }: { clientId: string }) {
           email: c.email ?? "",
           contactNumber: c.contactNumber ?? "",
           website: c.website ?? "",
+          apiUrl: c.apiUrl ?? "",
+          apiKey: c.apiKey ?? "",
+          secretKey: c.secretKey ?? "",
           code: c.code ?? "",
         });
       } catch (e: any) {
@@ -126,6 +135,9 @@ export default function EditClient({ clientId }: { clientId: string }) {
           email: form.email || null,
           contactNumber: form.contactNumber || null,
           website: form.website || null,
+          apiUrl: form.apiUrl || null,
+          apiKey: form.apiKey || null,
+          secretKey: form.secretKey || null,
         }),
       });
       if (!res.ok) {
@@ -142,7 +154,6 @@ export default function EditClient({ clientId }: { clientId: string }) {
 
   const closeSuccess = () => {
     setSuccessOpen(false);
-    // go back to the client list (adjust if your path differs)
     router.replace("/client/new/clientlist");
     router.refresh();
   };
@@ -226,6 +237,36 @@ export default function EditClient({ clientId }: { clientId: string }) {
               type="url"
               value={form.website}
               onChange={(e) => update("website", e.target.value)}
+            />
+          </Field>
+
+          <Field className="xl:col-span-6">
+            <Label>API URL</Label>
+            <Input
+              type="url"
+              value={form.apiUrl}
+              onChange={(e) => update("apiUrl", e.target.value)}
+              placeholder="https://api.example.com"
+            />
+          </Field>
+
+          <Field>
+            <Label>API Key</Label>
+            <Input
+              type="text"
+              value={form.apiKey}
+              onChange={(e) => update("apiKey", e.target.value)}
+              placeholder="Enter API key"
+            />
+          </Field>
+
+          <Field>
+            <Label>Secret Key</Label>
+            <Input
+              type="text"
+              value={form.secretKey}
+              onChange={(e) => update("secretKey", e.target.value)}
+              placeholder="Enter secret key"
             />
           </Field>
         </div>

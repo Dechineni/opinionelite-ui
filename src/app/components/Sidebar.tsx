@@ -53,7 +53,7 @@ function buildMenu(role: Role): RootItem[] {
             { key: "project-single", label: "Single", href: "/projects/new/single" },
             { key: "project-group", label: "Group", href: "/projects/new/group" },
             { key: "project-recontact", label: "ReContact", href: "/projects/new/recontact" },
-            { key: "project-api", label: "API Survey", href: "/projects/new/api" },
+            { key: "project-api", label: "API Survey", href: "/projects/new/apisurvey" },
           ],
         },
       ],
