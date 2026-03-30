@@ -2,6 +2,7 @@
 export const runtime = "edge";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { COUNTRIES } from "@/data/countries";
 
 type ClientLite = {
@@ -49,6 +50,8 @@ const Select = (props: React.SelectHTMLAttributes<HTMLSelectElement>) => (
 );
 
 export default function ApiSurvey() {
+  const router = useRouter();
+
   const [loadingClients, setLoadingClients] = useState(true);
   const [clients, setClients] = useState<ClientLite[]>([]);
   const [selectedClientId, setSelectedClientId] = useState("");
@@ -132,9 +135,28 @@ export default function ApiSurvey() {
     setError(null);
   };
 
+  const openSurveyDetails = (row: SurveyRow) => {
+    const selectedClient = clients.find((c) => c.id === selectedClientId);
+
+    const qs = new URLSearchParams({
+      clientId: selectedClientId,
+      clientName: selectedClient?.name || "",
+      countryCode: selectedCountry,
+      surveyCode: row.surveyCode,
+      quotaId: row.quotaId,
+      surveyName: row.surveyName,
+      quota: row.quota,
+      loi: row.loi,
+      ir: row.ir,
+      cpi: row.cpi,
+    });
+
+    router.push(`/projects/new/apisurvey/details?${qs.toString()}`);
+  };
+
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">API Survey</h1>
+      <h1 className="text-xl font-semibold">Survey List</h1>
 
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="grid grid-cols-12 gap-6">
@@ -224,7 +246,15 @@ export default function ApiSurvey() {
               ) : (
                 rows.map((row, idx) => (
                   <tr key={`${row.surveyCode}-${row.quotaId}-${idx}`}>
-                    <td className="border border-slate-200 px-3 py-2">{row.surveyCode}</td>
+                    <td className="border border-slate-200 px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => openSurveyDetails(row)}
+                        className="font-medium text-emerald-700 hover:underline"
+                      >
+                        {row.surveyCode}
+                      </button>
+                    </td>
                     <td className="border border-slate-200 px-3 py-2">{row.quotaId}</td>
                     <td className="border border-slate-200 px-3 py-2">{row.surveyName}</td>
                     <td className="border border-slate-200 px-3 py-2">{row.quota}</td>
