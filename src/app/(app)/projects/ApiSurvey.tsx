@@ -55,8 +55,6 @@ export default function ApiSurvey() {
   const [selectedCountry, setSelectedCountry] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isViewing, setIsViewing] = useState(false);
-
-  // Placeholder rows for now; later this will come from provider API
   const [rows, setRows] = useState<SurveyRow[]>([]);
 
   const COUNTRY_OPTS = useMemo(
@@ -93,6 +91,7 @@ export default function ApiSurvey() {
 
   const onView = async () => {
     setError(null);
+    setRows([]);
 
     if (!selectedClientId) {
       setError("Please select a client.");
@@ -106,9 +105,19 @@ export default function ApiSurvey() {
 
     setIsViewing(true);
     try {
-      // Placeholder only for now.
-      // In next step this will call a backend route that talks to provider API.
-      setRows([]);
+      const qs = new URLSearchParams({
+        clientId: selectedClientId,
+        countryCode: selectedCountry,
+      });
+
+      const res = await fetch(`/api/provider-surveys?${qs.toString()}`);
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data?.error || `Failed to load surveys (${res.status})`);
+      }
+
+      setRows(Array.isArray(data?.items) ? data.items : []);
     } catch (e: any) {
       setError(e?.message || "Failed to load surveys");
     } finally {
