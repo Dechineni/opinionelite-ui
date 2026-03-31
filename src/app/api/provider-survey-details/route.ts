@@ -4,6 +4,14 @@ export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import {
+  getTolunaSurveyDetail,
+  type TolunaClientConfig,
+} from "@/lib/providers/toluna";
+
+function normalizeProviderType(v: string | null | undefined) {
+  return String(v ?? "").trim().toLowerCase();
+}
 
 export async function GET(req: Request) {
   try {
@@ -37,6 +45,11 @@ export async function GET(req: Request) {
         apiUrl: true,
         apiKey: true,
         secretKey: true,
+        providerType: true,
+        memberApiUrl: true,
+        partnerGuid: true,
+        panelGuidEnUs: true,
+        panelGuidEnGb: true,
       },
     });
 
@@ -44,46 +57,35 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
     }
 
-    if (!client.apiUrl) {
+    const providerType = normalizeProviderType(client.providerType);
+
+    if (!providerType) {
       return NextResponse.json(
-        { error: "Selected client does not have API configuration" },
+        { error: "Selected client does not have an Integration Provider configured" },
         { status: 400 }
       );
     }
 
-    // MOCK DETAILS FOR NOW
-    // Later this will call the provider's survey details endpoint.
-    const detail = {
-      clientId: client.id,
-      clientName: client.name,
-      countryCode,
-      surveyCode,
-      quotaId,
-      surveyName: `${client.name} Ad-Hoc Survey`,
-      quota: "3",
-      loi: "15",
-      ir: "54",
-      cpi: "16",
-      liveUrl: "https://insights.opinionelite.com/TestSurvey/Index?rid=[identifier]",
-      testUrl: "https://insights.opinionelite.com/TestSurvey/Index?rid=[identifier]",
-      targeting: [
-        {
-          label: "Age",
-          value: "45-64",
-        },
-        {
-          label: "Gender",
-          value: "Female",
-        },
-        {
-          label: "State",
-          value:
-            "Alabama, Arkansas, Delaware, Florida, Georgia, Kentucky, Louisiana, Maryland, Mississippi, North Carolina, Oklahoma, South Carolina, Tennessee, Texas, Virginia, West Virginia",
-        },
-      ],
-    };
+    switch (providerType) {
+      case "toluna": {
+        const detail = await getTolunaSurveyDetail({
+          client: client as TolunaClientConfig,
+          countryCode,
+          surveyCode,
+          quotaId,
+        });
 
-    return NextResponse.json(detail);
+        return NextResponse.json(detail);
+      }
+
+      default:
+        return NextResponse.json(
+          {
+            error: `Integration Provider '${client.providerType}' is not supported yet`,
+          },
+          { status: 400 }
+        );
+    }
   } catch (err: any) {
     return NextResponse.json(
       {

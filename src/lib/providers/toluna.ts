@@ -15,20 +15,53 @@ export type ProviderSurveyResult = {
   items: ProviderSurveyRow[];
 };
 
+export type ProviderSurveyDetail = {
+  clientId: string;
+  clientName: string;
+  countryCode: string;
+  surveyCode: string;
+  quotaId: string;
+  surveyName: string;
+  quota: string;
+  loi: string;
+  ir: string;
+  cpi: string;
+  liveUrl: string;
+  testUrl: string;
+  targeting: Array<{ label: string; value: string }>;
+};
+
 export type TolunaClientConfig = {
   id: string;
   code: string;
   name: string;
-  apiUrl: string | null;       // Toluna External Sample base URL
-  apiKey: string | null;       // Toluna API_AUTH_KEY
+  apiUrl: string | null; // Toluna External Sample base URL
+  apiKey: string | null; // Toluna API_AUTH_KEY
   panelGuidEnUs: string | null;
   panelGuidEnGb: string | null;
+};
+
+type TolunaQuestionAnswer = {
+  PreCodes?: string[];
+  AnswerText?: string;
+};
+
+type TolunaSubQuota = {
+  QuestionID?: number;
+  QuestionText?: string;
+  QuestionAnswers?: TolunaQuestionAnswer[];
+};
+
+type TolunaLayer = {
+  LayerName?: string;
+  SubQuotas?: TolunaSubQuota[];
 };
 
 type TolunaQuota = {
   QuotaID?: number;
   EstimatedCompletesRemaining?: number;
   CompletesRequired?: number;
+  Layers?: TolunaLayer[];
 };
 
 type TolunaPrice = {
@@ -78,10 +111,10 @@ function formatMoney(value: unknown) {
   return Number.isFinite(n) ? n.toFixed(2) : "";
 }
 
-export async function getTolunaSurveys(args: {
+async function fetchTolunaQuotas(args: {
   client: TolunaClientConfig;
   countryCode: string;
-}): Promise<ProviderSurveyResult> {
+}): Promise<TolunaGetQuotasResponse> {
   const { client } = args;
   const countryCode = String(args.countryCode || "").trim().toUpperCase();
 
@@ -136,7 +169,52 @@ export async function getTolunaSurveys(args: {
     throw new Error(`Toluna Get Quotas failed (${res.status}): ${detail}`);
   }
 
-  const surveys = Array.isArray(json?.Surveys) ? json!.Surveys! : [];
+  return json || {};
+}
+
+function flattenTolunaTargeting(quotas: TolunaQuota[] | undefined) {
+  const out: Array<{ label: string; value: string }> = [];
+  const qs = Array.isArray(quotas) ? quotas : [];
+
+  for (const quota of qs) {
+    const layers = Array.isArray(quota.Layers) ? quota.Layers : [];
+    for (const layer of layers) {
+      const subQuotas = Array.isArray(layer.SubQuotas) ? layer.SubQuotas : [];
+      for (const sub of subQuotas) {
+        const label =
+          String(sub.QuestionText || "").trim() ||
+          String(layer.LayerName || "").trim() ||
+          "Targeting";
+
+        const answers = Array.isArray(sub.QuestionAnswers) ? sub.QuestionAnswers : [];
+        const value = answers
+          .map((a: TolunaQuestionAnswer) => String(a.AnswerText || "").trim())
+          .filter(Boolean)
+          .join(", ");
+
+        if (label || value) {
+          out.push({
+            label: label || "Targeting",
+            value: value || "-",
+          });
+        }
+      }
+    }
+  }
+
+  return out;
+}
+
+export async function getTolunaSurveys(args: {
+  client: TolunaClientConfig;
+  countryCode: string;
+}): Promise<ProviderSurveyResult> {
+  const { client } = args;
+  const countryCode = String(args.countryCode || "").trim().toUpperCase();
+
+  const json = await fetchTolunaQuotas({ client, countryCode });
+
+  const surveys = Array.isArray(json.Surveys) ? json.Surveys : [];
   const items: ProviderSurveyRow[] = [];
 
   for (const survey of surveys) {
@@ -180,5 +258,59 @@ export async function getTolunaSurveys(args: {
     source: "toluna",
     countryCode,
     items,
+  };
+}
+
+export async function getTolunaSurveyDetail(args: {
+  client: TolunaClientConfig;
+  countryCode: string;
+  surveyCode: string;
+  quotaId: string;
+}): Promise<ProviderSurveyDetail> {
+  const { client } = args;
+  const countryCode = String(args.countryCode || "").trim().toUpperCase();
+  const surveyCode = String(args.surveyCode || "").trim();
+  const quotaId = String(args.quotaId || "").trim();
+
+  const [surveyResult, json] = await Promise.all([
+    getTolunaSurveys({ client, countryCode }),
+    fetchTolunaQuotas({ client, countryCode }),
+  ]);
+
+  const surveys = Array.isArray(json.Surveys) ? json.Surveys : [];
+  const survey = surveys.find((s: TolunaSurvey) => String(s.SurveyID ?? "") === surveyCode);
+
+  if (!survey) {
+    throw new Error("Selected Toluna survey was not found");
+  }
+
+  const quotas = Array.isArray(survey.Quotas) ? survey.Quotas : [];
+  const quota = quotas.find((q: TolunaQuota) => String(q.QuotaID ?? "") === quotaId);
+
+  if (!quota) {
+    throw new Error("Selected Toluna quota was not found");
+  }
+
+  const summaryRow =
+    surveyResult.items.find(
+      (item) => item.surveyCode === surveyCode && item.quotaId === quotaId
+    ) || null;
+
+  return {
+    clientId: client.id,
+    clientName: client.name,
+    countryCode,
+    surveyCode,
+    quotaId,
+    surveyName: String(survey.SurveyName ?? "").trim(),
+    quota:
+      summaryRow?.quota ||
+      formatNumber(quota.EstimatedCompletesRemaining ?? quota.CompletesRequired),
+    loi: summaryRow?.loi || formatNumber(survey.LOI),
+    ir: summaryRow?.ir || formatPercent(survey.IR),
+    cpi: summaryRow?.cpi || formatMoney(survey.Price?.Amount),
+    liveUrl: "",
+    testUrl: "",
+    targeting: flattenTolunaTargeting([quota]),
   };
 }
