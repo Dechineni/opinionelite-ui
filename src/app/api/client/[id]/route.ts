@@ -19,6 +19,11 @@ const CLIENT_SELECT = {
   apiUrl: true,
   apiKey: true,
   secretKey: true,
+  providerType: true,
+  memberApiUrl: true,
+  partnerGuid: true,
+  panelGuidEnUs: true,
+  panelGuidEnGb: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -85,6 +90,11 @@ export async function PATCH(
     apiUrl: b.apiUrl ?? null,
     apiKey: b.apiKey ?? null,
     secretKey: b.secretKey ?? null,
+    providerType: b.providerType ?? null,
+    memberApiUrl: b.memberApiUrl ?? null,
+    partnerGuid: b.partnerGuid ?? null,
+    panelGuidEnUs: b.panelGuidEnUs ?? null,
+    panelGuidEnGb: b.panelGuidEnGb ?? null,
   });
 
   try {

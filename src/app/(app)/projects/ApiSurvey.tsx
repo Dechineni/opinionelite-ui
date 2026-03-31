@@ -136,19 +136,11 @@ export default function ApiSurvey() {
   };
 
   const openSurveyDetails = (row: SurveyRow) => {
-    const selectedClient = clients.find((c) => c.id === selectedClientId);
-
     const qs = new URLSearchParams({
       clientId: selectedClientId,
-      clientName: selectedClient?.name || "",
       countryCode: selectedCountry,
       surveyCode: row.surveyCode,
       quotaId: row.quotaId,
-      surveyName: row.surveyName,
-      quota: row.quota,
-      loi: row.loi,
-      ir: row.ir,
-      cpi: row.cpi,
     });
 
     router.push(`/projects/new/apisurvey/details?${qs.toString()}`);

@@ -8,16 +8,21 @@ import { COUNTRIES } from "@/data/countries";
 
 type ClientDto = {
   id: string;
-  code: string; // e.g. C0001
+  code: string;
   name: string;
   contactPerson: string | null;
-  countryCode: string; // ISO-2
+  countryCode: string;
   email: string | null;
   contactNumber: string | null;
   website: string | null;
   apiUrl: string | null;
   apiKey: string | null;
   secretKey: string | null;
+  providerType: string | null;
+  memberApiUrl: string | null;
+  partnerGuid: string | null;
+  panelGuidEnUs: string | null;
+  panelGuidEnGb: string | null;
 };
 
 const Label = ({ children, required = false }: { children: React.ReactNode; required?: boolean }) => (
@@ -59,8 +64,6 @@ export default function EditClient({ clientId }: { clientId: string }) {
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // success dialog state
   const [successOpen, setSuccessOpen] = useState(false);
 
   const [form, setForm] = useState({
@@ -73,7 +76,12 @@ export default function EditClient({ clientId }: { clientId: string }) {
     apiUrl: "",
     apiKey: "",
     secretKey: "",
-    code: "", // read-only display
+    providerType: "",
+    memberApiUrl: "",
+    partnerGuid: "",
+    panelGuidEnUs: "",
+    panelGuidEnGb: "",
+    code: "",
   });
 
   const update = (k: keyof typeof form, v: any) => setForm((s) => ({ ...s, [k]: v }));
@@ -83,7 +91,6 @@ export default function EditClient({ clientId }: { clientId: string }) {
     []
   );
 
-  /* ---------------------------- fetch existing ---------------------------- */
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -105,6 +112,11 @@ export default function EditClient({ clientId }: { clientId: string }) {
           apiUrl: c.apiUrl ?? "",
           apiKey: c.apiKey ?? "",
           secretKey: c.secretKey ?? "",
+          providerType: c.providerType ?? "",
+          memberApiUrl: c.memberApiUrl ?? "",
+          partnerGuid: c.partnerGuid ?? "",
+          panelGuidEnUs: c.panelGuidEnUs ?? "",
+          panelGuidEnGb: c.panelGuidEnGb ?? "",
           code: c.code ?? "",
         });
       } catch (e: any) {
@@ -119,7 +131,6 @@ export default function EditClient({ clientId }: { clientId: string }) {
     };
   }, [clientId]);
 
-  /* ------------------------------- submit -------------------------------- */
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
@@ -138,6 +149,11 @@ export default function EditClient({ clientId }: { clientId: string }) {
           apiUrl: form.apiUrl || null,
           apiKey: form.apiKey || null,
           secretKey: form.secretKey || null,
+          providerType: form.providerType || null,
+          memberApiUrl: form.memberApiUrl || null,
+          partnerGuid: form.partnerGuid || null,
+          panelGuidEnUs: form.panelGuidEnUs || null,
+          panelGuidEnGb: form.panelGuidEnGb || null,
         }),
       });
       if (!res.ok) {
@@ -240,13 +256,23 @@ export default function EditClient({ clientId }: { clientId: string }) {
             />
           </Field>
 
+          <Field>
+            <Label>Integration Provider</Label>
+            <Input
+              type="text"
+              value={form.providerType}
+              onChange={(e) => update("providerType", e.target.value)}
+              placeholder="e.g. Toluna"
+            />
+          </Field>
+
           <Field className="xl:col-span-6">
             <Label>API URL</Label>
             <Input
               type="url"
               value={form.apiUrl}
               onChange={(e) => update("apiUrl", e.target.value)}
-              placeholder="https://api.example.com"
+              placeholder="https://external-sample-api.example.com"
             />
           </Field>
 
@@ -256,7 +282,7 @@ export default function EditClient({ clientId }: { clientId: string }) {
               type="text"
               value={form.apiKey}
               onChange={(e) => update("apiKey", e.target.value)}
-              placeholder="Enter API key"
+              placeholder="Enter API auth key"
             />
           </Field>
 
@@ -267,6 +293,46 @@ export default function EditClient({ clientId }: { clientId: string }) {
               value={form.secretKey}
               onChange={(e) => update("secretKey", e.target.value)}
               placeholder="Enter secret key"
+            />
+          </Field>
+
+          <Field className="xl:col-span-6">
+            <Label>Member API URL</Label>
+            <Input
+              type="url"
+              value={form.memberApiUrl}
+              onChange={(e) => update("memberApiUrl", e.target.value)}
+              placeholder="https://member-api.example.com"
+            />
+          </Field>
+
+          <Field>
+            <Label>Partner GUID</Label>
+            <Input
+              type="text"
+              value={form.partnerGuid}
+              onChange={(e) => update("partnerGuid", e.target.value)}
+              placeholder="Enter partner GUID"
+            />
+          </Field>
+
+          <Field className="xl:col-span-6">
+            <Label>Panel GUID (EN-US)</Label>
+            <Input
+              type="text"
+              value={form.panelGuidEnUs}
+              onChange={(e) => update("panelGuidEnUs", e.target.value)}
+              placeholder="Enter EN-US panel GUID"
+            />
+          </Field>
+
+          <Field className="xl:col-span-6">
+            <Label>Panel GUID (EN-GB)</Label>
+            <Input
+              type="text"
+              value={form.panelGuidEnGb}
+              onChange={(e) => update("panelGuidEnGb", e.target.value)}
+              placeholder="Enter EN-GB panel GUID"
             />
           </Field>
         </div>
@@ -296,7 +362,6 @@ export default function EditClient({ clientId }: { clientId: string }) {
         </div>
       </form>
 
-      {/* Success dialog */}
       {successOpen && (
         <div className="fixed inset-0 z-[100] grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true">
           <div className="w-full max-w-sm rounded-xl bg-white p-6 text-center shadow-xl">

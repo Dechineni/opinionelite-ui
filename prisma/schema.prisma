@@ -22,6 +22,13 @@ model Client {
   apiKey        String?
   secretKey     String?
 
+  // NEW: provider-specific support
+  providerType  String?
+  memberApiUrl  String?
+  partnerGuid   String?
+  panelGuidEnUs String?
+  panelGuidEnGb String?
+
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   projects      Project[]

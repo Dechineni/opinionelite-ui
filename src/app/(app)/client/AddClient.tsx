@@ -61,7 +61,13 @@ export default function AddClient() {
     apiUrl: "",
     apiKey: "",
     secretKey: "",
+    providerType: "",
+    memberApiUrl: "",
+    partnerGuid: "",
+    panelGuidEnUs: "",
+    panelGuidEnGb: "",
   });
+
   const update = (k: keyof typeof form, v: any) => setForm((s) => ({ ...s, [k]: v }));
 
   const COUNTRY_OPTS = useMemo(
@@ -87,15 +93,21 @@ export default function AddClient() {
           apiUrl: form.apiUrl || null,
           apiKey: form.apiKey || null,
           secretKey: form.secretKey || null,
+          providerType: form.providerType || null,
+          memberApiUrl: form.memberApiUrl || null,
+          partnerGuid: form.partnerGuid || null,
+          panelGuidEnUs: form.panelGuidEnUs || null,
+          panelGuidEnGb: form.panelGuidEnGb || null,
         }),
       });
+
       if (!res.ok) {
         const t = await res.text();
         throw new Error(t || `HTTP ${res.status}`);
       }
+
       const created = await res.json().catch(() => ({}));
 
-      // capture for dialog
       setCreatedName(created?.name ?? form.clientName);
       setCreatedCode(created?.code ?? null);
       setSuccessOpen(true);
@@ -179,13 +191,23 @@ export default function AddClient() {
             />
           </Field>
 
+          <Field>
+            <Label>Integration Provider</Label>
+            <Input
+              type="text"
+              value={form.providerType}
+              onChange={(e) => update("providerType", e.target.value)}
+              placeholder="e.g. Toluna"
+            />
+          </Field>
+
           <Field className="xl:col-span-6">
             <Label>API URL</Label>
             <Input
               type="url"
               value={form.apiUrl}
               onChange={(e) => update("apiUrl", e.target.value)}
-              placeholder="https://api.example.com"
+              placeholder="https://external-sample-api.example.com"
             />
           </Field>
 
@@ -195,7 +217,7 @@ export default function AddClient() {
               type="text"
               value={form.apiKey}
               onChange={(e) => update("apiKey", e.target.value)}
-              placeholder="Enter API key"
+              placeholder="Enter API auth key"
             />
           </Field>
 
@@ -206,6 +228,46 @@ export default function AddClient() {
               value={form.secretKey}
               onChange={(e) => update("secretKey", e.target.value)}
               placeholder="Enter secret key"
+            />
+          </Field>
+
+          <Field className="xl:col-span-6">
+            <Label>Member API URL</Label>
+            <Input
+              type="url"
+              value={form.memberApiUrl}
+              onChange={(e) => update("memberApiUrl", e.target.value)}
+              placeholder="https://member-api.example.com"
+            />
+          </Field>
+
+          <Field>
+            <Label>Partner GUID</Label>
+            <Input
+              type="text"
+              value={form.partnerGuid}
+              onChange={(e) => update("partnerGuid", e.target.value)}
+              placeholder="Enter partner GUID"
+            />
+          </Field>
+
+          <Field className="xl:col-span-6">
+            <Label>Panel GUID (EN-US)</Label>
+            <Input
+              type="text"
+              value={form.panelGuidEnUs}
+              onChange={(e) => update("panelGuidEnUs", e.target.value)}
+              placeholder="Enter EN-US panel GUID"
+            />
+          </Field>
+
+          <Field className="xl:col-span-6">
+            <Label>Panel GUID (EN-GB)</Label>
+            <Input
+              type="text"
+              value={form.panelGuidEnGb}
+              onChange={(e) => update("panelGuidEnGb", e.target.value)}
+              placeholder="Enter EN-GB panel GUID"
             />
           </Field>
         </div>
