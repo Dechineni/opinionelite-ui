@@ -174,30 +174,52 @@ async function fetchTolunaQuotas(args: {
 
 function flattenTolunaTargeting(quotas: TolunaQuota[] | undefined) {
   const out: Array<{ label: string; value: string }> = [];
+  const seen = new Set<string>();
   const qs = Array.isArray(quotas) ? quotas : [];
 
   for (const quota of qs) {
     const layers = Array.isArray(quota.Layers) ? quota.Layers : [];
+
     for (const layer of layers) {
       const subQuotas = Array.isArray(layer.SubQuotas) ? layer.SubQuotas : [];
+
       for (const sub of subQuotas) {
-        const label =
-          String(sub.QuestionText || "").trim() ||
-          String(layer.LayerName || "").trim() ||
-          "Targeting";
+        const questionText = String(sub.QuestionText || "").trim();
+        const layerName = String(layer.LayerName || "").trim();
 
         const answers = Array.isArray(sub.QuestionAnswers) ? sub.QuestionAnswers : [];
-        const value = answers
-          .map((a: TolunaQuestionAnswer) => String(a.AnswerText || "").trim())
-          .filter(Boolean)
-          .join(", ");
 
-        if (label || value) {
-          out.push({
-            label: label || "Targeting",
-            value: value || "-",
-          });
-        }
+        const answerTexts = answers
+          .map((a: TolunaQuestionAnswer) => String(a.AnswerText || "").trim())
+          .filter(Boolean);
+
+        const preCodes = answers
+          .flatMap((a: TolunaQuestionAnswer) =>
+            Array.isArray(a.PreCodes) ? a.PreCodes : []
+          )
+          .map((v: string) => String(v).trim())
+          .filter(Boolean);
+
+        const label = questionText || layerName;
+        const value =
+          answerTexts.length > 0
+            ? answerTexts.join(", ")
+            : preCodes.length > 0
+            ? preCodes.join(", ")
+            : "";
+
+        // skip noisy empty rows
+        if (!label && !value) continue;
+        if (!value) continue;
+
+        const key = `${label || "Targeting"}::${value}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        out.push({
+          label: label || "Targeting",
+          value,
+        });
       }
     }
   }
