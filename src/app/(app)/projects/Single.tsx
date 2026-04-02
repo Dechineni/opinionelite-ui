@@ -1,10 +1,10 @@
-"use client"; 
+"use client";
 export const runtime = 'edge';
 
 import React, { useMemo, useState, useEffect } from "react";
 import { COUNTRIES, getLanguagesForCountry } from "@/data/countries";
 import { useClientsLite } from "@/hooks/useClientsLite";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 /* ---------- small helpers ---------- */
 const toNum = (v: string) =>
@@ -41,16 +41,36 @@ function SuccessDialog({
   );
 }
 
+type ApiSurveySelection = {
+  id: string;
+  clientId: string;
+  providerType: string;
+  countryCode: string;
+  surveyCode: string;
+  quotaId: string;
+  surveyName: string;
+  quota: string | null;
+  loi: string | null;
+  ir: string | null;
+  cpi: string | null;
+  liveUrl: string | null;
+  testUrl: string | null;
+  targetingJson: string | null;
+  rawSurveyJson: string | null;
+  projectId: string | null;
+};
+
 export default function SingleProject() {
-  // Load clients
   const { clients, loading: clientsLoading, error: clientsError } =
     useClientsLite();
 
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const selectionId = (searchParams.get("selectionId") || "").trim();
 
   const [createdId, setCreatedId] = useState<string | null>(null);
+  const [loadingSelection, setLoadingSelection] = useState(false);
 
-  // form state
   const [form, setForm] = useState({
     clientId: "",
     projectName: "",
@@ -65,7 +85,7 @@ export default function SingleProject() {
     loi: "",
     ir: "",
     sampleSize: "",
-    clickQuota: "", // kept in state; field hidden
+    clickQuota: "",
 
     projectCpi: "",
     supplierCpi: "",
@@ -73,7 +93,6 @@ export default function SingleProject() {
     startDate: "",
     endDate: "",
 
-    // filters
     preScreen: false,
     exclude: false,
     geoLocation: false,
@@ -84,25 +103,74 @@ export default function SingleProject() {
     speeder: false,
     speederDepth: "",
 
-    // devices
     mobile: true,
     tablet: false,
     desktop: false,
   });
+
   const update = (k: keyof typeof form, v: any) =>
     setForm((s) => ({ ...s, [k]: v }));
 
-  // country → language options
   const LANGUAGE_OPTS = useMemo(
     () => getLanguagesForCountry(form.country),
     [form.country]
   );
+
   useEffect(() => {
     if (!form.language) return;
     const stillValid = LANGUAGE_OPTS.some((l) => l.code === form.language);
     if (!stillValid) update("language", "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.country, LANGUAGE_OPTS.length]);
+
+  useEffect(() => {
+    let alive = true;
+
+    if (!selectionId) return;
+
+    (async () => {
+      setLoadingSelection(true);
+      try {
+        const res = await fetch(`/api/api-survey-selection/${selectionId}`);
+        if (!res.ok) throw new Error(`Failed to load selection (${res.status})`);
+        const sel: ApiSurveySelection = await res.json();
+
+        if (!alive) return;
+
+        const today = new Date();
+        const after7 = new Date();
+        after7.setDate(today.getDate() + 7);
+
+        const yyyyMmDd = (d: Date) => d.toISOString().slice(0, 10);
+
+        setForm((prev) => ({
+          ...prev,
+          clientId: sel.clientId || prev.clientId,
+          projectName: sel.surveyName || prev.projectName,
+          country: sel.countryCode || prev.country,
+          loi: sel.loi || prev.loi,
+          ir: sel.ir ? String(sel.ir).replace("%", "") : prev.ir,
+          sampleSize: sel.quota || prev.sampleSize,
+          projectCpi: sel.cpi || prev.projectCpi,
+          supplierCpi: sel.cpi || prev.supplierCpi,
+          category: prev.category || "API Survey",
+          description:
+            prev.description ||
+            `Provider: ${sel.providerType}\nSurveyCode: ${sel.surveyCode}\nQuotaId: ${sel.quotaId}`,
+          startDate: prev.startDate || yyyyMmDd(today),
+          endDate: prev.endDate || yyyyMmDd(after7),
+        }));
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (alive) setLoadingSelection(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [selectionId]);
 
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -128,7 +196,7 @@ export default function SingleProject() {
         loi: toNum(form.loi),
         ir: toNum(form.ir),
         sampleSize: toNum(form.sampleSize),
-        clickQuota: toNum(form.clickQuota), // will be undefined (hidden field), which is fine
+        clickQuota: toNum(form.clickQuota),
 
         projectCpi: form.projectCpi === "" ? undefined : form.projectCpi,
         supplierCpi: form.supplierCpi === "" ? null : form.supplierCpi,
@@ -163,6 +231,16 @@ export default function SingleProject() {
       const created = await res.json();
       setCreatedId(created.id);
 
+      if (selectionId && created?.id) {
+        await fetch(`/api/api-survey-selection/${selectionId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId: created.id,
+          }),
+        });
+      }
+
       setSuccessOpen(true);
     } catch (e: any) {
       setErr(e?.message || "Save failed");
@@ -173,12 +251,18 @@ export default function SingleProject() {
 
   return (
     <>
-      {/* noValidate prevents native HTML5 popups like the email '@' check */}
       <form onSubmit={onSubmit} noValidate className="space-y-6">
         <h1 className="text-xl font-semibold">Single Project</h1>
 
+        {selectionId && (
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            {loadingSelection
+              ? "Loading API Survey selection..."
+              : "Form prefilled from API Survey selection. You can still edit the values before submitting."}
+          </div>
+        )}
+
         <div className="grid grid-cols-12 gap-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          {/* Client */}
           <div className="col-span-12 md:col-span-6 xl:col-span-4">
             <label className="mb-1 block text-xs font-medium">Client*</label>
             <select
@@ -201,7 +285,6 @@ export default function SingleProject() {
             )}
           </div>
 
-          {/* Name / Manager / Category */}
           <div className="col-span-12 md:col-span-6 xl:col-span-4">
             <label className="mb-1 block text-xs font-medium">
               Project Name*
@@ -228,7 +311,6 @@ export default function SingleProject() {
             />
           </div>
 
-          {/* Country / Language / Currency */}
           <div className="col-span-12 md:col-span-6 xl:col-span-4">
             <label className="mb-1 block text-xs font-medium">
               Project Country*
@@ -279,7 +361,6 @@ export default function SingleProject() {
             />
           </div>
 
-          {/* Numbers (Click Quota hidden) */}
           <div className="col-span-12 md:col-span-4">
             <label className="mb-1 block text-xs font-medium">
               LOI (minutes)*
@@ -315,9 +396,7 @@ export default function SingleProject() {
               required
             />
           </div>
-          {/* Click Quota field removed from the UI */}
 
-          {/* CPI */}
           <div className="col-span-12 md:col-span-6">
             <label className="mb-1 block text-xs font-medium">Project CPI*</label>
             <input
@@ -340,7 +419,6 @@ export default function SingleProject() {
             />
           </div>
 
-          {/* Dates */}
           <div className="col-span-12 md:col-span-6">
             <label className="mb-1 block text-xs font-medium">Start Date*</label>
             <input
@@ -362,7 +440,6 @@ export default function SingleProject() {
             />
           </div>
 
-          {/* toggles */}
           <div className="col-span-12 grid grid-cols-2 gap-3 md:grid-cols-4">
             {(
               [
@@ -389,7 +466,6 @@ export default function SingleProject() {
             ))}
           </div>
 
-          {/* depths */}
           <div className="col-span-12 md:col-span-6">
             <label className="mb-1 block text-xs font-medium">Unique IP depth</label>
             <input
@@ -435,7 +511,6 @@ export default function SingleProject() {
         </div>
       </form>
 
-      {/* success pop-up */}
       <SuccessDialog
         open={successOpen}
         onClose={() => {

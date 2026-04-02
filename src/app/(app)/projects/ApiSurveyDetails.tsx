@@ -187,7 +187,12 @@ export default function ApiSurveyDetails() {
             <div className="mt-6 flex justify-end">
               <button
                 type="button"
-                className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+                disabled={!selectionId || savingSelection}
+                onClick={() => {
+                  if (!selectionId) return;
+                  router.push(`/projects/new/single?selectionId=${selectionId}`);
+                }}
+                className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
               >
                 Launch
               </button>
