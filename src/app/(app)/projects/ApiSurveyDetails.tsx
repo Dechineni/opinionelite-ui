@@ -1,3 +1,4 @@
+// FILE: src/app/(app)/projects/ApiSurveyDetails.tsx
 "use client";
 export const runtime = "edge";
 
@@ -23,6 +24,8 @@ type SurveyDetail = {
   liveUrl: string;
   testUrl: string;
   targeting: TargetingItem[];
+  providerType?: string;
+  rawSurvey?: unknown;
 };
 
 const DetailRow = ({
@@ -48,8 +51,10 @@ export default function ApiSurveyDetails() {
   const quotaId = searchParams.get("quotaId") || "";
 
   const [loading, setLoading] = useState(true);
+  const [savingSelection, setSavingSelection] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<SurveyDetail | null>(null);
+  const [selectionId, setSelectionId] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -75,11 +80,44 @@ export default function ApiSurveyDetails() {
 
         if (!alive) return;
         setDetail(data);
+
+        setSavingSelection(true);
+        const saveRes = await fetch("/api/api-survey-selection", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clientId: data.clientId,
+            providerType: data.providerType || "",
+            countryCode: data.countryCode,
+            surveyCode: data.surveyCode,
+            quotaId: data.quotaId,
+            surveyName: data.surveyName,
+            quota: data.quota,
+            loi: data.loi,
+            ir: data.ir,
+            cpi: data.cpi,
+            liveUrl: data.liveUrl,
+            testUrl: data.testUrl,
+            targeting: data.targeting,
+            rawSurvey: data.rawSurvey ?? null,
+          }),
+        });
+
+        const saved = await saveRes.json().catch(() => ({}));
+        if (!saveRes.ok) {
+          throw new Error(saved?.error || `Failed to save API survey selection (${saveRes.status})`);
+        }
+
+        if (!alive) return;
+        setSelectionId(saved?.id || null);
       } catch (e: any) {
         if (!alive) return;
         setError(e?.message || "Failed to load survey details");
       } finally {
-        if (alive) setLoading(false);
+        if (alive) {
+          setSavingSelection(false);
+          setLoading(false);
+        }
       }
     })();
 
@@ -136,6 +174,14 @@ export default function ApiSurveyDetails() {
                   ))
                 )}
               </div>
+            </div>
+
+            <div className="mt-4 text-xs text-slate-500">
+              {savingSelection
+                ? "Saving API survey selection..."
+                : selectionId
+                ? `Saved selection: ${selectionId}`
+                : ""}
             </div>
 
             <div className="mt-6 flex justify-end">

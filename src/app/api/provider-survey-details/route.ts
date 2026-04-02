@@ -75,7 +75,11 @@ export async function GET(req: Request) {
           quotaId,
         });
 
-        return NextResponse.json(detail);
+        return NextResponse.json({
+          ...detail,
+          providerType,
+          rawSurvey: null,
+        });
       }
 
       default:
