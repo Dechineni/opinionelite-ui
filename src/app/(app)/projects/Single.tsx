@@ -515,7 +515,16 @@ export default function SingleProject() {
         open={successOpen}
         onClose={() => {
           setSuccessOpen(false);
-          if (createdId) router.push(`/projects/projectdetail?id=${createdId}`);
+          if (createdId) {
+            const from =
+              selectionId && selectionId.trim() !== ""
+                ? "apiprojectlist"
+                : "projectlist";
+
+            router.push(
+              `/projects/projectdetail?id=${createdId}&from=${encodeURIComponent(from)}`
+            );
+          }
         }}
         message="Project Created Successfully"
       />
