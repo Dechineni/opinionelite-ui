@@ -31,6 +31,11 @@ export async function GET(req: Request) {
   const pageSize = pageInt(searchParams.get('pageSize'), 10);
 
   const where: Prisma.ProjectWhereInput = {
+    // Exclude API-created projects from normal Project List
+    apiSurveySelection: {
+      is: null,
+    },
+
     ...(q
       ? {
           OR: [
@@ -45,14 +50,12 @@ export async function GET(req: Request) {
     ...(groupId ? { groupId } : {}),
   };
 
-  // 1) Base project list + total + status buckets
   const [itemsRaw, total, grouped] = await Promise.all([
     prisma.project.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * pageSize,
       take: pageSize,
-      // only pull what UI needs + client.name
       include: { client: { select: { name: true } } },
     }),
     prisma.project.count({ where }),
@@ -63,14 +66,12 @@ export async function GET(req: Request) {
     }),
   ]);
 
-  // 2) Aggregate redirect outcomes (C/T/Q/D) per project
   const projectIds = itemsRaw.map((p) => p.id);
 
   let outcomeGrouped: { projectId: string; outcome: RedirectOutcome; _count: { _all: number } }[] =
     [];
 
   if (projectIds.length > 0) {
-    // TypeScript is a bit strict on groupBy generics, so we cast the result.
     const groupedOutcomes = await prisma.supplierRedirectEvent.groupBy({
       by: ['projectId', 'outcome'] as const,
       where: { projectId: { in: projectIds } },
@@ -80,7 +81,6 @@ export async function GET(req: Request) {
     outcomeGrouped = groupedOutcomes as typeof outcomeGrouped;
   }
 
-  // Build map: projectId -> { c, t, q, d }
   const byProject: Record<string, { c: number; t: number; q: number; d: number }> = {};
   for (const g of outcomeGrouped) {
     const bucket = (byProject[g.projectId] ??= { c: 0, t: 0, q: 0, d: 0 });
@@ -98,12 +98,10 @@ export async function GET(req: Request) {
         bucket.d += g._count._all;
         break;
       default:
-        // QUALITY_TERM / SURVEY_CLOSE are not displayed in ProjectList
         break;
     }
   }
 
-  // 3) Flatten client name once & attach C/T/Q/D totals
   const items = itemsRaw.map(({ client, ...rest }) => {
     const totals = byProject[rest.id] ?? { c: 0, t: 0, q: 0, d: 0 };
     return {
@@ -116,7 +114,6 @@ export async function GET(req: Request) {
     };
   });
 
-  // 4) Build status buckets
   const statusCounts = Object.values(ProjectStatus).reduce<Record<ProjectStatus, number>>(
     (acc, s) => {
       acc[s] = 0;
@@ -135,10 +132,8 @@ export async function POST(req: Request) {
   const prisma = getPrisma();
   const raw = await req.json();
 
-  // strip accidental `code` so DB default is used
   const { code: _ignore, ...b } = raw;
 
-  // Validate required numeric fields
   const loi = Number(b.loi);
   const ir = Number(b.ir);
   const sampleSize = Number(b.sampleSize);
@@ -146,7 +141,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid LOI/IR/Sample Size' }, { status: 400 });
   }
 
-  // clickQuota defaults to sampleSize when omitted
   const clickQuota =
     b.clickQuota === undefined || b.clickQuota === null || b.clickQuota === ''
       ? sampleSize
@@ -155,7 +149,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid Click Quota' }, { status: 400 });
   }
 
-  // Decimals
   if (b.projectCpi === undefined || b.projectCpi === null || b.projectCpi === '') {
     return NextResponse.json({ error: 'Project CPI is required' }, { status: 400 });
   }
@@ -165,7 +158,6 @@ export async function POST(req: Request) {
       ? null
       : new Prisma.Decimal(b.supplierCpi);
 
-  // Dates
   if (!b.startDate || !b.endDate) {
     return NextResponse.json({ error: 'Start and End dates are required' }, { status: 400 });
   }

@@ -157,7 +157,7 @@ export default function ProjectList() {
                     <td className="px-4 py-3">{(page - 1) * pageSize + i + 1}</td>
                     <td className="px-4 py-3 font-semibold">
                       <a
-                       href={`/projects/projectdetail?id=${encodeURIComponent(r.id)}`}
+                       href={`/projects/projectdetail?id=${encodeURIComponent(r.id)}&from=projectlist`}
                        className="text-emerald-700 hover:underline font-semibold">
                        {r.code}
                       </a>

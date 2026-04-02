@@ -6,10 +6,9 @@ import { getPrisma } from "@/lib/prisma";
 import SurveyLinkPanel from "./SurveyLinkPanel";
 import SupplierMappingPanel from "./SupplierMappingPanel";
 import PrescreenPanel from "./PrescreenPanel";
-import SupplierMappedSummary from "./SupplierMappedSummary"; // ✅ new import
+import SupplierMappedSummary from "./SupplierMappedSummary";
 import ProjectStatusControl from "./ProjectStatusControl";
 
-/* helpers */
 function fmt(n: number | null | undefined, d = 2) {
   if (n === null || n === undefined) return "—";
   return Number(n).toFixed(d);
@@ -19,25 +18,21 @@ function dateStr(d: Date | string | null | undefined) {
   return new Date(d).toLocaleDateString();
 }
 
-/** Redirect links host */
 const THANKS_HOST = "https://opinion-elite.com";
 function buildThanksUrl(authCode: number) {
   return `${THANKS_HOST}/Thanks/Index?auth=${authCode}&rid=[pid]`;
 }
 
 export default async function ProjectDetail({
-
-
-  // In Next 15 RSC, this is a Promise and must be awaited.
   searchParams,
 }: {
-  searchParams: Promise<{ id?: string; tab?: string }>;
+  searchParams: Promise<{ id?: string; tab?: string; from?: string }>;
 }) {
   const prisma = getPrisma();
   const sp = await searchParams;
   const projectId = (sp.id ?? "").trim();
   const tab = (sp.tab ?? "detail").toLowerCase();
-  
+  const from = (sp.from ?? "projectlist").toLowerCase();
 
   if (!projectId) return redirect("/projects");
 
@@ -78,6 +73,11 @@ export default async function ProjectDetail({
     status,
   } = project;
 
+  const backHref =
+    from === "apiprojectlist"
+      ? "/projects/new/apiprojectlist"
+      : "/projects/new/projectlist";
+
   const Tab = ({
     href,
     active,
@@ -99,70 +99,78 @@ export default async function ProjectDetail({
   );
 
   const qid = encodeURIComponent(projectId);
+  const fromQs = encodeURIComponent(from);
   const preScreenstatus: "ACTIVE" | "CLOSED" =
-  status === "CLOSED" ? "CLOSED" : "ACTIVE";
+    status === "CLOSED" ? "CLOSED" : "ACTIVE";
 
   return (
     <div className="space-y-4">
-      {/* header */}
       <div className="space-y-2">
-  {/* HEADER ROW 1 */}
-<div className="flex items-center justify-between">
-  <div className="flex items-center gap-3">
-    <Link
-      href="/projects/new/projectlist"
-      className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-    >
-      ← Back
-    </Link>
-    <div className="text-lg font-semibold">
-      {code} : {name}
-    </div>
-  </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link
+              href={backHref}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+            >
+              ← Back
+            </Link>
+            <div className="text-lg font-semibold">
+              {code} : {name}
+            </div>
+          </div>
 
-  {/* Status dot + project info (RIGHT) */}
-  <div className="flex items-center gap-2">
-    <span
-      className={`h-3 w-3 rounded-full ${
-        status === "CLOSED" ? "bg-red-500" : "bg-emerald-500"
-      }`}
-    />
-    <span className="text-sm font-semibold text-slate-800">
-      {code} : {name}
-    </span>
-  </div>
-</div>
+          <div className="flex items-center gap-2">
+            <span
+              className={`h-3 w-3 rounded-full ${
+                status === "CLOSED" ? "bg-red-500" : "bg-emerald-500"
+              }`}
+            />
+            <span className="text-sm font-semibold text-slate-800">
+              {code} : {name}
+            </span>
+          </div>
+        </div>
 
-{/* HEADER ROW 2 */}
-<div className="flex items-center justify-between">
-  {/* Tabs LEFT */}
-  <div className="flex gap-2">
-    <Tab href={`/projects/projectdetail?id=${qid}&tab=detail`} active={tab === "detail"} color="bg-emerald-600">
-      Project Detail
-    </Tab>
-    <Tab href={`/projects/projectdetail?id=${qid}&tab=survey`} active={tab === "survey"}>
-      Survey Link
-    </Tab>
-    <Tab href={`/projects/projectdetail?id=${qid}&tab=supplier`} active={tab === "supplier"}>
-      Supplier Mapping
-    </Tab>
-    {preScreen && (
-      <Tab href={`/projects/projectdetail?id=${qid}&tab=prescreen`} active={tab === "prescreen"}>
-        Prescreen
-      </Tab>
-    )}
-  </div>
+        <div className="flex items-center justify-between">
+          <div className="flex gap-2">
+            <Tab
+              href={`/projects/projectdetail?id=${qid}&tab=detail&from=${fromQs}`}
+              active={tab === "detail"}
+              color="bg-emerald-600"
+            >
+              Project Detail
+            </Tab>
+            <Tab
+              href={`/projects/projectdetail?id=${qid}&tab=survey&from=${fromQs}`}
+              active={tab === "survey"}
+            >
+              Survey Link
+            </Tab>
+            <Tab
+              href={`/projects/projectdetail?id=${qid}&tab=supplier&from=${fromQs}`}
+              active={tab === "supplier"}
+            >
+              Supplier Mapping
+            </Tab>
+            {preScreen && (
+              <Tab
+                href={`/projects/projectdetail?id=${qid}&tab=prescreen&from=${fromQs}`}
+                active={tab === "prescreen"}
+              >
+                Prescreen
+              </Tab>
+            )}
+          </div>
 
-  {/* Dropdown + Update RIGHT */}
-  {tab !== "prescreen" && (
-  <ProjectStatusControl
-    projectId={projectId}
-    initialStatus={preScreenstatus}
-  />
-  )}
-</div>
+          {tab !== "prescreen" && (
+            <ProjectStatusControl
+              projectId={projectId}
+              initialStatus={preScreenstatus}
+            />
+          )}
+        </div>
       </div>
-      {/* content by tab */}
+
       {tab === "survey" ? (
         <SurveyLinkPanel projectId={projectId} />
       ) : tab === "supplier" ? (
@@ -225,10 +233,8 @@ export default async function ProjectDetail({
             </div>
           </div>
 
-          {/* Supplier Mapped between Device Filter and Redirect Links */}
           <SupplierMappedSummary projectId={projectId} />
 
-          {/* Redirect Links */}
           <div className="mt-8">
             <div className="mb-2 text-base font-semibold">Redirect Links</div>
             <div className="grid gap-3 text-sm">
