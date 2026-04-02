@@ -13,6 +13,11 @@ type ClientLite = {
   apiUrl: string | null;
   apiKey: string | null;
   secretKey: string | null;
+  providerType?: string | null;
+  memberApiUrl?: string | null;
+  partnerGuid?: string | null;
+  panelGuidEnUs?: string | null;
+  panelGuidEnGb?: string | null;
 };
 
 type SurveyRow = {
@@ -24,6 +29,8 @@ type SurveyRow = {
   ir: string;
   cpi: string;
 };
+
+const STORAGE_KEY = "api-survey-list-state-v1";
 
 const Label = ({
   children,
@@ -78,7 +85,21 @@ export default function ApiSurvey() {
         const data = await res.json();
         if (!alive) return;
 
-        setClients(Array.isArray(data?.items) ? data.items : []);
+        const loadedClients = Array.isArray(data?.items) ? data.items : [];
+        setClients(loadedClients);
+
+        // restore previous state if available
+        try {
+          const raw = sessionStorage.getItem(STORAGE_KEY);
+          if (raw) {
+            const saved = JSON.parse(raw);
+            setSelectedClientId(saved?.selectedClientId || "");
+            setSelectedCountry(saved?.selectedCountry || "");
+            setRows(Array.isArray(saved?.rows) ? saved.rows : []);
+          }
+        } catch {
+          // ignore bad session data
+        }
       } catch (e: any) {
         if (!alive) return;
         setError(e?.message || "Failed to load API-enabled clients");
@@ -91,6 +112,18 @@ export default function ApiSurvey() {
       alive = false;
     };
   }, []);
+
+  const persistState = (next: {
+    selectedClientId: string;
+    selectedCountry: string;
+    rows: SurveyRow[];
+  }) => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // ignore storage failures
+    }
+  };
 
   const onView = async () => {
     setError(null);
@@ -120,7 +153,14 @@ export default function ApiSurvey() {
         throw new Error(data?.error || `Failed to load surveys (${res.status})`);
       }
 
-      setRows(Array.isArray(data?.items) ? data.items : []);
+      const nextRows = Array.isArray(data?.items) ? data.items : [];
+      setRows(nextRows);
+
+      persistState({
+        selectedClientId,
+        selectedCountry,
+        rows: nextRows,
+      });
     } catch (e: any) {
       setError(e?.message || "Failed to load surveys");
     } finally {
@@ -133,9 +173,22 @@ export default function ApiSurvey() {
     setSelectedCountry("");
     setRows([]);
     setError(null);
+
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore
+    }
   };
 
   const openSurveyDetails = (row: SurveyRow) => {
+    // keep current list state before navigation
+    persistState({
+      selectedClientId,
+      selectedCountry,
+      rows,
+    });
+
     const qs = new URLSearchParams({
       clientId: selectedClientId,
       countryCode: selectedCountry,
