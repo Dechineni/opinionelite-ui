@@ -45,6 +45,7 @@ function buildMenu(role: Role): RootItem[] {
       icon: FileText,
       children: [
         { key: "project-list", label: "Project List", href: "/projects/new/projectlist" },
+        { key: "project-api-list", label: "API Project List", href: "/projects/new/apiprojectlist" },
         {
           key: "project-create",
           label: "Create Project",
