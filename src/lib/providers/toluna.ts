@@ -257,6 +257,19 @@ async function fetchTolunaReferenceBundle(args: {
 
   const rows: RefQuestionAnswerRow[] = Array.isArray(json) ? json : [];
 
+  console.log("Toluna ref rows count:", rows.length);
+
+const ageRow = rows.find(
+  (r) => String(r?.TranslatedQuestion?.QuestionID ?? "") === "1001538"
+);
+console.log("Toluna ref age row found:", !!ageRow);
+
+const has2006360 = rows.some((r) =>
+  Array.isArray(r?.TranslatedAnswers) &&
+  r.TranslatedAnswers.some((a) => String(a?.AnswerID ?? "") === "2006360")
+);
+console.log("Toluna ref answer 2006360 found:", has2006360);
+
   const questionsById = new Map<string, string>();
   const answersById = new Map<string, string>();
 
@@ -413,7 +426,10 @@ export async function getTolunaSurveyDetail(args: {
   const [surveyResult, json, refBundle] = await Promise.all([
     getTolunaSurveys({ client, countryCode }),
     fetchTolunaQuotas({ client, countryCode }),
-    fetchTolunaReferenceBundle({ client, countryCode }).catch(() => null),
+    fetchTolunaReferenceBundle({ client, countryCode }).catch((err) => {
+      console.error("Toluna reference bundle error:", err);
+      return null;
+    }),
   ]);
 
   const surveys = Array.isArray(json.Surveys) ? json.Surveys : [];
