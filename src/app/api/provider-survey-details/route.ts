@@ -50,6 +50,8 @@ export async function GET(req: Request) {
         partnerGuid: true,
         panelGuidEnUs: true,
         panelGuidEnGb: true,
+        refDataUrl: true,
+        partnerAuthKey: true,
       },
     });
 
@@ -78,7 +80,7 @@ export async function GET(req: Request) {
         return NextResponse.json({
           ...detail,
           providerType,
-          rawSurvey: null,
+          rawSurvey: detail.rawSurvey ?? null,
         });
       }
 
