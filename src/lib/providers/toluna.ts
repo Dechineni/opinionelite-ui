@@ -29,21 +29,28 @@ export type ProviderSurveyDetail = {
   liveUrl: string;
   testUrl: string;
   targeting: Array<{ label: string; value: string }>;
+  rawSurvey?: unknown;
 };
 
 export type TolunaClientConfig = {
   id: string;
   code: string;
   name: string;
-  apiUrl: string | null; // Toluna External Sample base URL
-  apiKey: string | null; // Toluna API_AUTH_KEY
+  apiUrl: string | null;          // Toluna External Sample base URL
+  apiKey: string | null;          // Toluna API_AUTH_KEY
+  memberApiUrl?: string | null;   // Toluna Member Management base URL
+  refDataUrl?: string | null;     // Toluna Reference Data base URL
+  partnerAuthKey?: string | null; // Toluna PARTNER_AUTH_KEY
   panelGuidEnUs: string | null;
   panelGuidEnGb: string | null;
 };
 
 type TolunaQuestionAnswer = {
+  AnswerID?: number;
+  AnswerIds?: number[];
   PreCodes?: string[];
   AnswerText?: string;
+  AnswerValue?: string;
 };
 
 type TolunaSubQuota = {
@@ -84,6 +91,31 @@ type TolunaGetQuotasResponse = {
   ResultCode?: number;
 };
 
+type RefQuestionAnswerRow = {
+  IsRoutable?: boolean;
+  InternalName?: string;
+  TranslatedQuestion?: {
+    QuestionID?: number;
+    CultureID?: number;
+    DisplayNameTranslation?: string;
+  } | null;
+  ChildQuestions?: Array<{
+    QuestionID?: number;
+    CultureID?: number;
+    DisplayNameTranslation?: string;
+  }> | null;
+  TranslatedAnswers?: Array<{
+    AnswerID?: number;
+    Translation?: string;
+    AnswerInternalName?: string;
+  }> | null;
+};
+
+type RefBundle = {
+  questionsById: Map<string, string>;
+  answersById: Map<string, string>;
+};
+
 function resolveTolunaPanelGuid(
   countryCode: string,
   client: Pick<TolunaClientConfig, "panelGuidEnUs" | "panelGuidEnGb">
@@ -94,6 +126,19 @@ function resolveTolunaPanelGuid(
   if (cc === "GB" || cc === "UK") return client.panelGuidEnGb || "";
 
   return "";
+}
+
+function resolveTolunaCultureId(countryCode: string) {
+  const cc = String(countryCode || "").trim().toUpperCase();
+
+  // Toluna docs example uses CultureID 1 and 5, and your sandbox uses EN-US / EN-GB.
+  // Common Toluna mapping in sandbox:
+  // EN-US => 1
+  // EN-GB => 5
+  if (cc === "US") return 1;
+  if (cc === "GB" || cc === "UK") return 5;
+
+  return null;
 }
 
 function formatNumber(value: unknown) {
@@ -109,6 +154,32 @@ function formatPercent(value: unknown) {
 function formatMoney(value: unknown) {
   const n = Number(value);
   return Number.isFinite(n) ? n.toFixed(2) : "";
+}
+
+async function fetchJson(url: string, init: RequestInit) {
+  const res = await fetch(url, {
+    ...init,
+    cache: "no-store",
+  });
+
+  const rawText = await res.text();
+  let json: any = null;
+
+  try {
+    json = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    throw new Error(`Toluna response was not valid JSON: ${rawText?.slice(0, 300) || ""}`);
+  }
+
+  if (!res.ok) {
+    const detail =
+      typeof json === "object" && json
+        ? JSON.stringify(json)
+        : rawText || `HTTP ${res.status}`;
+    throw new Error(`Toluna request failed (${res.status}): ${detail}`);
+  }
+
+  return json;
 }
 
 async function fetchTolunaQuotas(args: {
@@ -143,36 +214,82 @@ async function fetchTolunaQuotas(args: {
     panelGuid
   )}/Quotas?includeRoutables=true`;
 
-  const res = await fetch(quotasUrl, {
+  return (await fetchJson(quotasUrl, {
     method: "GET",
     headers: {
       API_AUTH_KEY: client.apiKey,
       Accept: "application/json",
     },
-    cache: "no-store",
-  });
-
-  const rawText = await res.text();
-  let json: TolunaGetQuotasResponse | null = null;
-
-  try {
-    json = rawText ? JSON.parse(rawText) : null;
-  } catch {
-    throw new Error(`Toluna response was not valid JSON: ${rawText?.slice(0, 300) || ""}`);
-  }
-
-  if (!res.ok) {
-    const detail =
-      typeof json === "object" && json
-        ? JSON.stringify(json)
-        : rawText || `HTTP ${res.status}`;
-    throw new Error(`Toluna Get Quotas failed (${res.status}): ${detail}`);
-  }
-
-  return json || {};
+  })) as TolunaGetQuotasResponse;
 }
 
-function flattenTolunaTargeting(quotas: TolunaQuota[] | undefined) {
+async function fetchTolunaReferenceBundle(args: {
+  client: TolunaClientConfig;
+  countryCode: string;
+}): Promise<RefBundle | null> {
+  const { client } = args;
+  const countryCode = String(args.countryCode || "").trim().toUpperCase();
+
+  if (!client.refDataUrl || !client.partnerAuthKey) {
+    return null;
+  }
+
+  const cultureId = resolveTolunaCultureId(countryCode);
+  if (!cultureId) {
+    return null;
+  }
+
+  const baseUrl = client.refDataUrl.replace(/\/+$/, "");
+  const url = `${baseUrl}/IPUtilityService/ReferenceData/QuestionsAndAnswersData`;
+
+  const body = {
+    CultureIDs: [cultureId],
+    CategoryIDs: [],
+    IncludeComputed: true,
+    IncludeRoutables: true,
+    IncludeDemographics: true,
+  };
+
+  const json = await fetchJson(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      PARTNER_AUTH_KEY: client.partnerAuthKey,
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  const rows: RefQuestionAnswerRow[] = Array.isArray(json) ? json : [];
+
+  const questionsById = new Map<string, string>();
+  const answersById = new Map<string, string>();
+
+  for (const row of rows) {
+    const qId = String(row.TranslatedQuestion?.QuestionID ?? "").trim();
+    const qText = String(row.TranslatedQuestion?.DisplayNameTranslation ?? "").trim();
+
+    if (qId && qText) {
+      questionsById.set(qId, qText);
+    }
+
+    const answers = Array.isArray(row.TranslatedAnswers) ? row.TranslatedAnswers : [];
+    for (const ans of answers) {
+      const aId = String(ans.AnswerID ?? "").trim();
+      const aText = String(ans.Translation ?? ans.AnswerInternalName ?? "").trim();
+      if (aId && aText) {
+        answersById.set(aId, aText);
+      }
+    }
+  }
+
+  return { questionsById, answersById };
+}
+
+function flattenTolunaTargeting(
+  quotas: TolunaQuota[] | undefined,
+  refBundle?: RefBundle | null
+) {
   const out: Array<{ label: string; value: string }> = [];
   const seen = new Set<string>();
   const qs = Array.isArray(quotas) ? quotas : [];
@@ -184,13 +301,34 @@ function flattenTolunaTargeting(quotas: TolunaQuota[] | undefined) {
       const subQuotas = Array.isArray(layer.SubQuotas) ? layer.SubQuotas : [];
 
       for (const sub of subQuotas) {
+        const questionId = String(sub.QuestionID ?? "").trim();
+        const mappedQuestion = questionId
+          ? refBundle?.questionsById.get(questionId) || ""
+          : "";
+
         const questionText = String(sub.QuestionText || "").trim();
         const layerName = String(layer.LayerName || "").trim();
 
         const answers = Array.isArray(sub.QuestionAnswers) ? sub.QuestionAnswers : [];
 
-        const answerTexts = answers
-          .map((a: TolunaQuestionAnswer) => String(a.AnswerText || "").trim())
+        const directTexts = answers
+          .map((a: TolunaQuestionAnswer) =>
+            String(a.AnswerText || a.AnswerValue || "").trim()
+          )
+          .filter(Boolean);
+
+        const answerIds = answers
+          .flatMap((a: TolunaQuestionAnswer) => {
+            const ids: string[] = [];
+            if (a.AnswerID !== undefined) ids.push(String(a.AnswerID));
+            if (Array.isArray(a.AnswerIds)) ids.push(...a.AnswerIds.map((v) => String(v)));
+            return ids;
+          })
+          .map((v) => v.trim())
+          .filter(Boolean);
+
+        const mappedAnswers = answerIds
+          .map((id) => refBundle?.answersById.get(id) || "")
           .filter(Boolean);
 
         const preCodes = answers
@@ -200,15 +338,16 @@ function flattenTolunaTargeting(quotas: TolunaQuota[] | undefined) {
           .map((v: string) => String(v).trim())
           .filter(Boolean);
 
-        const label = questionText || layerName;
+        const label = mappedQuestion || questionText || layerName;
         const value =
-          answerTexts.length > 0
-            ? answerTexts.join(", ")
+          directTexts.length > 0
+            ? directTexts.join(", ")
+            : mappedAnswers.length > 0
+            ? mappedAnswers.join(", ")
             : preCodes.length > 0
             ? preCodes.join(", ")
             : "";
 
-        // skip noisy empty rows
         if (!label && !value) continue;
         if (!value) continue;
 
@@ -294,9 +433,10 @@ export async function getTolunaSurveyDetail(args: {
   const surveyCode = String(args.surveyCode || "").trim();
   const quotaId = String(args.quotaId || "").trim();
 
-  const [surveyResult, json] = await Promise.all([
+  const [surveyResult, json, refBundle] = await Promise.all([
     getTolunaSurveys({ client, countryCode }),
     fetchTolunaQuotas({ client, countryCode }),
+    fetchTolunaReferenceBundle({ client, countryCode }).catch(() => null),
   ]);
 
   const surveys = Array.isArray(json.Surveys) ? json.Surveys : [];
@@ -333,6 +473,7 @@ export async function getTolunaSurveyDetail(args: {
     cpi: summaryRow?.cpi || formatMoney(survey.Price?.Amount),
     liveUrl: "",
     testUrl: "",
-    targeting: flattenTolunaTargeting([quota]),
+    targeting: flattenTolunaTargeting([quota], refBundle),
+    rawSurvey: survey,
   };
 }
