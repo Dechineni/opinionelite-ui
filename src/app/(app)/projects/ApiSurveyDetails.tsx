@@ -2,7 +2,7 @@
 "use client";
 export const runtime = "edge";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 type TargetingItem = {
@@ -28,6 +28,17 @@ type SurveyDetail = {
   rawSurvey?: unknown;
 };
 
+type DebugQuotaShape = {
+  surveyId: string;
+  quotaId: string;
+  layersCount: number;
+  subQuotaCount: number;
+  questionIdCount: number;
+  answerTextCount: number;
+  answerIdCount: number;
+  preCodeCount: number;
+};
+
 const DetailRow = ({
   label,
   value,
@@ -40,6 +51,61 @@ const DetailRow = ({
     <div className="col-span-12 md:col-span-9 text-slate-800 break-all">{value || "-"}</div>
   </div>
 );
+
+function buildQuotaDebug(rawSurvey: unknown, currentQuotaId: string): DebugQuotaShape | null {
+  if (!rawSurvey || typeof rawSurvey !== "object") return null;
+
+  const survey: any = rawSurvey;
+  const quotas = Array.isArray(survey?.Quotas) ? survey.Quotas : [];
+  const quota = quotas.find((q: any) => String(q?.QuotaID ?? "") === String(currentQuotaId));
+  if (!quota) return null;
+
+  const layers = Array.isArray(quota?.Layers) ? quota.Layers : [];
+
+  let subQuotaCount = 0;
+  let questionIdCount = 0;
+  let answerTextCount = 0;
+  let answerIdCount = 0;
+  let preCodeCount = 0;
+
+  for (const layer of layers) {
+    const subQuotas = Array.isArray(layer?.SubQuotas) ? layer.SubQuotas : [];
+    subQuotaCount += subQuotas.length;
+
+    for (const sub of subQuotas) {
+      if (sub?.QuestionID !== undefined && sub?.QuestionID !== null && String(sub.QuestionID).trim() !== "") {
+        questionIdCount += 1;
+      }
+
+      const answers = Array.isArray(sub?.QuestionAnswers) ? sub.QuestionAnswers : [];
+      for (const ans of answers) {
+        if (String(ans?.AnswerText ?? ans?.AnswerValue ?? "").trim()) {
+          answerTextCount += 1;
+        }
+        if (ans?.AnswerID !== undefined && ans?.AnswerID !== null) {
+          answerIdCount += 1;
+        }
+        if (Array.isArray(ans?.AnswerIds)) {
+          answerIdCount += ans.AnswerIds.filter((v: any) => v !== undefined && v !== null && String(v).trim() !== "").length;
+        }
+        if (Array.isArray(ans?.PreCodes)) {
+          preCodeCount += ans.PreCodes.filter((v: any) => String(v ?? "").trim() !== "").length;
+        }
+      }
+    }
+  }
+
+  return {
+    surveyId: String(survey?.SurveyID ?? ""),
+    quotaId: String(quota?.QuotaID ?? ""),
+    layersCount: layers.length,
+    subQuotaCount,
+    questionIdCount,
+    answerTextCount,
+    answerIdCount,
+    preCodeCount,
+  };
+}
 
 export default function ApiSurveyDetails() {
   const router = useRouter();
@@ -55,6 +121,7 @@ export default function ApiSurveyDetails() {
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<SurveyDetail | null>(null);
   const [selectionId, setSelectionId] = useState<string | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -126,6 +193,11 @@ export default function ApiSurveyDetails() {
     };
   }, [clientId, countryCode, surveyCode, quotaId]);
 
+  const debugQuota = useMemo(
+    () => buildQuotaDebug(detail?.rawSurvey, quotaId),
+    [detail?.rawSurvey, quotaId]
+  );
+
   return (
     <div className="space-y-4">
       <button
@@ -196,6 +268,58 @@ export default function ApiSurveyDetails() {
               >
                 Launch
               </button>
+            </div>
+
+            {/* Temporary debug block */}
+            <div className="mt-8 border-t border-slate-200 pt-6">
+              <button
+                type="button"
+                onClick={() => setShowDebug((v) => !v)}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                {showDebug ? "Hide Debug Targeting" : "Show Debug Targeting"}
+              </button>
+
+              {showDebug && (
+                <div className="mt-4 space-y-4">
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                    Use this section only for verification. It helps us confirm whether the selected quota
+                    actually contains targeting data or whether the mapping still needs adjustment.
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                    <div><span className="font-semibold">SurveyCode:</span> {surveyCode}</div>
+                    <div><span className="font-semibold">QuotaId:</span> {quotaId}</div>
+                    <div><span className="font-semibold">Mapped targeting rows:</span> {detail.targeting.length}</div>
+                    <div><span className="font-semibold">Has rawSurvey:</span> {detail.rawSurvey ? "Yes" : "No"}</div>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
+                    <div className="mb-2 font-semibold text-slate-700">Quota structure summary</div>
+                    {debugQuota ? (
+                      <div className="space-y-1 text-slate-800">
+                        <div><span className="font-semibold">SurveyID:</span> {debugQuota.surveyId || "-"}</div>
+                        <div><span className="font-semibold">QuotaID:</span> {debugQuota.quotaId || "-"}</div>
+                        <div><span className="font-semibold">Layers count:</span> {debugQuota.layersCount}</div>
+                        <div><span className="font-semibold">SubQuotas count:</span> {debugQuota.subQuotaCount}</div>
+                        <div><span className="font-semibold">QuestionID count:</span> {debugQuota.questionIdCount}</div>
+                        <div><span className="font-semibold">Answer text/value count:</span> {debugQuota.answerTextCount}</div>
+                        <div><span className="font-semibold">Answer ID count:</span> {debugQuota.answerIdCount}</div>
+                        <div><span className="font-semibold">PreCodes count:</span> {debugQuota.preCodeCount}</div>
+                      </div>
+                    ) : (
+                      <div className="text-slate-500">Could not locate the selected quota in rawSurvey.</div>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
+                    <div className="mb-2 font-semibold text-slate-700">Raw survey JSON</div>
+                    <pre className="max-h-[500px] overflow-auto rounded-md bg-slate-900 p-4 text-xs text-slate-100 whitespace-pre-wrap break-words">
+{JSON.stringify(detail.rawSurvey ?? null, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
