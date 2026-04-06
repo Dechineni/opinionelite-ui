@@ -1,4 +1,7 @@
 // FILE: src/lib/providers/toluna.ts
+
+console.log("Toluna provider file version marker: REF_POST_V2");
+
 export type ProviderSurveyRow = {
   surveyCode: string;
   quotaId: string;
@@ -244,6 +247,8 @@ async function fetchTolunaReferenceBundle(args: {
     IncludeRoutables: true,
     IncludeDemographics: true,
   };
+
+  console.log("Toluna ref method check:", "POST", url);
 
   const json = await fetchJson(url, {
     method: "POST",
