@@ -6,7 +6,6 @@ import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { COUNTRIES } from "@/data/countries";
 
-/* ------------------------------ tiny UI bits ------------------------------ */
 const Label = ({ children, required = false }: { children: React.ReactNode; required?: boolean }) => (
   <label className="mb-1 block text-xs font-medium text-slate-700">
     {children}
@@ -40,13 +39,11 @@ const Select = (props: React.SelectHTMLAttributes<HTMLSelectElement>) => (
   />
 );
 
-/* ------------------------------- component ------------------------------- */
 export default function AddClient() {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // success dialog
   const [successOpen, setSuccessOpen] = useState(false);
   const [createdName, setCreatedName] = useState<string | null>(null);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
@@ -66,6 +63,8 @@ export default function AddClient() {
     partnerGuid: "",
     panelGuidEnUs: "",
     panelGuidEnGb: "",
+    refDataUrl: "",
+    partnerAuthKey: "",
   });
 
   const update = (k: keyof typeof form, v: any) => setForm((s) => ({ ...s, [k]: v }));
@@ -98,6 +97,8 @@ export default function AddClient() {
           partnerGuid: form.partnerGuid || null,
           panelGuidEnUs: form.panelGuidEnUs || null,
           panelGuidEnGb: form.panelGuidEnGb || null,
+          refDataUrl: form.refDataUrl || null,
+          partnerAuthKey: form.partnerAuthKey || null,
         }),
       });
 
@@ -107,7 +108,6 @@ export default function AddClient() {
       }
 
       const created = await res.json().catch(() => ({}));
-
       setCreatedName(created?.name ?? form.clientName);
       setCreatedCode(created?.code ?? null);
       setSuccessOpen(true);
@@ -132,63 +132,37 @@ export default function AddClient() {
         <div className="grid grid-cols-12 gap-6">
           <Field>
             <Label required>Client Name</Label>
-            <Input
-              value={form.clientName}
-              onChange={(e) => update("clientName", e.target.value)}
-              required
-            />
+            <Input value={form.clientName} onChange={(e) => update("clientName", e.target.value)} required />
           </Field>
 
           <Field>
             <Label required>Contact Person</Label>
-            <Input
-              value={form.contactPerson}
-              onChange={(e) => update("contactPerson", e.target.value)}
-              required
-            />
+            <Input value={form.contactPerson} onChange={(e) => update("contactPerson", e.target.value)} required />
           </Field>
 
           <Field>
             <Label required>Country</Label>
-            <Select
-              value={form.country}
-              onChange={(e) => update("country", e.target.value)}
-              required
-            >
+            <Select value={form.country} onChange={(e) => update("country", e.target.value)} required>
               <option value="">-- Select Country --</option>
               {COUNTRY_OPTS.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.name}
-                </option>
+                <option key={c.code} value={c.code}>{c.name}</option>
               ))}
             </Select>
           </Field>
 
           <Field>
             <Label>Email ID</Label>
-            <Input
-              type="email"
-              value={form.email}
-              onChange={(e) => update("email", e.target.value)}
-            />
+            <Input type="email" value={form.email} onChange={(e) => update("email", e.target.value)} />
           </Field>
 
           <Field>
             <Label>Contact Number</Label>
-            <Input
-              type="tel"
-              value={form.contactNumber}
-              onChange={(e) => update("contactNumber", e.target.value)}
-            />
+            <Input type="tel" value={form.contactNumber} onChange={(e) => update("contactNumber", e.target.value)} />
           </Field>
 
           <Field>
             <Label>Website URL</Label>
-            <Input
-              type="url"
-              value={form.website}
-              onChange={(e) => update("website", e.target.value)}
-            />
+            <Input type="url" value={form.website} onChange={(e) => update("website", e.target.value)} />
           </Field>
 
           <Field>
@@ -197,27 +171,27 @@ export default function AddClient() {
               type="text"
               value={form.providerType}
               onChange={(e) => update("providerType", e.target.value)}
-              placeholder="e.g. Toluna"
+              placeholder="e.g. toluna"
             />
           </Field>
 
           <Field className="xl:col-span-6">
-            <Label>API URL</Label>
+            <Label>External Sample API URL</Label>
             <Input
               type="url"
               value={form.apiUrl}
               onChange={(e) => update("apiUrl", e.target.value)}
-              placeholder="https://external-sample-api.example.com"
+              placeholder="https://training.ups.toluna.com"
             />
           </Field>
 
           <Field>
-            <Label>API Key</Label>
+            <Label>API Auth Key</Label>
             <Input
               type="text"
               value={form.apiKey}
               onChange={(e) => update("apiKey", e.target.value)}
-              placeholder="Enter API auth key"
+              placeholder="Enter API_AUTH_KEY"
             />
           </Field>
 
@@ -237,7 +211,27 @@ export default function AddClient() {
               type="url"
               value={form.memberApiUrl}
               onChange={(e) => update("memberApiUrl", e.target.value)}
-              placeholder="https://member-api.example.com"
+              placeholder="https://training.ups.toluna.com"
+            />
+          </Field>
+
+          <Field className="xl:col-span-6">
+            <Label>Reference Data API URL</Label>
+            <Input
+              type="url"
+              value={form.refDataUrl}
+              onChange={(e) => update("refDataUrl", e.target.value)}
+              placeholder="https://training.ups.toluna.com"
+            />
+          </Field>
+
+          <Field>
+            <Label>Partner Auth Key</Label>
+            <Input
+              type="text"
+              value={form.partnerAuthKey}
+              onChange={(e) => update("partnerAuthKey", e.target.value)}
+              placeholder="Enter PARTNER_AUTH_KEY"
             />
           </Field>
 
@@ -247,7 +241,7 @@ export default function AddClient() {
               type="text"
               value={form.partnerGuid}
               onChange={(e) => update("partnerGuid", e.target.value)}
-              placeholder="Enter partner GUID"
+              placeholder="Sandbox: use Culture GUID as confirmed by Toluna"
             />
           </Field>
 
@@ -257,7 +251,7 @@ export default function AddClient() {
               type="text"
               value={form.panelGuidEnUs}
               onChange={(e) => update("panelGuidEnUs", e.target.value)}
-              placeholder="Enter EN-US panel GUID"
+              placeholder="Enter EN-US / Culture GUID"
             />
           </Field>
 
@@ -267,7 +261,7 @@ export default function AddClient() {
               type="text"
               value={form.panelGuidEnGb}
               onChange={(e) => update("panelGuidEnGb", e.target.value)}
-              placeholder="Enter EN-GB panel GUID"
+              placeholder="Enter EN-GB / Culture GUID"
             />
           </Field>
         </div>
@@ -297,17 +291,10 @@ export default function AddClient() {
         </div>
       </form>
 
-      {/* -------- Success Dialog -------- */}
       {successOpen && (
-        <div
-          className="fixed inset-0 z-[100] grid place-items-center bg-black/40 p-4"
-          role="dialog"
-          aria-modal="true"
-        >
+        <div className="fixed inset-0 z-[100] grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true">
           <div className="w-full max-w-sm rounded-xl bg-white p-6 text-center shadow-xl">
-            <div className="mb-3 text-lg font-semibold text-slate-900">
-              Client created successfully!
-            </div>
+            <div className="mb-3 text-lg font-semibold text-slate-900">Client created successfully!</div>
             {createdName && (
               <div className="mb-2 text-sm text-slate-700">
                 <span className="font-medium">{createdName}</span>

@@ -29,6 +29,9 @@ model Client {
   panelGuidEnUs String?
   panelGuidEnGb String?
 
+  refDataUrl     String?
+  partnerAuthKey String?
+
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   projects      Project[]

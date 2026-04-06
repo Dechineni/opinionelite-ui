@@ -24,6 +24,8 @@ const CLIENT_SELECT = {
   partnerGuid: true,
   panelGuidEnUs: true,
   panelGuidEnGb: true,
+  refDataUrl: true,
+  partnerAuthKey: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -95,6 +97,8 @@ export async function PATCH(
     partnerGuid: b.partnerGuid ?? null,
     panelGuidEnUs: b.panelGuidEnUs ?? null,
     panelGuidEnGb: b.panelGuidEnGb ?? null,
+    refDataUrl: b.refDataUrl ?? null,
+    partnerAuthKey: b.partnerAuthKey ?? null,
   });
 
   try {

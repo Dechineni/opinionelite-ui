@@ -74,6 +74,8 @@ export async function GET(req: Request) {
             partnerGuid: true,
             panelGuidEnUs: true,
             panelGuidEnGb: true,
+            refDataUrl: true,
+            partnerAuthKey: true,
           },
           skip: (page - 1) * pageSize,
           take: pageSize,
@@ -107,6 +109,8 @@ export async function GET(req: Request) {
           partnerGuid: true,
           panelGuidEnUs: true,
           panelGuidEnGb: true,
+          refDataUrl: true,
+          partnerAuthKey: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -151,6 +155,8 @@ export async function POST(req: Request) {
         partnerGuid: b.partnerGuid ?? null,
         panelGuidEnUs: b.panelGuidEnUs ?? null,
         panelGuidEnGb: b.panelGuidEnGb ?? null,
+        refDataUrl: b.refDataUrl ?? null,
+        partnerAuthKey: b.partnerAuthKey ?? null,
       },
     });
 
