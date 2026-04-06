@@ -36,30 +36,31 @@ export type TolunaClientConfig = {
   id: string;
   code: string;
   name: string;
-  apiUrl: string | null;          // Toluna External Sample base URL
-  apiKey: string | null;          // Toluna API_AUTH_KEY
-  memberApiUrl?: string | null;   // Toluna Member Management base URL
-  refDataUrl?: string | null;     // Toluna Reference Data base URL
-  partnerAuthKey?: string | null; // Toluna PARTNER_AUTH_KEY
+  apiUrl: string | null;
+  apiKey: string | null;
+  memberApiUrl?: string | null;
+  refDataUrl?: string | null;
+  partnerAuthKey?: string | null;
   panelGuidEnUs: string | null;
   panelGuidEnGb: string | null;
 };
 
-type TolunaQuestionAnswer = {
-  AnswerID?: number;
-  AnswerIds?: number[];
-  PreCodes?: string[];
-  AnswerText?: string;
-  AnswerValue?: string;
+type TolunaQuestionAnswerRef = {
+  QuestionID?: number;
+  AnswerIDs?: number[];
+  AnswerValues?: string[];
+  IsRoutable?: boolean;
 };
 
 type TolunaSubQuota = {
-  QuestionID?: number;
-  QuestionText?: string;
-  QuestionAnswers?: TolunaQuestionAnswer[];
+  SubQuotaID?: number;
+  CurrentCompletes?: number;
+  MaxTargetCompletes?: number;
+  QuestionsAndAnswers?: TolunaQuestionAnswerRef[];
 };
 
 type TolunaLayer = {
+  LayerID?: number;
   LayerName?: string;
   SubQuotas?: TolunaSubQuota[];
 };
@@ -130,14 +131,8 @@ function resolveTolunaPanelGuid(
 
 function resolveTolunaCultureId(countryCode: string) {
   const cc = String(countryCode || "").trim().toUpperCase();
-
-  // Toluna docs example uses CultureID 1 and 5, and your sandbox uses EN-US / EN-GB.
-  // Common Toluna mapping in sandbox:
-  // EN-US => 1
-  // EN-GB => 5
   if (cc === "US") return 1;
   if (cc === "GB" || cc === "UK") return 5;
-
   return null;
 }
 
@@ -301,64 +296,46 @@ function flattenTolunaTargeting(
       const subQuotas = Array.isArray(layer.SubQuotas) ? layer.SubQuotas : [];
 
       for (const sub of subQuotas) {
-        const questionId = String(sub.QuestionID ?? "").trim();
-        const mappedQuestion = questionId
-          ? refBundle?.questionsById.get(questionId) || ""
-          : "";
+        const qaRows = Array.isArray(sub.QuestionsAndAnswers)
+          ? sub.QuestionsAndAnswers
+          : [];
 
-        const questionText = String(sub.QuestionText || "").trim();
-        const layerName = String(layer.LayerName || "").trim();
+        for (const qa of qaRows) {
+          const questionId = String(qa.QuestionID ?? "").trim();
+          const label =
+            (questionId ? refBundle?.questionsById.get(questionId) || "" : "") ||
+            String(layer.LayerName || "").trim() ||
+            "Targeting";
 
-        const answers = Array.isArray(sub.QuestionAnswers) ? sub.QuestionAnswers : [];
+          const answerValues = Array.isArray(qa.AnswerValues)
+            ? qa.AnswerValues.map((v) => String(v).trim()).filter(Boolean)
+            : [];
 
-        const directTexts = answers
-          .map((a: TolunaQuestionAnswer) =>
-            String(a.AnswerText || a.AnswerValue || "").trim()
-          )
-          .filter(Boolean);
+          const answerIds = Array.isArray(qa.AnswerIDs)
+            ? qa.AnswerIDs.map((v) => String(v).trim()).filter(Boolean)
+            : [];
 
-        const answerIds = answers
-          .flatMap((a: TolunaQuestionAnswer) => {
-            const ids: string[] = [];
-            if (a.AnswerID !== undefined) ids.push(String(a.AnswerID));
-            if (Array.isArray(a.AnswerIds)) ids.push(...a.AnswerIds.map((v) => String(v)));
-            return ids;
-          })
-          .map((v) => v.trim())
-          .filter(Boolean);
+          const mappedAnswers = answerIds
+            .map((id) => refBundle?.answersById.get(id) || "")
+            .filter(Boolean);
 
-        const mappedAnswers = answerIds
-          .map((id) => refBundle?.answersById.get(id) || "")
-          .filter(Boolean);
+          const value =
+            answerValues.length > 0
+              ? answerValues.join(", ")
+              : mappedAnswers.length > 0
+              ? mappedAnswers.join(", ")
+              : answerIds.length > 0
+              ? answerIds.join(", ")
+              : "";
 
-        const preCodes = answers
-          .flatMap((a: TolunaQuestionAnswer) =>
-            Array.isArray(a.PreCodes) ? a.PreCodes : []
-          )
-          .map((v: string) => String(v).trim())
-          .filter(Boolean);
+          if (!value) continue;
 
-        const label = mappedQuestion || questionText || layerName;
-        const value =
-          directTexts.length > 0
-            ? directTexts.join(", ")
-            : mappedAnswers.length > 0
-            ? mappedAnswers.join(", ")
-            : preCodes.length > 0
-            ? preCodes.join(", ")
-            : "";
+          const key = `${label}::${value}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
 
-        if (!label && !value) continue;
-        if (!value) continue;
-
-        const key = `${label || "Targeting"}::${value}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-
-        out.push({
-          label: label || "Targeting",
-          value,
-        });
+          out.push({ label, value });
+        }
       }
     }
   }
