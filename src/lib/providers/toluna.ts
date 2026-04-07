@@ -154,6 +154,26 @@ function formatMoney(value: unknown) {
   return Number.isFinite(n) ? n.toFixed(2) : "";
 }
 
+const TOLUNA_AGE_ANSWER_MAP: Record<string, string> = {
+  "2006352": "18-24",
+  "2006353": "25-29",
+  "2006354": "30-34",
+  "2006355": "35-39",
+  "2006356": "40-44",
+  "2006357": "45-49",
+  "2006358": "50-54",
+  "2006359": "55-59",
+  "2006360": "60-64",
+  "2006361": "65 and older",
+};
+
+function mapTolunaAgeAnswers(answerIds: string[]) {
+  return answerIds
+    .map((id) => TOLUNA_AGE_ANSWER_MAP[id] || "")
+    .filter(Boolean);
+}
+
+
 async function fetchJson(url: string, init: RequestInit) {
   const res = await fetch(url, {
     ...init,
@@ -337,9 +357,21 @@ function flattenTolunaTargeting(
             .map((id) => refBundle?.answersById.get(id) || "")
             .filter(Boolean);
 
+          const manualAgeAnswers =
+            questionId === "1001538" ? mapTolunaAgeAnswers(answerIds) : [];
+
+          const finalLabel =
+            questionId === "1001538"
+              ? "Age"
+              : (questionId ? refBundle?.questionsById.get(questionId) || "" : "") ||
+              String(layer.LayerName || "").trim() ||
+              "Targeting";
+
           const value =
             answerValues.length > 0
               ? answerValues.join(", ")
+              : manualAgeAnswers.length > 0
+              ? manualAgeAnswers.join(", ")
               : mappedAnswers.length > 0
               ? mappedAnswers.join(", ")
               : answerIds.length > 0
@@ -352,7 +384,7 @@ function flattenTolunaTargeting(
           if (seen.has(key)) continue;
           seen.add(key);
 
-          out.push({ label, value });
+          out.push({ label: finalLabel, value });
         }
       }
     }
