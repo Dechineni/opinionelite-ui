@@ -1,4 +1,5 @@
-export const runtime = "nodejs";
+export const runtime = "edge";
+export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
