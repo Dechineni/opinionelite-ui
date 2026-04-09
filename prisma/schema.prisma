@@ -126,6 +126,7 @@ model Project {
   reconciliations       Reconciliation[]
 
   apiSurveySelection ApiSurveySelection?
+  respondentLaunchProfiles RespondentLaunchProfile[]
 }
 
 /// A supplier mapped to a project (1 row per supplier per project)
@@ -334,6 +335,23 @@ model ApiSurveySelection {
   @@index([countryCode])
   @@index([surveyCode])
   @@index([quotaId])
+}
+
+model RespondentLaunchProfile {
+  id          String   @id @default(cuid())
+  projectId   String
+  supplierId  String?
+  externalId  String
+  birthDate   DateTime
+  gender      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, supplierId, externalId])
+  @@index([projectId])
+  @@index([supplierId])
 }
 
 enum ProjectStatus {
