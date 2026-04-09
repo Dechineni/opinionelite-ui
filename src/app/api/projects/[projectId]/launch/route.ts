@@ -20,7 +20,11 @@ export async function GET(
     select: {
       id: true,
       code: true,
-      apiSurveySelectionId: true,
+      apiSurveySelection: {
+        select: {
+          id: true,
+        },
+      },
       client: {
         select: {
           providerType: true,
@@ -38,10 +42,10 @@ export async function GET(
   if (externalId) qs.set("id", externalId);
 
   const isProviderBacked =
-    !!project.apiSurveySelectionId && !!project.client?.providerType;
+    !!project.apiSurveySelection?.id && !!project.client?.providerType;
 
-  // Provider-backed projects still fall through to survey-live for now.
-  const targetPath = isProviderBacked
+    // Provider-backed projects still fall through to survey-live for now.
+    const targetPath = isProviderBacked
     ? `/api/projects/${encodeURIComponent(project.code || project.id)}/survey-live`
     : `/api/projects/${encodeURIComponent(project.code || project.id)}/survey-live`;
 
