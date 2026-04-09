@@ -243,7 +243,7 @@ async function fetchJson(url: string, init: RequestInit) {
   return json;
 }
 
-async function fetchTolunaQuotas(args: {
+export async function fetchTolunaQuotas(args: {
   client: TolunaClientConfig;
   countryCode: string;
 }): Promise<TolunaGetQuotasResponse> {
