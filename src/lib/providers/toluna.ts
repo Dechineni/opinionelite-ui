@@ -216,6 +216,10 @@ function mapTolunaAgeAnswers(answerIds: string[]) {
     .filter(Boolean);
 }
 
+function getTolunaGenderAnswerId(gender: "Male" | "Female"): number {
+  return gender === "Male" ? 2000246 : 2000247;
+}
+
 
 async function fetchJson(url: string, init: RequestInit) {
   const res = await fetch(url, {
@@ -550,14 +554,21 @@ async function addTolunaMember(args: TolunaEnsureMemberArgs) {
   const baseUrl = client.memberApiUrl.replace(/\/+$/, "");
   const url = `${baseUrl}/IntegratedPanelService/api/Respondent`;
 
-  const body = {
-    PartnerGUID: client.partnerGuid,
-    MemberCode: profile.memberCode,
-    BirthDate: formatTolunaBirthDate(profile.birthDate),
-    Gender: normalizeTolunaGender(profile.gender),
-    PostalCode: "",
-    CountryCode: profile.countryCode,
-  };
+  const normalizedGender = normalizeTolunaGender(profile.gender);
+
+const body = {
+  PartnerGUID: client.partnerGuid,
+  MemberCode: profile.memberCode,
+  BirthDate: formatTolunaBirthDate(profile.birthDate),
+  PostalCode: "",
+  IsActive: true,
+  AnsweredQuestions: [
+    {
+      QuestionID: 1001007,
+      AnswerID: getTolunaGenderAnswerId(normalizedGender),
+    },
+  ],
+};
 
   return await fetchJson(url, {
     method: "POST",
@@ -583,14 +594,21 @@ async function updateTolunaMember(args: TolunaEnsureMemberArgs) {
   const baseUrl = client.memberApiUrl.replace(/\/+$/, "");
   const url = `${baseUrl}/IntegratedPanelService/api/Respondent`;
 
-  const body = {
-    PartnerGUID: client.partnerGuid,
-    MemberCode: profile.memberCode,
-    BirthDate: formatTolunaBirthDate(profile.birthDate),
-    Gender: normalizeTolunaGender(profile.gender),
-    PostalCode: "",
-    CountryCode: profile.countryCode,
-  };
+  const normalizedGender = normalizeTolunaGender(profile.gender);
+
+const body = {
+  PartnerGUID: client.partnerGuid,
+  MemberCode: profile.memberCode,
+  BirthDate: formatTolunaBirthDate(profile.birthDate),
+  PostalCode: "",
+  IsActive: true,
+  AnsweredQuestions: [
+    {
+      QuestionID: 1001007,
+      AnswerID: getTolunaGenderAnswerId(normalizedGender),
+    },
+  ],
+};
 
   return await fetchJson(url, {
     method: "PUT",
