@@ -682,13 +682,27 @@ export async function generateTolunaInvite(args: TolunaGenerateInviteArgs) {
     },
   })) as TolunaInviteResponse;
 
-  const inviteUrl = String(
-    json?.SurveyURL || json?.InviteURL || json?.Url || ""
-  ).trim();
+  const raw = json as Record<string, unknown>;
 
-  if (!inviteUrl) {
-    throw new Error("Toluna invite response did not contain a survey URL");
-  }
+const inviteUrl = String(
+  raw["SurveyURL"] ??
+    raw["InviteURL"] ??
+    raw["Url"] ??
+    raw["URL"] ??
+    raw["SurveyUrl"] ??
+    raw["InviteUrl"] ??
+    raw["surveyUrl"] ??
+    raw["inviteUrl"] ??
+    raw["Link"] ??
+    raw["link"] ??
+    ""
+).trim();
+
+if (!inviteUrl) {
+  throw new Error(
+    `Toluna invite response did not contain a survey URL. Raw response: ${JSON.stringify(json)}`
+  );
+}
 
   return {
     inviteUrl,
