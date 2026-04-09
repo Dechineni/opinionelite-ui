@@ -563,7 +563,7 @@ async function addTolunaMember(args: TolunaEnsureMemberArgs) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Accept: "application/json",
+      Accept: "application/json;version=2.0",
     },
     body: JSON.stringify(body),
   });
@@ -581,9 +581,7 @@ async function updateTolunaMember(args: TolunaEnsureMemberArgs) {
   }
 
   const baseUrl = client.memberApiUrl.replace(/\/+$/, "");
-  const url = `${baseUrl}/IntegratedPanelService/api/Respondent/${encodeURIComponent(
-    profile.memberCode
-  )}`;
+  const url = `${baseUrl}/IntegratedPanelService/api/Respondent`;
 
   const body = {
     PartnerGUID: client.partnerGuid,
@@ -598,7 +596,7 @@ async function updateTolunaMember(args: TolunaEnsureMemberArgs) {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
-      Accept: "application/json",
+      Accept: "application/json;version=2.0",
     },
     body: JSON.stringify(body),
   });
