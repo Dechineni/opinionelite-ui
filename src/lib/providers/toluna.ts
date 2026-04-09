@@ -42,6 +42,7 @@ export type TolunaClientConfig = {
   memberApiUrl?: string | null;
   refDataUrl?: string | null;
   partnerAuthKey?: string | null;
+  partnerGuid?: string | null;
   panelGuidEnUs: string | null;
   panelGuidEnGb: string | null;
 };
@@ -93,6 +94,33 @@ type TolunaGetQuotasResponse = {
   ResultCode?: number;
 };
 
+export type TolunaLaunchProfile = {
+  memberCode: string;
+  birthDate: string; // YYYY-MM-DD
+  gender: "Male" | "Female";
+  countryCode: string;
+};
+
+type TolunaEnsureMemberArgs = {
+  client: TolunaClientConfig;
+  profile: TolunaLaunchProfile;
+};
+
+type TolunaGenerateInviteArgs = {
+  client: TolunaClientConfig;
+  countryCode: string;
+  memberCode: string;
+  quotaId: string;
+};
+
+type TolunaInviteResponse = {
+  SurveyURL?: string;
+  Url?: string;
+  InviteURL?: string;
+  Result?: string;
+  ResultCode?: number;
+};
+
 type RefQuestionAnswerRow = {
   IsRoutable?: boolean;
   InternalName?: string;
@@ -135,6 +163,23 @@ function resolveTolunaCultureId(countryCode: string) {
   if (cc === "US") return 1;
   if (cc === "GB" || cc === "UK") return 5;
   return null;
+}
+
+function normalizeTolunaGender(value: string): "Male" | "Female" {
+  const v = String(value || "").trim().toLowerCase();
+  if (v === "male") return "Male";
+  if (v === "female") return "Female";
+  throw new Error("Toluna launch requires gender to be Male or Female");
+}
+
+function formatTolunaBirthDate(dateOnly: string) {
+  const v = String(dateOnly || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    throw new Error("Toluna launch requires birthDate in YYYY-MM-DD format");
+  }
+
+  const [yyyy, mm, dd] = v.split("-");
+  return `${Number(mm)}/${Number(dd)}/${yyyy}`;
 }
 
 function formatNumber(value: unknown) {
@@ -488,5 +533,149 @@ export async function getTolunaSurveyDetail(args: {
     testUrl: "",
     targeting: flattenTolunaTargeting([quota], refBundle),
     rawSurvey: survey,
+  };
+}
+
+async function addTolunaMember(args: TolunaEnsureMemberArgs) {
+  const { client, profile } = args;
+
+  if (!client.memberApiUrl) {
+    throw new Error("Toluna Member API URL is missing on the selected client");
+  }
+
+  if (!client.partnerGuid) {
+    throw new Error("Toluna Partner GUID is missing on the selected client");
+  }
+
+  const baseUrl = client.memberApiUrl.replace(/\/+$/, "");
+  const url = `${baseUrl}/IntegratedPanelService/api/Respondent`;
+
+  const body = {
+    PartnerGUID: client.partnerGuid,
+    MemberCode: profile.memberCode,
+    BirthDate: formatTolunaBirthDate(profile.birthDate),
+    Gender: normalizeTolunaGender(profile.gender),
+    PostalCode: "",
+    CountryCode: profile.countryCode,
+  };
+
+  return await fetchJson(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+async function updateTolunaMember(args: TolunaEnsureMemberArgs) {
+  const { client, profile } = args;
+
+  if (!client.memberApiUrl) {
+    throw new Error("Toluna Member API URL is missing on the selected client");
+  }
+
+  if (!client.partnerGuid) {
+    throw new Error("Toluna Partner GUID is missing on the selected client");
+  }
+
+  const baseUrl = client.memberApiUrl.replace(/\/+$/, "");
+  const url = `${baseUrl}/IntegratedPanelService/api/Respondent/${encodeURIComponent(
+    profile.memberCode
+  )}`;
+
+  const body = {
+    PartnerGUID: client.partnerGuid,
+    MemberCode: profile.memberCode,
+    BirthDate: formatTolunaBirthDate(profile.birthDate),
+    Gender: normalizeTolunaGender(profile.gender),
+    PostalCode: "",
+    CountryCode: profile.countryCode,
+  };
+
+  return await fetchJson(url, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function ensureTolunaMember(args: TolunaEnsureMemberArgs) {
+  try {
+    return await addTolunaMember(args);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err || "");
+    const lower = msg.toLowerCase();
+
+    const looksLikeDuplicate =
+      lower.includes("409") ||
+      lower.includes("already exists") ||
+      lower.includes("duplicate") ||
+      lower.includes("member exists");
+
+    if (!looksLikeDuplicate) {
+      throw err;
+    }
+
+    return await updateTolunaMember(args);
+  }
+}
+
+export async function generateTolunaInvite(args: TolunaGenerateInviteArgs) {
+  const { client, countryCode, memberCode, quotaId } = args;
+  const cc = String(countryCode || "").trim().toUpperCase();
+
+  if (!client.apiUrl) {
+    throw new Error("Toluna External Sample API URL is missing on the selected client");
+  }
+
+  if (!client.apiKey) {
+    throw new Error("Toluna API key is missing on the selected client");
+  }
+
+  const panelGuid = resolveTolunaPanelGuid(cc, client);
+
+  if (!panelGuid) {
+    throw new Error(
+      cc === "US"
+        ? "Toluna Panel GUID (EN-US) is missing for this client"
+        : cc === "GB" || cc === "UK"
+        ? "Toluna Panel GUID (EN-GB) is missing for this client"
+        : `Toluna panel mapping is not configured for country ${cc}`
+    );
+  }
+
+  if (!quotaId) {
+    throw new Error("Toluna quotaId is missing");
+  }
+
+  const baseUrl = client.apiUrl.replace(/\/+$/, "");
+  const url = `${baseUrl}/IPExternalSamplingService/ExternalSample/${encodeURIComponent(
+    panelGuid
+  )}/${encodeURIComponent(memberCode)}/Invite/${encodeURIComponent(quotaId)}`;
+
+  const json = (await fetchJson(url, {
+    method: "GET",
+    headers: {
+      API_AUTH_KEY: client.apiKey,
+      Accept: "application/json",
+    },
+  })) as TolunaInviteResponse;
+
+  const inviteUrl = String(
+    json?.SurveyURL || json?.InviteURL || json?.Url || ""
+  ).trim();
+
+  if (!inviteUrl) {
+    throw new Error("Toluna invite response did not contain a survey URL");
+  }
+
+  return {
+    inviteUrl,
+    raw: json,
   };
 }

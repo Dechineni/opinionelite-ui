@@ -111,11 +111,9 @@ export async function GET(
     return NextResponse.redirect(profileUrl, 302);
   }
 
-  // Phase C:
-  // Provider-backed projects still continue to survey-live once the profile exists.
-  // In Phase D this will redirect to /provider-launch instead.
+  // Provider-backed projects will redirect to /provider-launch.
   const target = new URL(
-    `/api/projects/${encodeURIComponent(projectKey)}/survey-live`,
+    `/api/projects/${encodeURIComponent(projectKey)}/provider-launch`,
     url.origin
   );
   for (const [k, v] of qs.entries()) target.searchParams.set(k, v);
