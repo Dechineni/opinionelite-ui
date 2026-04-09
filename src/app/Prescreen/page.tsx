@@ -135,7 +135,7 @@ function PrescreenInner() {
   function destinationAfterPrescreen(): string {
     if (nextUrl) return nextUrl;
     const u = new URL(
-      `/api/projects/${encodeURIComponent(projectId)}/survey-live`,
+      `/api/projects/${encodeURIComponent(projectId)}/launch`,
       window.location.origin
     );
     if (supplierId) u.searchParams.set("supplierId", supplierId);

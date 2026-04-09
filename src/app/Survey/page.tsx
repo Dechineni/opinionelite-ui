@@ -21,7 +21,7 @@ function SurveyLandingInner() {
     const toLive = () => {
       window.location.href = `/api/projects/${encodeURIComponent(
         projectId
-      )}/survey-live?supplierId=${encodeURIComponent(supplierId)}&id=${encodeURIComponent(id)}`;
+      )}/launch?supplierId=${encodeURIComponent(supplierId)}&id=${encodeURIComponent(id)}`;
     };
     const toPrescreen = () => {
       router.replace(
