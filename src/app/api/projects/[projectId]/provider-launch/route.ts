@@ -20,6 +20,28 @@ function normalizeGender(value: string): "Male" | "Female" | null {
   return null;
 }
 
+function id20(): string {
+  const abc =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = new Uint8Array(20);
+
+  if (
+    typeof globalThis !== "undefined" &&
+    (globalThis as any).crypto &&
+    typeof (globalThis as any).crypto.getRandomValues === "function"
+  ) {
+    (globalThis as any).crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+
+  let s = "";
+  for (let i = 0; i < bytes.length; i++) s += abc[bytes[i] % abc.length];
+  return s;
+}
+
 export async function GET(
   req: Request,
   ctx: { params: Promise<{ projectId: string }> }
@@ -85,7 +107,11 @@ export async function GET(
 
     if (providerType !== "toluna") {
       return NextResponse.json(
-        { error: `Provider launch is not implemented for ${providerType || "unknown provider"}.` },
+        {
+          error: `Provider launch is not implemented for ${
+            providerType || "unknown provider"
+          }.`,
+        },
         { status: 400 }
       );
     }
@@ -180,9 +206,43 @@ export async function GET(
       quotaId,
     });
 
+    let redirectRow = await prisma.surveyRedirect.findFirst({
+      where: {
+        projectId: project.id,
+        supplierId: supplierId || null,
+        externalId,
+        result: null,
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+
+    const destination = invite.inviteUrl;
+
+    if (redirectRow) {
+      await prisma.surveyRedirect.update({
+        where: { id: redirectRow.id },
+        data: {
+          destination,
+        },
+      });
+    } else {
+      redirectRow = await prisma.surveyRedirect.create({
+        data: {
+          id: id20(),
+          projectId: project.id,
+          supplierId: supplierId || null,
+          externalId,
+          destination,
+        },
+        select: { id: true },
+      });
+    }
+
     return NextResponse.redirect(invite.inviteUrl, 302);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown provider-launch error";
+    const message =
+      err instanceof Error ? err.message : "Unknown provider-launch error";
     console.error("provider-launch error:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -220,7 +220,6 @@ function getTolunaGenderAnswerId(gender: "Male" | "Female"): number {
   return gender === "Male" ? 2000246 : 2000247;
 }
 
-
 async function fetchJson(url: string, init: RequestInit) {
   const res = await fetch(url, {
     ...init,
@@ -233,7 +232,9 @@ async function fetchJson(url: string, init: RequestInit) {
   try {
     json = rawText ? JSON.parse(rawText) : null;
   } catch {
-    throw new Error(`Toluna response was not valid JSON: ${rawText?.slice(0, 300) || ""}`);
+    throw new Error(
+      `Toluna response was not valid JSON: ${rawText?.slice(0, 300) || ""}`
+    );
   }
 
   if (!res.ok) {
@@ -396,8 +397,8 @@ function flattenTolunaTargeting(
             questionId === "1001538"
               ? "Age"
               : (questionId ? refBundle?.questionsById.get(questionId) || "" : "") ||
-              String(layer.LayerName || "").trim() ||
-              "Targeting";
+                String(layer.LayerName || "").trim() ||
+                "Targeting";
 
           const value =
             answerValues.length > 0
@@ -502,14 +503,18 @@ export async function getTolunaSurveyDetail(args: {
   ]);
 
   const surveys = Array.isArray(json.Surveys) ? json.Surveys : [];
-  const survey = surveys.find((s: TolunaSurvey) => String(s.SurveyID ?? "") === surveyCode);
+  const survey = surveys.find(
+    (s: TolunaSurvey) => String(s.SurveyID ?? "") === surveyCode
+  );
 
   if (!survey) {
     throw new Error("Selected Toluna survey was not found");
   }
 
   const quotas = Array.isArray(survey.Quotas) ? survey.Quotas : [];
-  const quota = quotas.find((q: TolunaQuota) => String(q.QuotaID ?? "") === quotaId);
+  const quota = quotas.find(
+    (q: TolunaQuota) => String(q.QuotaID ?? "") === quotaId
+  );
 
   if (!quota) {
     throw new Error("Selected Toluna quota was not found");
@@ -556,19 +561,20 @@ async function addTolunaMember(args: TolunaEnsureMemberArgs) {
 
   const normalizedGender = normalizeTolunaGender(profile.gender);
 
-const body = {
-  PartnerGUID: client.partnerGuid,
-  MemberCode: profile.memberCode,
-  BirthDate: formatTolunaBirthDate(profile.birthDate),
-  PostalCode: "",
-  IsActive: true,
-  AnsweredQuestions: [
-    {
-      QuestionID: 1001007,
-      AnswerID: getTolunaGenderAnswerId(normalizedGender),
-    },
-  ],
-};
+  const body = {
+    PartnerGUID: client.partnerGuid,
+    MemberCode: profile.memberCode,
+    BirthDate: formatTolunaBirthDate(profile.birthDate),
+    PostalCode: "",
+    IsActive: true,
+    IsTest: true,
+    AnsweredQuestions: [
+      {
+        QuestionID: 1001007,
+        AnswerID: getTolunaGenderAnswerId(normalizedGender),
+      },
+    ],
+  };
 
   return await fetchJson(url, {
     method: "POST",
@@ -596,19 +602,20 @@ async function updateTolunaMember(args: TolunaEnsureMemberArgs) {
 
   const normalizedGender = normalizeTolunaGender(profile.gender);
 
-const body = {
-  PartnerGUID: client.partnerGuid,
-  MemberCode: profile.memberCode,
-  BirthDate: formatTolunaBirthDate(profile.birthDate),
-  PostalCode: "",
-  IsActive: true,
-  AnsweredQuestions: [
-    {
-      QuestionID: 1001007,
-      AnswerID: getTolunaGenderAnswerId(normalizedGender),
-    },
-  ],
-};
+  const body = {
+    PartnerGUID: client.partnerGuid,
+    MemberCode: profile.memberCode,
+    BirthDate: formatTolunaBirthDate(profile.birthDate),
+    PostalCode: "",
+    IsActive: true,
+    IsTest: true,
+    AnsweredQuestions: [
+      {
+        QuestionID: 1001007,
+        AnswerID: getTolunaGenderAnswerId(normalizedGender),
+      },
+    ],
+  };
 
   return await fetchJson(url, {
     method: "PUT",
@@ -684,23 +691,23 @@ export async function generateTolunaInvite(args: TolunaGenerateInviteArgs) {
 
   const raw = json as Record<string, unknown>;
 
-const inviteUrl = String(
-  raw["SurveyURL"] ??
-    raw["InviteURL"] ??
-    raw["Url"] ??
-    raw["URL"] ??
-    raw["SurveyUrl"] ??
-    raw["InviteUrl"] ??
-    raw["surveyUrl"] ??
-    raw["inviteUrl"] ??
-    raw["Link"] ??
-    raw["link"] ??
-    ""
-).trim();
+  const inviteUrl = String(
+    raw["SurveyURL"] ??
+      raw["InviteURL"] ??
+      raw["Url"] ??
+      raw["URL"] ??
+      raw["SurveyUrl"] ??
+      raw["InviteUrl"] ??
+      raw["surveyUrl"] ??
+      raw["inviteUrl"] ??
+      raw["Link"] ??
+      raw["link"] ??
+      ""
+  ).trim();
 
-if (!inviteUrl) {
-  throw new Error("Toluna invite response did not contain a survey URL");
-}
+  if (!inviteUrl) {
+    throw new Error("Toluna invite response did not contain a survey URL");
+  }
 
   return {
     inviteUrl,

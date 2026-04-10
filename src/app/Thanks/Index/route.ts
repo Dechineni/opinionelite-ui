@@ -56,19 +56,28 @@ export async function GET(req: Request) {
 
   try {
     const url = new URL(req.url);
+
     const auth = url.searchParams.get("auth");
-    const ridIn = (url.searchParams.get("pid") || url.searchParams.get("rid") || "").trim();
+    const rawRid = (url.searchParams.get("pid") || url.searchParams.get("rid") || "").trim();
+    const memberCode = (url.searchParams.get("MemberCode") || "").trim();
+
+    const ridIn = rawRid && !/^\[[^\]]+\]$/.test(rawRid) ? rawRid : "";
+    const callbackExternalId = memberCode || (!looksLikePid(ridIn) ? ridIn : "");
 
     const mapped = mapAuth(auth);
     if (!mapped.redirectResult || !mapped.eventOutcome) {
       return NextResponse.json({ ok: false, error: "Invalid or missing auth" }, { status: 400 });
     }
-    if (!ridIn) {
-      return NextResponse.json({ ok: false, error: "Missing pid/rid" }, { status: 400 });
+
+    if (!ridIn && !callbackExternalId) {
+      return NextResponse.json(
+        { ok: false, error: "Missing pid/rid and MemberCode" },
+        { status: 400 }
+      );
     }
 
     let redirect =
-      looksLikePid(ridIn)
+      ridIn && looksLikePid(ridIn)
         ? await prisma.surveyRedirect.findUnique({
             where: { id: ridIn },
             select: {
@@ -83,9 +92,12 @@ export async function GET(req: Request) {
           })
         : null;
 
-    if (!redirect && !looksLikePid(ridIn)) {
+    if (!redirect && callbackExternalId) {
       redirect = await prisma.surveyRedirect.findFirst({
-        where: { externalId: ridIn },
+        where: {
+          externalId: callbackExternalId,
+          result: null,
+        },
         orderBy: { createdAt: "desc" },
         select: {
           id: true,
@@ -97,6 +109,24 @@ export async function GET(req: Request) {
           result: true,
         },
       });
+
+      if (!redirect) {
+        redirect = await prisma.surveyRedirect.findFirst({
+          where: {
+            externalId: callbackExternalId,
+          },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            projectId: true,
+            supplierId: true,
+            respondentId: true,
+            externalId: true,
+            destination: true,
+            result: true,
+          },
+        });
+      }
     }
 
     if (!redirect) {
@@ -111,7 +141,6 @@ export async function GET(req: Request) {
     const supplierId = redirect.supplierId ?? null;
     const externalId = redirect.externalId ?? null;
 
-    // Resolve supplier record – treat redirect.supplierId as either Supplier.id or Supplier.code
     let supplierRecord:
       | {
           id: string;
@@ -156,7 +185,6 @@ export async function GET(req: Request) {
 
     const supplierIdForEvent = supplierRecord?.id ?? null;
 
-    // Ensure respondent (no upsert)
     let respondentId = redirect.respondentId ?? null;
     if (!respondentId && projectId && externalId) {
       if (supplierId) {
@@ -182,6 +210,7 @@ export async function GET(req: Request) {
           where: { projectId, externalId, supplierId: null },
           select: { id: true },
         });
+
         if (found) {
           respondentId = found.id;
         } else {
@@ -208,14 +237,12 @@ export async function GET(req: Request) {
       prisma.surveyRedirect.update({ where: { id: pid }, data: { respondentId } }).catch(() => {});
     }
 
-    // Persist outcome on SurveyRedirect
     if (redirect.result !== mapped.redirectResult) {
       await prisma.surveyRedirect
         .update({ where: { id: pid }, data: { result: mapped.redirectResult } })
         .catch(() => {});
     }
 
-    // Write SupplierRedirectEvent
     if (projectId) {
       try {
         await prisma.supplierRedirectEvent.create({
@@ -232,13 +259,8 @@ export async function GET(req: Request) {
       }
     }
 
-    // Next hop:
-    // Business wants supplier-side callback FIRST for ALL outcomes (including COMPLETE).
-    // If supplier URL missing for COMPLETE, fall back to OP Panel complete page.
     let nextUrl: string | null = null;
 
-    // Supplier-side callback URLs should receive Supplier.id as the identifier.
-    // If supplier is not resolved for any reason, fall back safely.
     const supplierIdent = supplierRecord?.id || pid || externalId || "";
 
     if (supplierRecord) {
@@ -261,7 +283,6 @@ export async function GET(req: Request) {
       }
     }
 
-    // If COMPLETE and supplier doesn't have a completeUrl configured, fall back to OP Panel complete page.
     if (!nextUrl && mapped.redirectResult === "COMPLETE") {
       const opPanelBase =
         (process.env.OP_PANEL_API_BASE || "").trim() || "https://opinionelite.com";
