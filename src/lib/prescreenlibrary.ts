@@ -3369,22 +3369,6 @@ export const LIBRARY_QUESTIONS: Record<LibraryProfileKey, LibraryQuestion[]> = {
     { label: "No" },
   ],
 },
-
-    {
-        key: "standard_supplemental_income",
-        title: "STANDARD_SUPPLEMENTAL_INCOME",
-        question:
-          "",
-        controlType: "RADIO",
-        options: [
-            { label: "Ride share driver (Uber, Lyft, etc.)"},
-            { label: "Home share host (AirBnB host, etc.)"},
-            { label: "Landlord"},
-            { label: "Paid dog walker"},
-            { label: "Other supplemental income activity"},
-            { label: "None of the above"},
-        ]
-    },
     {
         key: "standard_urban_rural_1",
         title: "STANDARD_URBAN_RURAL",
