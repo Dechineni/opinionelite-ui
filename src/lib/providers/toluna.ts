@@ -699,9 +699,7 @@ const inviteUrl = String(
 ).trim();
 
 if (!inviteUrl) {
-  throw new Error(
-    `Toluna invite response did not contain a survey URL. Raw response: ${JSON.stringify(json)}`
-  );
+  throw new Error("Toluna invite response did not contain a survey URL");
 }
 
   return {
