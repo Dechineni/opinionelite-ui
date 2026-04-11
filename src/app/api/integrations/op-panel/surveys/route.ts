@@ -1,4 +1,3 @@
-// FILE: src/app/api/integrations/op-panel/surveys/route.ts
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { COUNTRIES } from "@/data/countries";
@@ -49,11 +48,9 @@ function toCountryCodeFromName(nameOrCode: string | null | undefined): string {
   const v = String(nameOrCode ?? "").trim();
   if (!v) return "";
 
-  // if user already has code like "IN"
   if (/^[A-Za-z]{2}$/.test(v)) return v.toUpperCase();
   const key = normalizeCountryName(v);
 
-  // Common aliases first
   const alias = COUNTRY_ALIAS_TO_CODE.get(key);
   if (alias) return alias;
 
@@ -90,13 +87,10 @@ function normText(v: unknown): string {
   return String(v ?? "").trim().toLowerCase();
 }
 
-// ✅ NEW: make prescreen title compatible with OP Panel question keys
 function stripNumericSuffix(key: string): string {
-  // e.g. STANDARD_HOBBIES_1001 -> STANDARD_HOBBIES
   return key.replace(/_\d+$/, "");
 }
 
-// ✅ NEW: normalize answer/options for case-insensitive compare
 function normChoice(v: unknown): string {
   return String(v ?? "").trim().toLowerCase();
 }
@@ -174,8 +168,19 @@ function applyIdentifier(url: string, identifier: string) {
     .replaceAll("{identifier}", encodeURIComponent(identifier));
 }
 
+function isTestSupplier(supplier: { code?: string | null; name?: string | null } | null | undefined) {
+  const code = String(supplier?.code || "").trim().toLowerCase();
+  const name = String(supplier?.name || "").trim().toLowerCase();
+
+  return (
+    name === "test supplier" ||
+    code === "test_supplier" ||
+    code === "test" ||
+    code === "testsupplier"
+  );
+}
+
 export async function GET(req: Request) {
-  // ---- Auth: OP Panel -> OpinionElite UI ----
   const expectedCallerKey = (process.env.OP_PANEL_CALLER_KEY || "").trim();
   const headerKey =
     (req.headers.get("x-op-panel-key") || "").trim() ||
@@ -187,7 +192,7 @@ export async function GET(req: Request) {
   }
 
   const { searchParams } = new URL(req.url);
-  const userId = (searchParams.get("userId") || "").trim(); // OP Panel username
+  const userId = (searchParams.get("userId") || "").trim();
   if (!userId)
     return NextResponse.json({ error: "Missing userId" }, { status: 400 });
 
@@ -197,7 +202,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "OP Panel API env not set" }, { status: 500 });
   }
 
-  // Fetch OP Panel answers + signup info
   const profileUrl = new URL(
     `${opPanelBase.replace(/\/$/, "")}/UI/get_profile_answers.php`
   );
@@ -226,7 +230,6 @@ export async function GET(req: Request) {
   const signupCountry = profJson?.signup?.country ?? null;
   const signupBirthday = profJson?.signup?.birthday ?? null;
 
-  // ✅ IMPORTANT: use signup.id as identifier in the URL
   const identifier = String(profJson?.signup?.id ?? "").trim() || userId;
 
   const prisma = getPrisma();
@@ -261,11 +264,14 @@ export async function GET(req: Request) {
     orderBy: { createdAt: "asc" },
   });
 
+  // Only expose Test Supplier mappings to OP Panel
+  const testSupplierMaps = (maps as any[]).filter((m) => isTestSupplier(m?.supplier));
+
   const appBase =
     (process.env.APP_PUBLIC_BASE_URL || "").trim() || "https://opinion-elite.com";
 
   const attemptedKeys = new Set<string>();
-  const pairs = (maps as any[])
+  const pairs = testSupplierMaps
     .map((m) => {
       const projectId = String(m?.project?.id || "").trim();
       const supplierCode = String(m?.supplier?.code || "").trim();
@@ -274,12 +280,20 @@ export async function GET(req: Request) {
     .filter(Boolean);
 
   if (identifier && pairs.length > 0) {
-    const projectIds = Array.from(new Set((maps as any[])
-      .map((m) => String(m?.project?.id || "").trim())
-      .filter(Boolean)));
-    const supplierCodes = Array.from(new Set((maps as any[])
-      .map((m) => String(m?.supplier?.code || "").trim())
-      .filter(Boolean)));
+    const projectIds = Array.from(
+      new Set(
+        testSupplierMaps
+          .map((m) => String(m?.project?.id || "").trim())
+          .filter(Boolean)
+      )
+    );
+    const supplierCodes = Array.from(
+      new Set(
+        testSupplierMaps
+          .map((m) => String(m?.supplier?.code || "").trim())
+          .filter(Boolean)
+      )
+    );
 
     const priorAttempts = await prisma.surveyRedirect.findMany({
       where: {
@@ -308,21 +322,19 @@ export async function GET(req: Request) {
     supplierName?: string;
   }> = [];
 
-  for (const m of maps as any[]) {
+  for (const m of testSupplierMaps as any[]) {
     const p = m.project;
     if (!p) continue;
 
     const questions: any[] = Array.isArray(p.prescreenQuestions) ? p.prescreenQuestions : [];
     if (questions.length === 0) continue;
 
-    // Country eligibility
     const projectCountryCode = String(p.countryCode ?? "").toUpperCase();
     if (projectCountryCode) {
       const userCountryCode = toCountryCodeFromName(signupCountry);
       if (!userCountryCode || userCountryCode !== projectCountryCode) continue;
     }
 
-    // Age eligibility (optional)
     const ageQ = questions.find((q) => {
       const qText = normText(q?.question);
       const isAgeText = qText === normText("What is your age?") || qText.includes("your age");
@@ -346,7 +358,6 @@ export async function GET(req: Request) {
       }
     }
 
-    // Prescreen matching
     let ok = true;
 
     for (const q of questions) {
@@ -374,9 +385,18 @@ export async function GET(req: Request) {
         if (min === 0 && max === 0) continue;
 
         const n = parseNumber(String(userAnswer));
-        if (n == null) { ok = false; break; }
-        if (min && n < min) { ok = false; break; }
-        if (max && n > max) { ok = false; break; }
+        if (n == null) {
+          ok = false;
+          break;
+        }
+        if (min && n < min) {
+          ok = false;
+          break;
+        }
+        if (max && n > max) {
+          ok = false;
+          break;
+        }
       } else {
         const opts: any[] = Array.isArray(q.options) ? q.options : [];
         const hasValidate = opts.some((o) => Boolean(o.validate));
@@ -393,11 +413,17 @@ export async function GET(req: Request) {
 
         if (controlType === "RADIO" || controlType === "DROPDOWN") {
           const v = normChoice(userAnswer);
-          if (!allowed.has(v)) { ok = false; break; }
+          if (!allowed.has(v)) {
+            ok = false;
+            break;
+          }
         } else if (controlType === "CHECKBOX") {
           const picked = splitMulti(String(userAnswer)).map(normChoice);
           const anyMatch = picked.some((x) => allowed.has(x));
-          if (!anyMatch) { ok = false; break; }
+          if (!anyMatch) {
+            ok = false;
+            break;
+          }
         }
       }
     }
