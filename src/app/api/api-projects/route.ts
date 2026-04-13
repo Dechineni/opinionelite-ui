@@ -1,9 +1,9 @@
-// FILE: src/app/api/api-projects/route.ts
 export const runtime = "edge";
 export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { RedirectOutcome } from "@prisma/client";
 
 type ProjectStatus =
   | "ACTIVE"
@@ -113,34 +113,79 @@ export async function GET(req: Request) {
       statusCounts[g.status as ProjectStatus] = g._count.status;
     }
 
+    const projectIds = rows
+      .map((r) => r.project?.id)
+      .filter(Boolean) as string[];
+
+    let outcomeGrouped: {
+      projectId: string;
+      outcome: RedirectOutcome;
+      _count: { _all: number };
+    }[] = [];
+
+    if (projectIds.length > 0) {
+      const groupedOutcomes = await prisma.supplierRedirectEvent.groupBy({
+        by: ["projectId", "outcome"] as const,
+        where: { projectId: { in: projectIds } },
+        _count: { _all: true },
+      });
+
+      outcomeGrouped = groupedOutcomes as typeof outcomeGrouped;
+    }
+
+    const byProject: Record<string, { c: number; t: number; q: number; d: number }> = {};
+    for (const g of outcomeGrouped) {
+      const bucket = (byProject[g.projectId] ??= { c: 0, t: 0, q: 0, d: 0 });
+      switch (g.outcome) {
+        case "COMPLETE":
+          bucket.c += g._count._all;
+          break;
+        case "TERMINATE":
+          bucket.t += g._count._all;
+          break;
+        case "OVER_QUOTA":
+          bucket.q += g._count._all;
+          break;
+        case "DROP_OUT":
+          bucket.d += g._count._all;
+          break;
+        default:
+          break;
+      }
+    }
+
     const items = rows
       .filter((r) => r.project)
-      .map((r) => ({
-        id: r.project!.id,
-        code: r.project!.code,
-        name: r.project!.name,
-        managerEmail: r.project!.managerEmail,
-        category: r.project!.category,
-        status: r.project!.status,
-        countryCode: r.project!.countryCode,
-        languageCode: r.project!.languageCode,
-        currency: r.project!.currency,
-        loi: r.project!.loi,
-        ir: r.project!.ir,
-        sampleSize: r.project!.sampleSize,
-        projectCpi: r.project!.projectCpi,
-        supplierCpi: r.project!.supplierCpi,
-        startDate: r.project!.startDate,
-        endDate: r.project!.endDate,
-        clientName: r.project!.client?.name ?? null,
-        c: 0,
-        t: 0,
-        q: 0,
-        d: 0,
-        surveyCode: r.surveyCode,
-        quotaId: r.quotaId,
-        providerType: r.providerType,
-      }));
+      .map((r) => {
+        const totals = byProject[r.project!.id] ?? { c: 0, t: 0, q: 0, d: 0 };
+
+        return {
+          id: r.project!.id,
+          code: r.project!.code,
+          name: r.project!.name,
+          managerEmail: r.project!.managerEmail,
+          category: r.project!.category,
+          status: r.project!.status,
+          countryCode: r.project!.countryCode,
+          languageCode: r.project!.languageCode,
+          currency: r.project!.currency,
+          loi: r.project!.loi,
+          ir: r.project!.ir,
+          sampleSize: r.project!.sampleSize,
+          projectCpi: r.project!.projectCpi,
+          supplierCpi: r.project!.supplierCpi,
+          startDate: r.project!.startDate,
+          endDate: r.project!.endDate,
+          clientName: r.project!.client?.name ?? null,
+          c: totals.c,
+          t: totals.t,
+          q: totals.q,
+          d: totals.d,
+          surveyCode: r.surveyCode,
+          quotaId: r.quotaId,
+          providerType: r.providerType,
+        };
+      });
 
     return NextResponse.json({
       items,

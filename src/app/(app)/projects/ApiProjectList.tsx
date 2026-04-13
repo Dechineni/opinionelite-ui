@@ -1,4 +1,3 @@
-// FILE: src/app/(app)/projects/ApiProjectList.tsx
 "use client";
 export const runtime = "edge";
 
@@ -107,7 +106,7 @@ export default function ApiProjectList() {
     </button>
   );
 
-  const COLS = 14;
+  const COLS = 15;
 
   return (
     <div className="space-y-4">
@@ -149,6 +148,7 @@ export default function ApiProjectList() {
                 <td className="px-4 py-3 text-right">C</td>
                 <td className="px-4 py-3 text-right">T</td>
                 <td className="px-4 py-3 text-right">Q</td>
+                <td className="px-4 py-3 text-right">D</td>
                 <td className="px-4 py-3 text-right">CPI</td>
               </tr>
             </thead>
@@ -184,6 +184,7 @@ export default function ApiProjectList() {
                     <td className="px-4 py-3 text-right">{r.c ?? 0}</td>
                     <td className="px-4 py-3 text-right">{r.t ?? 0}</td>
                     <td className="px-4 py-3 text-right">{r.q ?? 0}</td>
+                    <td className="px-4 py-3 text-right">{r.d ?? 0}</td>
                     <td className="px-4 py-3 text-right">{r.projectCpi}</td>
                   </tr>
                 ))}
