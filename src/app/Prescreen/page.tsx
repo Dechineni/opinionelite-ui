@@ -1,13 +1,12 @@
-// src/app/Prescreen/page.tsx
 "use client";
 export const runtime = "edge";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-type ControlType = "TEXT" | "RADIO" | "DROPDOWN" | "CHECKBOX";         
+type ControlType = "TEXT" | "RADIO" | "DROPDOWN" | "CHECKBOX";
 type TextType = "EMAIL" | "CONTACTNO" | "ZIPCODE" | "CUSTOM";
 
 type PrescreenOption = { id: string; label: string; value: string };
@@ -35,18 +34,6 @@ function PrescreenInner() {
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  const alertedOnce = useRef(false);
-
-  // Global click logger (capture) — proves clicks hit the document
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      // comment out later — this is only for diagnosis
-      console.log("[Prescreen] global click", (e.target as HTMLElement)?.tagName);
-    };
-    document.addEventListener("click", h, true);
-    return () => document.removeEventListener("click", h, true);
-  }, []);
 
   useEffect(() => {
     if (!projectId || !rid) {
@@ -143,6 +130,12 @@ function PrescreenInner() {
     return u.toString();
   }
 
+  function terminateDestination(): string {
+    const u = new URL("/Thanks", window.location.origin);
+    u.searchParams.set("status", "TERMINATE");
+    return u.toString();
+  }
+
   function buildAnswersPayload() {
     const flat = questions.map((q) => {
       const v = answers[q.id];
@@ -162,70 +155,48 @@ function PrescreenInner() {
   async function submitCore() {
     if (!projectId || !rid || submitting) return;
 
-    // show *something* immediately to prove handler runs
-    if (!alertedOnce.current) {
-      alertedOnce.current = true;
-      alert("Submitting…");
-    }
-    console.log("[Prescreen] onClick fired", {
-      projectId,
-      rid,
-      supplierId,
-      qCount: questions.length,
-    });
-
-    // validate — do NOT rely on disabled attr (we removed it)
     const missing = validateMissing();
     if (missing.length > 0) {
-      console.warn("[Prescreen] missing answers:", missing);
-      alert("Please complete: \n• " + missing.join("\n• "));
+      setError("Please answer all required prescreen questions correctly.");
       return;
     }
 
     setSubmitting(true);
+    setError(null);
+
     try {
-      if (questions.length > 0) {
-        const { url, body } = buildAnswersPayload();
-        // fire-and-forget; redirect does not wait
-        void fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-          keepalive: true,
-        })
-          .then(async (r) => {
-            const t = await r.clone().text().catch(() => "");
-            console.log("[Prescreen] answers POST =>", r.status, t);
-          })
-          .catch((e) => console.warn("[Prescreen] POST failed (ignored):", e));
+      const { url, body } = buildAnswersPayload();
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(json?.error || "Failed to submit prescreen answers.");
       }
 
-      const dest = destinationAfterPrescreen();
-      // belt & suspenders navigation
-      window.location.assign(dest);
-      setTimeout(() => {
-        if (!document.hidden) window.location.href = dest;
-      }, 150);
+      const pass = Boolean(json?.pass);
+
+      if (pass) {
+        window.location.assign(destinationAfterPrescreen());
+      } else {
+        window.location.assign(terminateDestination());
+      }
     } catch (e: any) {
-      console.error("[Prescreen] submit error:", e?.message || e);
-      const dest = destinationAfterPrescreen();
-      window.location.assign(dest);
-      setTimeout(() => {
-        if (!document.hidden) window.location.href = dest;
-      }, 150);
+      setError(e?.message || "Failed to submit prescreen.");
+      setSubmitting(false);
     }
   }
 
-  // If there are no pending questions, auto-continue
   useEffect(() => {
     if (!loading && questions.length === 0 && projectId && rid) {
       const dest = destinationAfterPrescreen();
       window.location.assign(dest);
-      setTimeout(() => {
-        if (!document.hidden) window.location.href = dest;
-      }, 150);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, questions.length, projectId, rid]);
 
   if (loading) return <div className="p-6 text-sm text-slate-600">Loading prescreen…</div>;
@@ -234,15 +205,8 @@ function PrescreenInner() {
 
   return (
     <div className="max-w-3xl p-6 mx-auto">
-      {/* Tiny debug strip — remove later */}
-      <div className="mb-2 rounded bg-slate-100 px-2 py-1 text-[11px] text-slate-600">
-        canSubmit: <b>{String(canSubmit)}</b> · submitting: <b>{String(submitting)}</b> ·
-        qCount: <b>{questions.length}</b>
-      </div>
-
       <h1 className="mb-4 text-xl font-semibold text-slate-800">Prescreen</h1>
 
-      {/* noValidate so browser HTML5 validation doesn’t swallow submit */}
       <form onSubmit={(e) => e.preventDefault()} noValidate className="space-y-6">
         {questions.map((q, idx) => (
           <div key={q.id} className="rounded-lg border border-slate-200 p-4">
@@ -327,11 +291,11 @@ function PrescreenInner() {
         )}
 
         <div className="flex justify-end">
-          {/* IMPORTANT: type="button"; not disabled; onClick handles everything */}
           <button
             type="button"
             onClick={() => void submitCore()}
-            className="rounded-md bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+            disabled={!canSubmit || submitting}
+            className="rounded-md bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
             data-testid="prescreen-continue"
           >
             {submitting ? "Submitting…" : "Continue"}
