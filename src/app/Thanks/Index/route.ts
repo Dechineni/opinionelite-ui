@@ -51,6 +51,18 @@ function fillIdentifier(rawUrl: string, identifier: string) {
 
 const looksLikePid = (s: string) => /^[0-9A-Za-z]{20}$/.test(s);
 
+function isTestSupplier(supplier: { code?: string | null; name?: string | null } | null | undefined) {
+  const code = String(supplier?.code || "").trim().toLowerCase();
+  const name = String(supplier?.name || "").trim().toLowerCase();
+
+  return (
+    name === "test supplier" ||
+    code === "test_supplier" ||
+    code === "test" ||
+    code === "testsupplier"
+  );
+}
+
 export async function GET(req: Request) {
   const prisma = getPrisma();
 
@@ -145,6 +157,7 @@ export async function GET(req: Request) {
       | {
           id: string;
           code: string;
+          name: string | null;
           completeUrl: string | null;
           terminateUrl: string | null;
           overQuotaUrl: string | null;
@@ -159,6 +172,7 @@ export async function GET(req: Request) {
         select: {
           id: true,
           code: true,
+          name: true,
           completeUrl: true,
           terminateUrl: true,
           overQuotaUrl: true,
@@ -173,6 +187,7 @@ export async function GET(req: Request) {
           select: {
             id: true,
             code: true,
+            name: true,
             completeUrl: true,
             terminateUrl: true,
             overQuotaUrl: true,
@@ -283,7 +298,8 @@ export async function GET(req: Request) {
       }
     }
 
-    if (!nextUrl && mapped.redirectResult === "COMPLETE") {
+    // Only Test Supplier COMPLETE should fall back to OP Panel complete page.
+    if (!nextUrl && mapped.redirectResult === "COMPLETE" && isTestSupplier(supplierRecord)) {
       const opPanelBase =
         (process.env.OP_PANEL_API_BASE || "").trim() || "https://opinionelite.com";
       const u = new URL("/UI/complete.php", opPanelBase.replace(/\/$/, "") + "/");
