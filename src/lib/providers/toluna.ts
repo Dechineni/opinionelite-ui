@@ -220,6 +220,10 @@ function getTolunaGenderAnswerId(gender: "Male" | "Female"): number {
   return gender === "Male" ? 2000246 : 2000247;
 }
 
+function getTolunaIsTestFlag() {
+  return (process.env.TOLUNA_IS_TEST || "").trim().toLowerCase() === "true";
+}
+
 async function fetchJson(url: string, init: RequestInit) {
   const res = await fetch(url, {
     ...init,
@@ -567,7 +571,7 @@ async function addTolunaMember(args: TolunaEnsureMemberArgs) {
     BirthDate: formatTolunaBirthDate(profile.birthDate),
     PostalCode: "",
     IsActive: true,
-    IsTest: true,
+    IsTest: getTolunaIsTestFlag(),
     AnsweredQuestions: [
       {
         QuestionID: 1001007,
@@ -608,7 +612,7 @@ async function updateTolunaMember(args: TolunaEnsureMemberArgs) {
     BirthDate: formatTolunaBirthDate(profile.birthDate),
     PostalCode: "",
     IsActive: true,
-    IsTest: true,
+    IsTest: getTolunaIsTestFlag(),
     AnsweredQuestions: [
       {
         QuestionID: 1001007,
