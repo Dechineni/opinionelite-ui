@@ -28,6 +28,19 @@ export async function POST(req: Request) {
   const rawChild = body.project;
   const hasChild = !!rawChild && !!(rawChild.name || rawChild.projectName);
   const { code: _ignore, ...child } = rawChild || {};
+  const {
+  sentryEnabled,
+  sentryProjectId,
+  sentryTemplateId,
+  sentryLiveUrl,
+  sentryTestUrl,
+  sentryReportingUrl,
+  sentryProjectStatus,
+  sentryHashingEnabled,
+  sentryVerisoulEnabled,
+  sentryVerisoulTermFake,
+  sentryVerisoulTermSuspicious,
+} = child || {};
 
   if (hasChild) {
     if (!child.startDate || !child.endDate || child.projectCpi === undefined) {
@@ -82,6 +95,17 @@ export async function POST(req: Request) {
             mobile: !!child.mobile,
             tablet: !!child.tablet,
             desktop: !!child.desktop,
+            sentryEnabled: sentryEnabled ?? false,
+sentryProjectId: sentryEnabled ? sentryProjectId ?? null : null,
+sentryTemplateId: sentryEnabled ? sentryTemplateId ?? null : null,
+sentryLiveUrl: sentryEnabled ? sentryLiveUrl ?? null : null,
+sentryTestUrl: sentryEnabled ? sentryTestUrl ?? null : null,
+sentryReportingUrl: sentryEnabled ? sentryReportingUrl ?? null : null,
+sentryProjectStatus: sentryEnabled ? sentryProjectStatus ?? null : null,
+sentryHashingEnabled: sentryEnabled ? sentryHashingEnabled ?? false : false,
+sentryVerisoulEnabled: sentryEnabled ? !!sentryVerisoulEnabled : false,
+sentryVerisoulTermFake: sentryEnabled ? !!sentryVerisoulTermFake : false,
+sentryVerisoulTermSuspicious: sentryEnabled ? !!sentryVerisoulTermSuspicious : false,
           },
           select: { id: true, code: true },
         });

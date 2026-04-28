@@ -239,8 +239,23 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const prisma = getPrisma();
   const raw = await req.json();
+  console.log("BODY RECEIVED:", raw);
 
   const { code: _ignore, ...b } = raw;
+  console.log("MAPPED b:", b);
+  const {
+  sentryEnabled,
+  sentryProjectId,
+  sentryTemplateId,
+  sentryLiveUrl,
+  sentryTestUrl,
+  sentryReportingUrl,
+  sentryProjectStatus,
+  sentryHashingEnabled,
+  sentryVerisoulEnabled,
+  sentryVerisoulTermFake,
+  sentryVerisoulTermSuspicious,
+} = b;
 
   const loi = Number(b.loi);
   const ir = Number(b.ir);
@@ -323,6 +338,18 @@ export async function POST(req: Request) {
         mobile: !!b.mobile,
         tablet: !!b.tablet,
         desktop: !!b.desktop,
+        sentryEnabled: sentryEnabled ?? false,
+
+sentryProjectId: sentryEnabled ? sentryProjectId ?? null : null,
+sentryTemplateId: sentryEnabled ? sentryTemplateId ?? null : null,
+sentryLiveUrl: sentryEnabled ? sentryLiveUrl ?? null : null,
+sentryTestUrl: sentryEnabled ? sentryTestUrl ?? null : null,
+sentryReportingUrl: sentryEnabled ? sentryReportingUrl ?? null : null,
+sentryProjectStatus: sentryEnabled ? sentryProjectStatus ?? null : null,
+sentryHashingEnabled: sentryEnabled ? sentryHashingEnabled ?? false : false,
+sentryVerisoulEnabled: sentryEnabled ? !!sentryVerisoulEnabled : false,
+sentryVerisoulTermFake: sentryEnabled ? !!sentryVerisoulTermFake : false,
+sentryVerisoulTermSuspicious: sentryEnabled ? !!sentryVerisoulTermSuspicious : false,
       },
       select: {
         id: true,

@@ -56,6 +56,8 @@ export async function PATCH(
   const { projectId } = await ctx.params;
   const where = whereFrom(req, projectId);
   const b = await req.json();
+  const isSentryOn =
+  typeof b.sentryEnabled === "boolean" ? b.sentryEnabled : undefined;
 
   // Build purely scalar payload. IMPORTANT: no nested { connect } / { disconnect }.
   const data: Prisma.ProjectUncheckedUpdateInput = {
@@ -124,6 +126,23 @@ export async function PATCH(
     mobile: typeof b.mobile === "boolean" ? b.mobile : undefined,
     tablet: typeof b.tablet === "boolean" ? b.tablet : undefined,
     desktop: typeof b.desktop === "boolean" ? b.desktop : undefined,
+// sentryEnabled (only update if explicitly passed)
+sentryEnabled:
+  typeof b.sentryEnabled === "boolean" ? b.sentryEnabled : undefined,
+
+// Only touch Sentry fields if sentryEnabled is provided
+...(typeof b.sentryEnabled === "boolean" && {
+  sentryProjectId: b.sentryEnabled ? b.sentryProjectId ?? null : null,
+  sentryTemplateId: b.sentryEnabled ? b.sentryTemplateId ?? null : null,
+  sentryLiveUrl: b.sentryEnabled ? b.sentryLiveUrl ?? null : null,
+  sentryTestUrl: b.sentryEnabled ? b.sentryTestUrl ?? null : null,
+  sentryReportingUrl: b.sentryEnabled ? b.sentryReportingUrl ?? null : null,
+  sentryProjectStatus: b.sentryEnabled ? b.sentryProjectStatus ?? null : null,
+  sentryHashingEnabled: b.sentryEnabled ? b.sentryHashingEnabled ?? false : false,
+  sentryVerisoulEnabled: b.sentryEnabled ? b.sentryVerisoulEnabled ?? false : false,
+  sentryVerisoulTermFake: b.sentryEnabled ? b.sentryVerisoulTermFake ?? false : false,
+  sentryVerisoulTermSuspicious: b.sentryEnabled ? b.sentryVerisoulTermSuspicious ?? false : false,
+}),
   };
 
   try {

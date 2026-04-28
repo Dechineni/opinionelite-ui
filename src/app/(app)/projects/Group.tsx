@@ -140,6 +140,18 @@ export default function GroupProjectForm() {
     tSign: false,
     speeder: false,
     speederDepth: 1,
+    sentryEnabled: false,
+
+    sentryProjectId: "",
+    sentryTemplateId: "",
+    sentryLiveUrl: "",
+    sentryTestUrl: "",
+    sentryReportingUrl: "",
+    sentryProjectStatus: "",
+    sentryVerisoulEnabled: "",
+    sentryVerisoulTermFake: "",
+    sentryVerisoulTermSuspicious: "",
+
 
     // device
     mobile: true,
@@ -201,6 +213,7 @@ export default function GroupProjectForm() {
           endDate: toISO(form.endDate),
 
           preScreen: form.preScreen,
+          sentryEnabled: form.sentryEnabled,
           exclude: form.exclude,
           geoLocation: form.geoLocation,
           dynamicThanks: form.dynamicThanksUrl,
@@ -216,6 +229,15 @@ export default function GroupProjectForm() {
             form.speeder && form.speederDepth
               ? Number(form.speederDepth)
               : null,
+              sentryProjectId: form.sentryEnabled ? form.sentryProjectId : null,
+              sentryTemplateId: form.sentryEnabled ? form.sentryTemplateId : null,
+              sentryLiveUrl: form.sentryEnabled ? form.sentryLiveUrl : null,
+              sentryTestUrl: form.sentryEnabled ? form.sentryTestUrl : null,
+              sentryReportingUrl: form.sentryEnabled ? form.sentryReportingUrl : null,
+              sentryProjectStatus: form.sentryEnabled ? form.sentryProjectStatus : null,
+              sentryVerisoulEnabled: form.sentryEnabled ? form.sentryVerisoulEnabled : null,
+        sentryVerisoulTermFake: form.sentryEnabled ? form.sentryVerisoulTermFake : null,
+        sentryVerisoulTermSuspicious: form.sentryEnabled ? form.sentryVerisoulTermSuspicious : null,
 
           mobile: form.mobile,
           tablet: form.tablet,
@@ -511,6 +533,14 @@ export default function GroupProjectForm() {
                 PreScreen
               </label>
               <label className="flex items-center gap-2 text-sm text-slate-700">
+  <input
+    type="checkbox"
+    checked={form.sentryEnabled}
+    onChange={(e) => update("sentryEnabled", e.target.checked)}
+  />{" "}
+  Sentry
+</label>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input
                   type="checkbox"
                   checked={form.geoLocation}
@@ -620,6 +650,91 @@ export default function GroupProjectForm() {
             <div className="mt-1 text-xs text-slate-500">
               Maximum limit of characters 2000
             </div>
+
+            
+          {form.sentryEnabled && (
+  <div className="mt-6">
+    <div className="border-b border-slate-200 pb-2 text-sm font-semibold text-slate-800">
+      Sentry Configuration
+    </div>
+
+    <div className="mt-3 grid grid-cols-12 gap-4">
+      
+      <div className="col-span-12 md:col-span-6">
+        <Label>Sentry project id</Label>
+        <Input
+          value={form.sentryProjectId}
+          onChange={(e) => update("sentryProjectId", e.target.value)}
+        />
+      </div>
+
+      <div className="col-span-12 md:col-span-6">
+        <Label>Sentry template id</Label>
+        <Input
+          value={form.sentryTemplateId}
+          onChange={(e) => update("sentryTemplateId", e.target.value)}
+        />
+      </div>
+
+      <div className="col-span-12 md:col-span-6">
+        <Label>Sentry live url</Label>
+        <Input
+          value={form.sentryLiveUrl}
+          onChange={(e) => update("sentryLiveUrl", e.target.value)}
+        />
+      </div>
+
+      <div className="col-span-12 md:col-span-6">
+        <Label>Sentry test url</Label>
+        <Input
+          value={form.sentryTestUrl}
+          onChange={(e) => update("sentryTestUrl", e.target.value)}
+        />
+      </div>
+
+      <div className="col-span-12 md:col-span-6">
+        <Label>Sentry reporting url</Label>
+        <Input
+          value={form.sentryReportingUrl}
+          onChange={(e) => update("sentryReportingUrl", e.target.value)}
+        />
+      </div>
+
+      <div className="col-span-12 md:col-span-6">
+        <Label>Sentry project status</Label>
+        <Input
+          value={form.sentryProjectStatus}
+          onChange={(e) => update("sentryProjectStatus", e.target.value)}
+        />
+      </div>
+
+      <div className="col-span-12 md:col-span-6">
+  <Label>Enable Verisoul</Label>
+  <Input
+    value={form.sentryVerisoulEnabled}
+onChange={(e) => update("sentryVerisoulEnabled", e.target.value)}
+  />
+</div>
+
+<div className="col-span-12 md:col-span-6">
+  <Label>Terminate Fake</Label>
+  <Input
+    value={form.sentryVerisoulTermFake}
+    onChange={(e) => update("sentryVerisoulTermFake", e.target.value)}
+  />
+</div>
+
+<div className="col-span-12 md:col-span-6">
+  <Label>Terminate Suspicious</Label>
+  <Input
+    value={form.sentryVerisoulTermSuspicious}
+    onChange={(e) => update("sentryVerisoulTermSuspicious", e.target.value)}
+  />
+</div>
+
+    </div>
+  </div>
+)}
           </div>
 
           {error && (
