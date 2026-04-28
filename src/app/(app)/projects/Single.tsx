@@ -109,9 +109,10 @@ export default function SingleProject() {
     sentryTestUrl: "",
     sentryReportingUrl: "",
     sentryProjectStatus: "",
-    sentryVerisoulEnabled: "",
-    sentryVerisoulTermFake: "",
-    sentryVerisoulTermSuspicious: "",
+    sentryHashingEnabled: false,
+    sentryVerisoulEnabled: false,
+    sentryVerisoulTermFake: false,
+    sentryVerisoulTermSuspicious: false,
 
 
     mobile: true,
@@ -235,9 +236,10 @@ export default function SingleProject() {
         sentryTestUrl: form.sentryEnabled ? form.sentryTestUrl : null,
         sentryReportingUrl: form.sentryEnabled ? form.sentryReportingUrl : null,
         sentryProjectStatus: form.sentryEnabled ? form.sentryProjectStatus : null,
-        sentryVerisoulEnabled: form.sentryEnabled ? form.sentryVerisoulEnabled : null,
-        sentryVerisoulTermFake: form.sentryEnabled ? form.sentryVerisoulTermFake : null,
-        sentryVerisoulTermSuspicious: form.sentryEnabled ? form.sentryVerisoulTermSuspicious : null,
+        sentryHashingEnabled: form.sentryHashingEnabled,
+        sentryVerisoulEnabled: form.sentryVerisoulEnabled,
+        sentryVerisoulTermFake: form.sentryVerisoulTermFake,
+        sentryVerisoulTermSuspicious: form.sentryVerisoulTermSuspicious,
 
 
         mobile: form.mobile,
@@ -574,29 +576,38 @@ export default function SingleProject() {
     </div>
 
     <div className="col-span-12 md:col-span-6">
+  <label className="mb-1 block text-xs font-medium">Sentry Hashing Enabled</label>
+  <input
+  type="checkbox"
+  checked={form.sentryHashingEnabled}
+  onChange={(e) => update("sentryHashingEnabled", e.target.checked)}
+/>
+</div>
+
+    <div className="col-span-12 md:col-span-6">
   <label className="mb-1 block text-xs font-medium">Enable Verisoul</label>
   <input
-    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-    value={form.sentryVerisoulEnabled}
-onChange={(e) => update("sentryVerisoulEnabled", e.target.value)}
-  />
+  type="checkbox"
+  checked={form.sentryVerisoulEnabled}
+  onChange={(e) => update("sentryVerisoulEnabled", e.target.checked)}
+/>
 </div>
 
 <div className="col-span-12 md:col-span-6">
   <label className="mb-1 block text-xs font-medium">Terminate Fake</label>
   <input
-    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-    value={form.sentryVerisoulTermFake}
-    onChange={(e) => update("sentryVerisoulTermFake", e.target.value)}
-  />
+  type="checkbox"
+    checked={form.sentryVerisoulTermFake}
+    onChange={(e) => update("sentryVerisoulTermFake", e.target.checked)}
+/>
 </div>
-
+    
 <div className="col-span-12 md:col-span-6">
   <label className="mb-1 block text-xs font-medium">Terminate Suspicious</label>
   <input
-    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-    value={form.sentryVerisoulTermSuspicious}
-onChange={(e) => update("sentryVerisoulTermSuspicious", e.target.value)}
+  type="checkbox"
+    checked={form.sentryVerisoulTermSuspicious}
+    onChange={(e) => update("sentryVerisoulTermSuspicious", e.target.checked)}
   />
 </div>
   </>
