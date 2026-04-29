@@ -239,10 +239,9 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const prisma = getPrisma();
   const raw = await req.json();
-  console.log("BODY RECEIVED:", raw);
+
 
   const { code: _ignore, ...b } = raw;
-  console.log("MAPPED b:", b);
   const {
   sentryEnabled,
   sentryProjectId,
