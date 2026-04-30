@@ -44,6 +44,9 @@ export async function GET(req: Request) {
         partnerGuid: true,
         panelGuidEnUs: true,
         panelGuidEnGb: true,
+        panelGuidEnCa: true,
+        panelGuidEnIn: true,
+        panelGuidPtBr: true,
       },
     });
 

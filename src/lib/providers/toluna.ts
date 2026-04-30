@@ -44,7 +44,10 @@ export type TolunaClientConfig = {
   partnerAuthKey?: string | null;
   partnerGuid?: string | null;
   panelGuidEnUs: string | null;
+  panelGuidEnCa?: string | null;
+  panelGuidEnIn?: string | null;
   panelGuidEnGb: string | null;
+  panelGuidPtBr?: string | null;
 };
 
 type TolunaQuestionAnswerRef = {
@@ -148,12 +151,15 @@ type RefBundle = {
 
 function resolveTolunaPanelGuid(
   countryCode: string,
-  client: Pick<TolunaClientConfig, "panelGuidEnUs" | "panelGuidEnGb">
+  client: Pick<TolunaClientConfig, "panelGuidEnUs" | "panelGuidEnCa" | "panelGuidEnIn" | "panelGuidEnGb" | "panelGuidPtBr">
 ) {
   const cc = String(countryCode || "").trim().toUpperCase();
 
   if (cc === "US") return client.panelGuidEnUs || "";
+  if (cc === "CA") return client.panelGuidEnCa || "";
+  if (cc === "IN") return client.panelGuidEnIn || "";
   if (cc === "GB" || cc === "UK") return client.panelGuidEnGb || "";
+  if (cc === "BR") return client.panelGuidPtBr || "";
 
   return "";
 }
@@ -161,7 +167,10 @@ function resolveTolunaPanelGuid(
 function resolveTolunaCultureId(countryCode: string) {
   const cc = String(countryCode || "").trim().toUpperCase();
   if (cc === "US") return 1;
+  if (cc === "CA") return 2;
+  if (cc === "IN") return 18;
   if (cc === "GB" || cc === "UK") return 5;
+  if (cc === "BR") return 21;
   return null;
 }
 
@@ -273,9 +282,15 @@ export async function fetchTolunaQuotas(args: {
     throw new Error(
       countryCode === "US"
         ? "Toluna Panel GUID (EN-US) is missing for this client"
-        : countryCode === "GB" || countryCode === "UK"
-        ? "Toluna Panel GUID (EN-GB) is missing for this client"
-        : `Toluna panel mapping is not configured for country ${countryCode}`
+      : countryCode === "CA"
+      ? "Toluna Panel GUID (EN-CA) is missing for this client"
+      : countryCode === "IN"
+      ? "Toluna Panel GUID (EN-IN) is missing for this client"
+      : countryCode === "GB" || countryCode === "UK"
+      ? "Toluna Panel GUID (EN-GB) is missing for this client"
+      : countryCode === "BR"
+      ? "Toluna Panel GUID (PT-BR) is missing for this client"
+      : `Toluna panel mapping is not configured for country ${countryCode}`
     );
   }
 
@@ -670,9 +685,15 @@ export async function generateTolunaInvite(args: TolunaGenerateInviteArgs) {
     throw new Error(
       cc === "US"
         ? "Toluna Panel GUID (EN-US) is missing for this client"
-        : cc === "GB" || cc === "UK"
-        ? "Toluna Panel GUID (EN-GB) is missing for this client"
-        : `Toluna panel mapping is not configured for country ${cc}`
+      : cc === "CA"
+      ? "Toluna Panel GUID (EN-CA) is missing for this client"
+      : cc === "IN"
+      ? "Toluna Panel GUID (EN-IN) is missing for this client"
+      : cc === "GB" || cc === "UK"
+      ? "Toluna Panel GUID (EN-GB) is missing for this client"
+      : cc === "BR"
+      ? "Toluna Panel GUID (PT-BR) is missing for this client"
+      : `Toluna panel mapping is not configured for country ${cc}`
     );
   }
 

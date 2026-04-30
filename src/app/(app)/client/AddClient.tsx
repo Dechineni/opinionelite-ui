@@ -63,6 +63,9 @@ export default function AddClient() {
     partnerGuid: "",
     panelGuidEnUs: "",
     panelGuidEnGb: "",
+    panelGuidEnCa: "",
+    panelGuidEnIn: "",
+    panelGuidPtBr: "",
     refDataUrl: "",
     partnerAuthKey: "",
   });
@@ -97,6 +100,9 @@ export default function AddClient() {
           partnerGuid: form.partnerGuid || null,
           panelGuidEnUs: form.panelGuidEnUs || null,
           panelGuidEnGb: form.panelGuidEnGb || null,
+          panelGuidEnCa: form.panelGuidEnCa || null,
+          panelGuidEnIn: form.panelGuidEnIn || null,
+          panelGuidPtBr: form.panelGuidPtBr || null,
           refDataUrl: form.refDataUrl || null,
           partnerAuthKey: form.partnerAuthKey || null,
         }),
@@ -264,6 +270,36 @@ export default function AddClient() {
               placeholder="Enter EN-GB / Culture GUID"
             />
           </Field>
+
+          <Field className="xl:col-span-6">
+  <Label>Panel GUID (EN-CA)</Label>
+  <Input
+    type="text"
+    value={form.panelGuidEnCa}
+    onChange={(e) => update("panelGuidEnCa", e.target.value)}
+    placeholder="Enter EN-CA / Culture GUID"
+  />
+</Field>
+
+<Field className="xl:col-span-6">
+  <Label>Panel GUID (EN-IN)</Label>
+  <Input
+    type="text"
+    value={form.panelGuidEnIn}
+    onChange={(e) => update("panelGuidEnIn", e.target.value)}
+    placeholder="Enter EN-IN / Culture GUID"
+  />
+</Field>
+
+<Field className="xl:col-span-6">
+  <Label>Panel GUID (PT-BR)</Label>
+  <Input
+    type="text"
+    value={form.panelGuidPtBr}
+    onChange={(e) => update("panelGuidPtBr", e.target.value)}
+    placeholder="Enter PT-BR / Culture GUID"
+  />
+</Field>
         </div>
 
         {error && (
