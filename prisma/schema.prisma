@@ -28,6 +28,9 @@ model Client {
   partnerGuid   String?
   panelGuidEnUs String?
   panelGuidEnGb String?
+  panelGuidEnCa String?
+  panelGuidEnIn String?
+  panelGuidPtBr String?
 
   refDataUrl     String?
   partnerAuthKey String?

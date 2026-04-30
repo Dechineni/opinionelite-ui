@@ -1,3 +1,5 @@
+// FILE: src/app/api/projects/[projectId]/provider-launch/route.ts
+
 export const runtime = "edge";
 export const preferredRegion = "auto";
 
@@ -83,6 +85,9 @@ export async function GET(
             partnerGuid: true,
             panelGuidEnUs: true,
             panelGuidEnGb: true,
+            panelGuidEnCa: true,
+            panelGuidEnIn: true,
+            panelGuidPtBr: true,
           },
         },
       },
@@ -187,6 +192,9 @@ export async function GET(
       partnerGuid: project.client.partnerGuid,
       panelGuidEnUs: project.client.panelGuidEnUs,
       panelGuidEnGb: project.client.panelGuidEnGb,
+      panelGuidEnCa: project.client.panelGuidEnCa,
+      panelGuidEnIn: project.client.panelGuidEnIn,
+      panelGuidPtBr: project.client.panelGuidPtBr,
     } satisfies TolunaClientConfig;
 
     await ensureTolunaMember({
