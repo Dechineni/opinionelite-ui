@@ -4,6 +4,7 @@ export const preferredRegion = "auto";
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { Prisma, ProjectStatus, RedirectOutcome } from "@prisma/client";
+import { createSentryProject } from "@/lib/integrations/sentry";
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -240,7 +241,6 @@ export async function POST(req: Request) {
   const prisma = getPrisma();
   const raw = await req.json();
 
-
   const { code: _ignore, ...b } = raw;
   const {
   sentryEnabled,
@@ -353,13 +353,108 @@ sentryVerisoulTermSuspicious: sentryEnabled ? !!sentryVerisoulTermSuspicious : f
       select: {
         id: true,
         code: true,
+        name: true,
         sampleSize: true,
         clickQuota: true,
         supplierCpi: true,
         projectCpi: true,
       },
     });
+let sentryResponse: any = null;
 
+if (sentryEnabled) {
+  try {
+    console.log("👉 SENTRY CALL START");
+
+    // -----------------------------
+    // 1. Resolve required values
+    // -----------------------------
+    const clientUrl =
+      process.env.SENTRY_CLIENT_URL ||
+      process.env.NEXT_PUBLIC_UI_ORIGIN ||
+      "https://opinion-elite.com";
+
+    const templateId =
+      sentryTemplateId || process.env.SENTRY_TEMPLATE_ID;
+
+    // -----------------------------
+    // 2. HARD VALIDATION
+    // -----------------------------
+    if (!clientUrl) {
+      throw new Error("Missing clientUrl");
+    }
+
+    if (!templateId) {
+      throw new Error("Missing templateId");
+    }
+
+    // -----------------------------
+    // 3. CLEAN PAYLOAD (MATCH CURL)
+    // -----------------------------
+    const payload = {
+      name: created.name,
+      clientUrl,
+      templateId,
+
+      clientName: undefined,
+      notes: undefined,
+
+      addStatusToUrl: true,
+      dontForwardQueryVariables: false,
+      skipQuestions: false,
+
+      verisoulProjectSettings: {
+        isEnabled: !!sentryVerisoulEnabled,
+        shouldTermFake: !!sentryVerisoulTermFake,
+        shouldTermSuspicious: !!sentryVerisoulTermSuspicious,
+      },
+    };
+
+    // -----------------------------
+    // 4. DEBUG LOG
+    // -----------------------------
+    console.log("🔥 FINAL PAYLOAD:", JSON.stringify(payload, null, 2));
+
+    // -----------------------------
+    // 5. API CALL (IMPORTANT FIX)
+    // -----------------------------
+    sentryResponse = await createSentryProject(payload); // ✅ NO const
+
+    console.log(
+      "🔥 FULL SENTRY RESPONSE:",
+      JSON.stringify(sentryResponse, null, 2)
+    );
+
+    const sentryProject = sentryResponse?.project;
+
+    console.log("🔥 EXTRACTED PROJECT:", sentryProject);
+
+    if (!sentryProject) {
+      throw new Error("Sentry project missing in response");
+    }
+
+    // -----------------------------
+    // 6. DB UPDATE (WITH LOGS)
+    // -----------------------------
+    console.log("👉 Updating DB with:", sentryProject.projectId);
+
+    const updated = await prisma.project.update({
+      where: { id: created.id },
+      data: {
+        sentryProjectId: sentryProject.projectId,
+        sentryLiveUrl: sentryProject.liveUrl,
+        sentryTestUrl: sentryProject.testUrl,
+        sentryReportingUrl: sentryProject.projectReportingUrl,
+        sentryProjectStatus: sentryProject.projectStatus,
+      },
+    });
+
+    console.log("✅ DB UPDATED:", updated);
+
+  } catch (err: any) {
+    console.error("❌ SENTRY FULL ERROR:", err);
+  }
+}
     let testSupplierWarning: string | null = null;
     let testSupplierMapping: {
       created: boolean;

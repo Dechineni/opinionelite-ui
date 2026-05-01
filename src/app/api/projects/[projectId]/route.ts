@@ -5,6 +5,7 @@ export const preferredRegion = "auto";
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { Prisma, ProjectStatus } from "@prisma/client";
+import { updateSentryProject, createSentryProject, buildSentryPayload, buildSentryUpdatePayload } from "@/lib/integrations/sentry";
 
 function whereFrom(req: Request, id: string) {
   const by = new URL(req.url).searchParams.get("by");
@@ -147,6 +148,49 @@ sentryEnabled:
 
   try {
     const updated = await prisma.project.update({ where, data });
+/* ---------------- SENTRY SYNC (EDIT FLOW) ---------------- */
+try {
+  if (updated.sentryEnabled) {
+    let sentryResponse;
+
+    if (updated.sentryProjectId) {
+      // ✅ UPDATE existing Sentry project (minimal payload)
+      const payload = buildSentryUpdatePayload(updated);
+
+      console.log("🟡 SENTRY UPDATE PAYLOAD:", payload);
+
+      sentryResponse = await updateSentryProject(
+        updated.sentryProjectId,
+        payload
+      );
+    } else {
+      // ✅ CREATE new Sentry project (full payload)
+      const payload = buildSentryPayload(updated);
+
+      console.log("🟢 SENTRY CREATE PAYLOAD:", payload);
+
+      sentryResponse = await createSentryProject(payload);
+    }
+
+    const sentryProject = sentryResponse?.project;
+
+    if (sentryProject?.projectId) {
+      await prisma.project.update({
+        where,
+        data: {
+          sentryProjectId: sentryProject.projectId,
+          sentryLiveUrl: sentryProject.liveUrl,
+          sentryTestUrl: sentryProject.testUrl,
+          sentryReportingUrl: sentryProject.projectReportingUrl,
+          sentryProjectStatus: sentryProject.projectStatus,
+        },
+      });
+    }
+  }
+} catch (err) {
+  console.error("❌ Sentry sync failed (edit flow):", err);
+  // IMPORTANT: do NOT fail project update
+}
     return NextResponse.json(updated);
   } catch (e: any) {
     if (e?.code === "P2025") {
