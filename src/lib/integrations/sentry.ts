@@ -230,5 +230,12 @@ export function buildSentryUpdatePayload(project: any) {
     ...(project.terminationUrl && {
       terminationUrl: project.terminationUrl,
     }),
+
+    verisoulProjectSettings: {
+      isEnabled: project.sentryVerisoulEnabled ?? false,
+      shouldTermFake: project.sentryVerisoulTermFake ?? false,
+      shouldTermSuspicious:
+        project.sentryVerisoulTermSuspicious ?? false,
+    },
   };
 }
