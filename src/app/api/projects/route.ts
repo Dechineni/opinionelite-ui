@@ -4,6 +4,7 @@ export const preferredRegion = "auto";
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { Prisma, ProjectStatus, RedirectOutcome } from "@prisma/client";
+import { createSentryProject } from "@/lib/integrations/sentry";
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -241,6 +242,19 @@ export async function POST(req: Request) {
   const raw = await req.json();
 
   const { code: _ignore, ...b } = raw;
+  const {
+  sentryEnabled,
+  sentryProjectId,
+  sentryTemplateId,
+  sentryLiveUrl,
+  sentryTestUrl,
+  sentryReportingUrl,
+  sentryProjectStatus,
+  sentryHashingEnabled,
+  sentryVerisoulEnabled,
+  sentryVerisoulTermFake,
+  sentryVerisoulTermSuspicious,
+} = b;
 
   const loi = Number(b.loi);
   const ir = Number(b.ir);
@@ -323,17 +337,107 @@ export async function POST(req: Request) {
         mobile: !!b.mobile,
         tablet: !!b.tablet,
         desktop: !!b.desktop,
+        sentryEnabled: sentryEnabled ?? false,
+
+sentryProjectId: sentryEnabled ? sentryProjectId ?? null : null,
+sentryTemplateId: sentryEnabled ? sentryTemplateId ?? null : null,
+sentryLiveUrl: sentryEnabled ? sentryLiveUrl ?? null : null,
+sentryTestUrl: sentryEnabled ? sentryTestUrl ?? null : null,
+sentryReportingUrl: sentryEnabled ? sentryReportingUrl ?? null : null,
+sentryProjectStatus: sentryEnabled ? sentryProjectStatus ?? null : null,
+sentryHashingEnabled: sentryEnabled ? !!sentryHashingEnabled : false,
+sentryVerisoulEnabled: sentryEnabled ? !!sentryVerisoulEnabled : false,
+sentryVerisoulTermFake: sentryEnabled ? !!sentryVerisoulTermFake : false,
+sentryVerisoulTermSuspicious: sentryEnabled ? !!sentryVerisoulTermSuspicious : false,
       },
       select: {
         id: true,
         code: true,
+        name: true,
         sampleSize: true,
         clickQuota: true,
         supplierCpi: true,
         projectCpi: true,
       },
     });
+let sentryResponse: any = null;
 
+if (sentryEnabled) {
+  try {
+    // -----------------------------
+    // 1. Resolve required values
+    // -----------------------------
+    const clientUrl =
+      process.env.SENTRY_CLIENT_URL ||
+      process.env.NEXT_PUBLIC_UI_ORIGIN ||
+      "https://opinion-elite.com";
+
+    const templateId =
+      sentryTemplateId || process.env.SENTRY_TEMPLATE_ID;
+
+    // -----------------------------
+    // 2. HARD VALIDATION
+    // -----------------------------
+    if (!clientUrl) {
+      throw new Error("Missing clientUrl");
+    }
+
+    if (!templateId) {
+      throw new Error("Missing templateId");
+    }
+
+    // -----------------------------
+    // 3. CLEAN PAYLOAD
+    // -----------------------------
+    const payload = {
+      name: created.name,
+      clientUrl,
+      templateId,
+
+      clientName: undefined,
+      notes: undefined,
+
+      addStatusToUrl: true,
+      dontForwardQueryVariables: false,
+      skipQuestions: false,
+
+      verisoulProjectSettings: {
+        isEnabled: !!sentryVerisoulEnabled,
+        shouldTermFake: !!sentryVerisoulTermFake,
+        shouldTermSuspicious: !!sentryVerisoulTermSuspicious,
+      },
+    };
+
+    // -----------------------------
+    // 4. API CALL
+    // -----------------------------
+    sentryResponse = await createSentryProject(payload);
+
+    const sentryProject = sentryResponse?.project;
+
+    if (!sentryProject) {
+      throw new Error("Sentry project missing in response");
+    }
+
+    // -----------------------------
+    // 5. DB UPDATE
+    // -----------------------------
+    await prisma.project.update({
+      where: { id: created.id },
+      data: {
+        sentryProjectId: sentryProject.projectId,
+        sentryLiveUrl: sentryProject.liveUrl,
+        sentryTestUrl: sentryProject.testUrl,
+        sentryReportingUrl: sentryProject.projectReportingUrl,
+        sentryProjectStatus: sentryProject.projectStatus,
+      },
+    });
+
+  } catch (err: any) {
+    // Keep only error logging if absolutely needed in prod
+    console.error("Sentry integration failed:", err);
+  }
+}
     let testSupplierWarning: string | null = null;
     let testSupplierMapping: {
       created: boolean;

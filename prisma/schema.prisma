@@ -130,6 +130,18 @@ model Project {
 
   apiSurveySelection ApiSurveySelection?
   respondentLaunchProfiles RespondentLaunchProfile[]
+
+  sentryEnabled        Boolean  @default(false)
+  sentryProjectId      String?
+  sentryTemplateId     String?
+  sentryLiveUrl        String?
+  sentryTestUrl        String?
+  sentryReportingUrl   String?
+  sentryProjectStatus  String?
+  sentryHashingEnabled Boolean @default(false)
+  sentryVerisoulEnabled        Boolean @default(false)
+  sentryVerisoulTermFake       Boolean @default(false)
+  sentryVerisoulTermSuspicious Boolean @default(false)
 }
 
 /// A supplier mapped to a project (1 row per supplier per project)

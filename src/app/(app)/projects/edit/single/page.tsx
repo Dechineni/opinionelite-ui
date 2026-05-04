@@ -87,6 +87,7 @@ export default function EditSingleProject() {
     endDate: "",
 
     preScreen: false,
+    sentryEnabled: false,
     exclude: false,
     geoLocation: false,
     dynamicThanks: false,
@@ -96,6 +97,16 @@ export default function EditSingleProject() {
     speeder: false,
     speederDepth: "",
 
+    sentryProjectId: "",
+    sentryTemplateId: "",
+    sentryLiveUrl: "",
+    sentryTestUrl: "",
+    sentryReportingUrl: "",
+    sentryProjectStatus: "",
+    sentryHashingEnabled: false,
+    sentryVerisoulEnabled: false,
+    sentryVerisoulTermFake: false,
+    sentryVerisoulTermSuspicious: false,
     mobile: true,
     tablet: false,
     desktop: false,
@@ -144,11 +155,23 @@ export default function EditSingleProject() {
           endDate: fromISODateOnly(p.endDate),
 
           preScreen: !!p.preScreen,
+          sentryEnabled: !!p.sentryEnabled,
           exclude: !!p.exclude,
           geoLocation: !!p.geoLocation,
           dynamicThanks: !!p.dynamicThanksUrl,
           uniqueIp: !!p.uniqueIp,
           uniqueIpDepth: p.uniqueIpDepth != null ? String(p.uniqueIpDepth) : "",
+
+          sentryProjectId: p.sentryProjectId ?? "",
+          sentryTemplateId: p.sentryTemplateId ?? "",
+          sentryLiveUrl: p.sentryLiveUrl ?? "",
+          sentryTestUrl: p.sentryTestUrl ?? "",
+          sentryReportingUrl: p.sentryReportingUrl ?? "",
+          sentryProjectStatus: p.sentryProjectStatus ?? "",
+          sentryHashingEnabled: !!p.sentryHashingEnabled,
+          sentryVerisoulEnabled: !!p.sentryVerisoulEnabled,
+          sentryVerisoulTermFake: !!p.sentryVerisoulTermFake,
+          sentryVerisoulTermSuspicious: !!p.sentryVerisoulTermSuspicious,
 
           tSign: !!p.tSign,
           speeder: !!p.speeder,
@@ -212,6 +235,7 @@ export default function EditSingleProject() {
         endDate: toISO(form.endDate),
 
         preScreen: form.preScreen,
+        sentryEnabled: form.sentryEnabled,
         exclude: form.exclude,
         geoLocation: form.geoLocation,
         dynamicThanksUrl: form.dynamicThanks,
@@ -220,6 +244,17 @@ export default function EditSingleProject() {
         tSign: form.tSign,
         speeder: form.speeder,
         speederDepth: form.speederDepth === "" ? null : Number(form.speederDepth),
+
+        sentryProjectId: form.sentryProjectId,
+        sentryTemplateId: form.sentryTemplateId,
+        sentryLiveUrl: form.sentryLiveUrl,
+        sentryTestUrl: form.sentryTestUrl,
+        sentryReportingUrl: form.sentryReportingUrl,
+        sentryProjectStatus: form.sentryProjectStatus,
+        sentryHashingEnabled: form.sentryHashingEnabled,
+        sentryVerisoulEnabled: form.sentryVerisoulEnabled,
+        sentryVerisoulTermFake: form.sentryVerisoulTermFake,
+        sentryVerisoulTermSuspicious: form.sentryVerisoulTermSuspicious,
 
         mobile: form.mobile,
         tablet: form.tablet,
@@ -446,6 +481,7 @@ export default function EditSingleProject() {
             {(
               [
                 "preScreen",
+                "sentryEnabled",
                 "exclude",
                 "geoLocation",
                 "dynamicThanks",
@@ -463,7 +499,9 @@ export default function EditSingleProject() {
                   checked={(form as any)[k]}
                   onChange={(e) => update(k, e.target.checked)}
                 />
-                <span className="capitalize">{k}</span>
+                <span>
+  {k === "sentryEnabled" ? "Sentry" : k.charAt(0).toUpperCase() + k.slice(1)}
+</span>
               </label>
             ))}
           </div>
@@ -498,6 +536,115 @@ export default function EditSingleProject() {
               onChange={(e) => update("description", e.target.value)}
             />
           </div>
+
+
+          {form.sentryEnabled && (
+  <>
+    <div className="col-span-12">
+      <h3 className="text-sm font-semibold text-slate-700 mt-4">
+        Sentry Configuration
+      </h3>
+    </div>
+
+    <div className="col-span-12 md:col-span-6">
+      <Label>Sentry Project ID</Label>
+      <input
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        value={form.sentryProjectId}
+        onChange={(e) => update("sentryProjectId", e.target.value)}
+      />
+    </div>
+
+    <div className="col-span-12 md:col-span-6">
+      <Label>Sentry Template ID</Label>
+      <input
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        value={form.sentryTemplateId}
+        onChange={(e) => update("sentryTemplateId", e.target.value)}
+      />
+    </div>
+
+    <div className="col-span-12 md:col-span-6">
+      <Label>Sentry Live URL</Label>
+      <input
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        value={form.sentryLiveUrl}
+        onChange={(e) => update("sentryLiveUrl", e.target.value)}
+      />
+    </div>
+
+    <div className="col-span-12 md:col-span-6">
+      <Label>Sentry Test URL</Label>
+      <input
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        value={form.sentryTestUrl}
+        onChange={(e) => update("sentryTestUrl", e.target.value)}
+      />
+    </div>
+
+    <div className="col-span-12 md:col-span-6">
+      <Label>Sentry Reporting URL</Label>
+      <input
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        value={form.sentryReportingUrl}
+        onChange={(e) => update("sentryReportingUrl", e.target.value)}
+      />
+    </div>
+
+    <div className="col-span-12 md:col-span-6">
+      <Label>Sentry Project Status</Label>
+      <input
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        value={form.sentryProjectStatus}
+        onChange={(e) => update("sentryProjectStatus", e.target.value)}
+      />
+    </div>
+
+    <div className="col-span-12 md:col-span-6">
+  <label className="mb-1 block text-xs font-medium">Sentry Hashing Enabled</label>
+  <input
+  type="checkbox"
+  checked={form.sentryHashingEnabled}
+onChange={(e) =>
+  update("sentryHashingEnabled", e.target.checked)
+}
+/>
+</div>
+
+    <div className="col-span-12 md:col-span-6">
+  <label className="mb-1 block text-xs font-medium">Enable Verisoul</label>
+  <input
+  type="checkbox"
+  checked={form.sentryVerisoulEnabled}
+  onChange={(e) =>
+    update("sentryVerisoulEnabled", e.target.checked)
+  }
+/>
+</div>
+
+<div className="col-span-12 md:col-span-6">
+  <label className="mb-1 block text-xs font-medium">Terminate Fake</label>
+  <input
+type="checkbox"
+    checked={form.sentryVerisoulTermFake}
+onChange={(e) =>
+  update("sentryVerisoulTermFake", e.target.checked)
+}
+  />
+</div>
+
+<div className="col-span-12 md:col-span-6">
+  <label className="mb-1 block text-xs font-medium">Terminate Suspicious</label>
+  <input
+type="checkbox"
+    checked={form.sentryVerisoulTermSuspicious}
+onChange={(e) =>
+  update("sentryVerisoulTermSuspicious", e.target.checked)
+}
+  />
+</div>
+  </>
+          )}
         </div>
 
         {err && (

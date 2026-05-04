@@ -217,6 +217,7 @@ export default async function ProjectDetail({
               <Toggles
                 items={[
                   ["Prescreen", preScreen],
+                  ["Sentry", project.sentryEnabled],
                   ["Geo Location", geoLocation],
                   ["Unique IP", uniqueIp ? `Yes${uniqueIpDepth ? `: ${uniqueIpDepth}` : ""}` : "No"],
                   ["Exclude", exclude],

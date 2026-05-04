@@ -5,6 +5,7 @@ export const preferredRegion = "auto";
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { Prisma, ProjectStatus } from "@prisma/client";
+import { updateSentryProject, createSentryProject, buildSentryPayload, buildSentryUpdatePayload } from "@/lib/integrations/sentry";
 
 function whereFrom(req: Request, id: string) {
   const by = new URL(req.url).searchParams.get("by");
@@ -56,6 +57,8 @@ export async function PATCH(
   const { projectId } = await ctx.params;
   const where = whereFrom(req, projectId);
   const b = await req.json();
+  const isSentryOn =
+  typeof b.sentryEnabled === "boolean" ? b.sentryEnabled : undefined;
 
   // Build purely scalar payload. IMPORTANT: no nested { connect } / { disconnect }.
   const data: Prisma.ProjectUncheckedUpdateInput = {
@@ -124,10 +127,66 @@ export async function PATCH(
     mobile: typeof b.mobile === "boolean" ? b.mobile : undefined,
     tablet: typeof b.tablet === "boolean" ? b.tablet : undefined,
     desktop: typeof b.desktop === "boolean" ? b.desktop : undefined,
+// sentryEnabled (only update if explicitly passed)
+sentryEnabled:
+  typeof b.sentryEnabled === "boolean" ? b.sentryEnabled : undefined,
+
+// Only touch Sentry fields if sentryEnabled is provided
+...(typeof b.sentryEnabled === "boolean" && {
+  sentryProjectId: b.sentryEnabled ? b.sentryProjectId ?? null : null,
+  sentryTemplateId: b.sentryEnabled ? b.sentryTemplateId ?? null : null,
+  sentryLiveUrl: b.sentryEnabled ? b.sentryLiveUrl ?? null : null,
+  sentryTestUrl: b.sentryEnabled ? b.sentryTestUrl ?? null : null,
+  sentryReportingUrl: b.sentryEnabled ? b.sentryReportingUrl ?? null : null,
+  sentryProjectStatus: b.sentryEnabled ? b.sentryProjectStatus ?? null : null,
+  sentryHashingEnabled: b.sentryEnabled ? b.sentryHashingEnabled ?? false : false,
+  sentryVerisoulEnabled: b.sentryEnabled ? b.sentryVerisoulEnabled ?? false : false,
+  sentryVerisoulTermFake: b.sentryEnabled ? b.sentryVerisoulTermFake ?? false : false,
+  sentryVerisoulTermSuspicious: b.sentryEnabled ? b.sentryVerisoulTermSuspicious ?? false : false,
+}),
   };
 
   try {
     const updated = await prisma.project.update({ where, data });
+/* ---------------- SENTRY SYNC (EDIT FLOW) ---------------- */
+try {
+  if (updated.sentryEnabled) {
+    let sentryResponse;
+
+    if (updated.sentryProjectId) {
+      // UPDATE existing Sentry project
+      const payload = buildSentryUpdatePayload(updated);
+
+      sentryResponse = await updateSentryProject(
+        updated.sentryProjectId,
+        payload
+      );
+    } else {
+      // CREATE new Sentry project
+      const payload = buildSentryPayload(updated);
+
+      sentryResponse = await createSentryProject(payload);
+    }
+
+    const sentryProject = sentryResponse?.project;
+
+    if (sentryProject?.projectId) {
+      await prisma.project.update({
+        where,
+        data: {
+          sentryProjectId: sentryProject.projectId,
+          sentryLiveUrl: sentryProject.liveUrl,
+          sentryTestUrl: sentryProject.testUrl,
+          sentryReportingUrl: sentryProject.projectReportingUrl,
+          sentryProjectStatus: sentryProject.projectStatus,
+        },
+      });
+    }
+  }
+} catch (err) {
+  console.error("❌ Sentry sync failed (edit flow):", err);
+  // do not fail main request
+}
     return NextResponse.json(updated);
   } catch (e: any) {
     if (e?.code === "P2025") {
