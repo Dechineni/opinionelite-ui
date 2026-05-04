@@ -1,16 +1,23 @@
-// FILE: src/lib/integrations/sentry.ts
-
 /* ---------------------------------------
- * ENV VALIDATION
+ * ENV CONFIG (runtime-safe)
  * ------------------------------------- */
-const SENTRY_API_BASE = process.env.SENTRY_API_BASE;
-const SENTRY_API_KEY = process.env.SENTRY_API_KEY;
-const DEFAULT_TEMPLATE_ID = process.env.SENTRY_TEMPLATE_ID;
-const DEFAULT_CLIENT_URL =
-  process.env.SENTRY_CLIENT_URL || "https://opinion-elite.com";
+function getSentryConfig() {
+  const SENTRY_API_BASE = process.env.SENTRY_API_BASE;
+  const SENTRY_API_KEY = process.env.SENTRY_API_KEY;
+  const DEFAULT_TEMPLATE_ID = process.env.SENTRY_TEMPLATE_ID;
+  const DEFAULT_CLIENT_URL =
+    process.env.SENTRY_CLIENT_URL || "https://opinion-elite.com";
 
-if (!SENTRY_API_BASE || !SENTRY_API_KEY) {
-  throw new Error("❌ Missing Sentry environment variables");
+  if (!SENTRY_API_BASE || !SENTRY_API_KEY) {
+    throw new Error("❌ Missing Sentry environment variables");
+  }
+
+  return {
+    SENTRY_API_BASE,
+    SENTRY_API_KEY,
+    DEFAULT_TEMPLATE_ID,
+    DEFAULT_CLIENT_URL,
+  };
 }
 
 /* ---------------------------------------
@@ -70,26 +77,22 @@ async function sentryRequest<T>(
   path: string,
   options: RequestInit & { idempotencyToken?: string } = {}
 ): Promise<T> {
-  const base = SENTRY_API_BASE!.replace(/\/+$/, "");
+  const { SENTRY_API_BASE, SENTRY_API_KEY } = getSentryConfig();
+
+  const base = SENTRY_API_BASE.replace(/\/+$/, "");
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${base}${cleanPath}`;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json",
-    "X-API-Key": SENTRY_API_KEY!,
+    "X-API-Key": SENTRY_API_KEY,
     ...(options.headers as Record<string, string>),
   };
 
   if (options.idempotencyToken) {
     headers["Idempotency-Token"] = options.idempotencyToken;
   }
-
-  console.log("👉 SENTRY REQUEST:", {
-    url,
-    method: options.method,
-    body: options.body,
-  });
 
   const res = await fetch(url, {
     ...options,
@@ -98,15 +101,7 @@ async function sentryRequest<T>(
 
   const text = await res.text();
 
-  console.log("🔥 RAW SENTRY RESPONSE:", text);
-
   if (!res.ok) {
-    console.error("❌ Sentry API FAILED:", {
-      url,
-      status: res.status,
-      response: text,
-    });
-
     throw new Error(`Sentry API Error ${res.status}`);
   }
 
@@ -149,7 +144,7 @@ export async function updateSentryProject(
     {
       method: "POST",
       idempotencyToken: generateIdempotencyToken(),
-      body: JSON.stringify(removeUndefined(payload)), // ✅ FIX
+      body: JSON.stringify(removeUndefined(payload)),
     }
   );
 }
@@ -179,6 +174,8 @@ export async function listSentryTemplates() {
  * BUILD PAYLOAD (CREATE)
  * ------------------------------------- */
 export function buildSentryPayload(project: any): SentryProjectPayload {
+  const { DEFAULT_TEMPLATE_ID, DEFAULT_CLIENT_URL } = getSentryConfig();
+
   const templateId = project.sentryTemplateId || DEFAULT_TEMPLATE_ID;
 
   const clientUrl =
@@ -212,9 +209,11 @@ export function buildSentryPayload(project: any): SentryProjectPayload {
 }
 
 /* ---------------------------------------
- * BUILD PAYLOAD (UPDATE) ✅ NEW
+ * BUILD PAYLOAD (UPDATE)
  * ------------------------------------- */
 export function buildSentryUpdatePayload(project: any) {
+  const { DEFAULT_CLIENT_URL } = getSentryConfig();
+
   const clientUrl =
     project.surveyLiveUrl ||
     project.surveyTestUrl ||

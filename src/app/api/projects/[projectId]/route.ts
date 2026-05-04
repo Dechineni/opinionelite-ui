@@ -154,20 +154,16 @@ try {
     let sentryResponse;
 
     if (updated.sentryProjectId) {
-      // ✅ UPDATE existing Sentry project (minimal payload)
+      // UPDATE existing Sentry project
       const payload = buildSentryUpdatePayload(updated);
-
-      console.log("🟡 SENTRY UPDATE PAYLOAD:", payload);
 
       sentryResponse = await updateSentryProject(
         updated.sentryProjectId,
         payload
       );
     } else {
-      // ✅ CREATE new Sentry project (full payload)
+      // CREATE new Sentry project
       const payload = buildSentryPayload(updated);
-
-      console.log("🟢 SENTRY CREATE PAYLOAD:", payload);
 
       sentryResponse = await createSentryProject(payload);
     }
@@ -189,7 +185,7 @@ try {
   }
 } catch (err) {
   console.error("❌ Sentry sync failed (edit flow):", err);
-  // IMPORTANT: do NOT fail project update
+  // do not fail main request
 }
     return NextResponse.json(updated);
   } catch (e: any) {

@@ -364,8 +364,6 @@ let sentryResponse: any = null;
 
 if (sentryEnabled) {
   try {
-    console.log("👉 SENTRY CALL START");
-
     // -----------------------------
     // 1. Resolve required values
     // -----------------------------
@@ -389,7 +387,7 @@ if (sentryEnabled) {
     }
 
     // -----------------------------
-    // 3. CLEAN PAYLOAD (MATCH CURL)
+    // 3. CLEAN PAYLOAD
     // -----------------------------
     const payload = {
       name: created.name,
@@ -411,34 +409,20 @@ if (sentryEnabled) {
     };
 
     // -----------------------------
-    // 4. DEBUG LOG
+    // 4. API CALL
     // -----------------------------
-    console.log("🔥 FINAL PAYLOAD:", JSON.stringify(payload, null, 2));
-
-    // -----------------------------
-    // 5. API CALL (IMPORTANT FIX)
-    // -----------------------------
-    sentryResponse = await createSentryProject(payload); // ✅ NO const
-
-    console.log(
-      "🔥 FULL SENTRY RESPONSE:",
-      JSON.stringify(sentryResponse, null, 2)
-    );
+    sentryResponse = await createSentryProject(payload);
 
     const sentryProject = sentryResponse?.project;
-
-    console.log("🔥 EXTRACTED PROJECT:", sentryProject);
 
     if (!sentryProject) {
       throw new Error("Sentry project missing in response");
     }
 
     // -----------------------------
-    // 6. DB UPDATE (WITH LOGS)
+    // 5. DB UPDATE
     // -----------------------------
-    console.log("👉 Updating DB with:", sentryProject.projectId);
-
-    const updated = await prisma.project.update({
+    await prisma.project.update({
       where: { id: created.id },
       data: {
         sentryProjectId: sentryProject.projectId,
@@ -449,10 +433,9 @@ if (sentryEnabled) {
       },
     });
 
-    console.log("✅ DB UPDATED:", updated);
-
   } catch (err: any) {
-    console.error("❌ SENTRY FULL ERROR:", err);
+    // Keep only error logging if absolutely needed in prod
+    console.error("Sentry integration failed:", err);
   }
 }
     let testSupplierWarning: string | null = null;
