@@ -139,6 +139,8 @@ model Project {
   sentryVerisoulEnabled        Boolean @default(false)
   sentryVerisoulTermFake       Boolean @default(false)
   sentryVerisoulTermSuspicious Boolean @default(false)
+  sentryProviderId     String?
+  sentryIdField        String?
 }
 
 /// A supplier mapped to a project (1 row per supplier per project)

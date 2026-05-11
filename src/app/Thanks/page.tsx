@@ -1,51 +1,70 @@
 // FILE: src/app/Thanks/page.tsx
 "use client";
-export const runtime = 'edge';
+
+export const runtime = "edge";
 
 import { useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 
-// Small client helper for timed redirect
 function AutoRedirect({ next }: { next?: string }) {
   useEffect(() => {
     if (!next) return;
+
     const t = setTimeout(() => {
-      try {
-        window.location.href = next;
-      } catch {
-        // ignore
-      }
+      window.location.href = next;
     }, 3000);
+
     return () => clearTimeout(t);
   }, [next]);
+
   return null;
 }
 
 export default function ThanksPage() {
-  const sp = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-  const status = (sp.get("status") || "").toUpperCase();
-  const pid = sp.get("pid") || "";
-  const next = sp.get("next") || undefined;
+  const searchParams = useSearchParams();
 
-  const MESSAGES: Record<string, { title: string; body: string }> = {
+  const status = (
+    searchParams.get("status") || ""
+  ).toUpperCase();
+
+  const pid =
+    searchParams.get("pid") || "";
+
+  const next =
+    searchParams.get("next") || undefined;
+
+  const MESSAGES: Record<
+    string,
+    { title: string; body: string }
+  > = {
     COMPLETE: {
       title: "Thank you!",
-      body: "Thanks for completing our survey! Your response has been recorded.",
+      body:
+        "Thanks for completing our survey! Your response has been recorded.",
     },
+
     TERMINATE: {
       title: "Thank you!",
-      body: "Thanks for your time. Unfortunately you are not qualified for this survey.",
+      body:
+        "Thanks for your time. Unfortunately you are not qualified for this survey.",
     },
+
     QUALITY_TERM: {
       title: "Thank you!",
-      body: "Thanks for your time. Unfortunately you are not qualified for this survey.",
+      body:
+        "Thanks for your time. Unfortunately you are not qualified for this survey.",
     },
+
     OVER_QUOTA: {
       title: "Thank you!",
-      body: "Thanks for your time. Unfortunately we no longer need responses for this survey.",
+      body:
+        "Thanks for your time. Unfortunately we no longer need responses for this survey.",
     },
+
     SURVEY_CLOSE: {
       title: "Thank you!",
-      body: "Thanks for your time. Unfortunately we no longer need responses for this survey.",
+      body:
+        "Thanks for your time. Unfortunately we no longer need responses for this survey.",
     },
   };
 
@@ -58,11 +77,21 @@ export default function ThanksPage() {
   return (
     <main className="min-h-[60vh] px-6 py-16 flex items-center justify-center bg-slate-50">
       <AutoRedirect next={next} />
-      <div className="max-w-xl w-full rounded-2xl bg-white shadow-sm border border-slate-200 p-8 text-center">
-        <h1 className="text-2xl font-semibold text-slate-900">{msg.title}</h1>
-        <p className="mt-3 text-slate-600">{msg.body}</p>
 
-        {pid ? <p className="mt-4 text-xs text-slate-400">Ref: {pid}</p> : null}
+      <div className="max-w-xl w-full rounded-2xl bg-white shadow-sm border border-slate-200 p-8 text-center">
+        <h1 className="text-2xl font-semibold text-slate-900">
+          {msg.title}
+        </h1>
+
+        <p className="mt-3 text-slate-600">
+          {msg.body}
+        </p>
+
+        {pid ? (
+          <p className="mt-4 text-xs text-slate-400">
+            Ref: {pid}
+          </p>
+        ) : null}
 
         <div className="mt-8">
           {next ? (
@@ -83,7 +112,9 @@ export default function ThanksPage() {
         </div>
 
         {next ? (
-          <p className="mt-2 text-xs text-slate-400">You’ll be redirected automatically in a moment…</p>
+          <p className="mt-2 text-xs text-slate-400">
+            You’ll be redirected automatically in a moment…
+          </p>
         ) : null}
       </div>
     </main>

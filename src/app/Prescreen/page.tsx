@@ -119,16 +119,25 @@ function PrescreenInner() {
     return miss;
   }
 
-  function destinationAfterPrescreen(): string {
-    if (nextUrl) return nextUrl;
-    const u = new URL(
-      `/api/projects/${encodeURIComponent(projectId)}/launch`,
-      window.location.origin
-    );
-    if (supplierId) u.searchParams.set("supplierId", supplierId);
-    u.searchParams.set("id", rid);
-    return u.toString();
-  }
+function destinationAfterPrescreen(): string {
+if (nextUrl && nextUrl.startsWith("/api/projects/") && !nextUrl.includes("://")) {
+  return new URL(nextUrl, window.location.origin).toString();
+}
+
+  const u = new URL(
+    `/api/projects/${encodeURIComponent(projectId)}/launch`,
+    window.location.origin
+  );
+
+  if (supplierId) u.searchParams.set("supplierId", supplierId);
+  u.searchParams.set("id", rid);
+
+  // IMPORTANT FLOW FLAGS (must match launch logic)
+  u.searchParams.set("stage", "prescreen");
+  u.searchParams.set("fromPrescreen", "1");
+
+  return u.toString();
+}
 
   function terminateDestination(): string {
     const u = new URL("/Thanks", window.location.origin);
@@ -181,11 +190,23 @@ function PrescreenInner() {
 
       const pass = Boolean(json?.pass);
 
-      if (pass) {
-        window.location.assign(destinationAfterPrescreen());
-      } else {
-        window.location.assign(terminateDestination());
-      }
+ if (pass) {
+const launchUrl = new URL(
+  `/api/projects/${encodeURIComponent(projectId)}/launch`,
+  window.location.origin
+);
+
+if (supplierId) launchUrl.searchParams.set("supplierId", supplierId);
+launchUrl.searchParams.set("id", rid);
+
+// IMPORTANT FLOW FLAGS
+launchUrl.searchParams.set("stage", "prescreen");
+launchUrl.searchParams.set("fromPrescreen", "1");
+
+window.location.assign(launchUrl.toString());
+} else {
+  window.location.assign(terminateDestination());
+}
     } catch (e: any) {
       setError(e?.message || "Failed to submit prescreen.");
       setSubmitting(false);

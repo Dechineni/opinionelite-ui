@@ -174,14 +174,19 @@ export async function listSentryTemplates() {
  * BUILD PAYLOAD (CREATE)
  * ------------------------------------- */
 export function buildSentryPayload(project: any): SentryProjectPayload {
-  const { DEFAULT_TEMPLATE_ID, DEFAULT_CLIENT_URL } = getSentryConfig();
+  const { DEFAULT_TEMPLATE_ID } = getSentryConfig();
 
-  const templateId = project.sentryTemplateId || DEFAULT_TEMPLATE_ID;
+  const templateId =
+    project.sentryTemplateId || DEFAULT_TEMPLATE_ID;
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  if (!appUrl) {
+    throw new Error("Missing NEXT_PUBLIC_APP_URL");
+  }
 
   const clientUrl =
-    project.surveyLiveUrl ||
-    project.surveyTestUrl ||
-    DEFAULT_CLIENT_URL;
+    `${appUrl}/api/sentry/callback/${project.id}`;
 
   if (!templateId) {
     throw new Error("Missing templateId");
@@ -193,7 +198,10 @@ export function buildSentryPayload(project: any): SentryProjectPayload {
     templateId,
 
     testClientUrl: project.surveyTestUrl || undefined,
-    terminationUrl: project.terminationUrl || undefined,
+
+    terminationUrl:
+      project.terminationUrl ||
+      `${appUrl}/api/sentry/terminate`,
 
     addStatusToUrl: true,
     dontForwardQueryVariables: false,
@@ -201,7 +209,8 @@ export function buildSentryPayload(project: any): SentryProjectPayload {
 
     verisoulProjectSettings: {
       isEnabled: project.sentryVerisoulEnabled ?? false,
-      shouldTermFake: project.sentryVerisoulTermFake ?? false,
+      shouldTermFake:
+        project.sentryVerisoulTermFake ?? false,
       shouldTermSuspicious:
         project.sentryVerisoulTermSuspicious ?? false,
     },
@@ -212,28 +221,33 @@ export function buildSentryPayload(project: any): SentryProjectPayload {
  * BUILD PAYLOAD (UPDATE)
  * ------------------------------------- */
 export function buildSentryUpdatePayload(project: any) {
-  const { DEFAULT_CLIENT_URL } = getSentryConfig();
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  if (!appUrl) {
+    throw new Error("Missing NEXT_PUBLIC_APP_URL");
+  }
 
   const clientUrl =
-    project.surveyLiveUrl ||
-    project.surveyTestUrl ||
-    DEFAULT_CLIENT_URL;
+    `${appUrl}/api/sentry/callback/${project.id}`;
 
   return {
     name: project.name,
     clientUrl,
 
+    addStatusToUrl: true,
+
     ...(project.surveyTestUrl && {
       testClientUrl: project.surveyTestUrl,
     }),
 
-    ...(project.terminationUrl && {
-      terminationUrl: project.terminationUrl,
-    }),
+    terminationUrl:
+      project.terminationUrl ||
+      `${appUrl}/api/sentry/terminate`,
 
     verisoulProjectSettings: {
       isEnabled: project.sentryVerisoulEnabled ?? false,
-      shouldTermFake: project.sentryVerisoulTermFake ?? false,
+      shouldTermFake:
+        project.sentryVerisoulTermFake ?? false,
       shouldTermSuspicious:
         project.sentryVerisoulTermSuspicious ?? false,
     },

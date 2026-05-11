@@ -244,12 +244,7 @@ export async function POST(req: Request) {
   const { code: _ignore, ...b } = raw;
   const {
   sentryEnabled,
-  sentryProjectId,
   sentryTemplateId,
-  sentryLiveUrl,
-  sentryTestUrl,
-  sentryReportingUrl,
-  sentryProjectStatus,
   sentryHashingEnabled,
   sentryVerisoulEnabled,
   sentryVerisoulTermFake,
@@ -337,18 +332,16 @@ export async function POST(req: Request) {
         mobile: !!b.mobile,
         tablet: !!b.tablet,
         desktop: !!b.desktop,
-        sentryEnabled: sentryEnabled ?? false,
 
-sentryProjectId: sentryEnabled ? sentryProjectId ?? null : null,
-sentryTemplateId: sentryEnabled ? sentryTemplateId ?? null : null,
-sentryLiveUrl: sentryEnabled ? sentryLiveUrl ?? null : null,
-sentryTestUrl: sentryEnabled ? sentryTestUrl ?? null : null,
-sentryReportingUrl: sentryEnabled ? sentryReportingUrl ?? null : null,
-sentryProjectStatus: sentryEnabled ? sentryProjectStatus ?? null : null,
-sentryHashingEnabled: sentryEnabled ? !!sentryHashingEnabled : false,
-sentryVerisoulEnabled: sentryEnabled ? !!sentryVerisoulEnabled : false,
-sentryVerisoulTermFake: sentryEnabled ? !!sentryVerisoulTermFake : false,
-sentryVerisoulTermSuspicious: sentryEnabled ? !!sentryVerisoulTermSuspicious : false,
+sentryEnabled: !!sentryEnabled,
+
+sentryTemplateId: sentryTemplateId ?? null,
+
+sentryHashingEnabled: !!sentryHashingEnabled,
+sentryVerisoulEnabled: !!sentryVerisoulEnabled,
+sentryVerisoulTermFake: !!sentryVerisoulTermFake,
+sentryVerisoulTermSuspicious:
+  !!sentryVerisoulTermSuspicious,
       },
       select: {
         id: true,
@@ -367,10 +360,9 @@ if (sentryEnabled) {
     // -----------------------------
     // 1. Resolve required values
     // -----------------------------
-    const clientUrl =
-      process.env.SENTRY_CLIENT_URL ||
-      process.env.NEXT_PUBLIC_UI_ORIGIN ||
-      "https://opinion-elite.com";
+ const clientUrl =
+`${process.env.NEXT_PUBLIC_APP_URL}/api/projects/${created.code}/sentry-callback`;
+
 
     const templateId =
       sentryTemplateId || process.env.SENTRY_TEMPLATE_ID;
@@ -390,28 +382,35 @@ if (sentryEnabled) {
     // 3. CLEAN PAYLOAD
     // -----------------------------
     const payload = {
-      name: created.name,
-      clientUrl,
-      templateId,
+  name: created.name,
+  clientUrl,
+  templateId,
 
-      clientName: undefined,
-      notes: undefined,
+  terminationUrl:
+    b.terminationUrl ||
+    `${process.env.NEXT_PUBLIC_APP_URL}/api/sentry/terminate`,
 
-      addStatusToUrl: true,
-      dontForwardQueryVariables: false,
-      skipQuestions: false,
+  testClientUrl: undefined,
 
-      verisoulProjectSettings: {
-        isEnabled: !!sentryVerisoulEnabled,
-        shouldTermFake: !!sentryVerisoulTermFake,
-        shouldTermSuspicious: !!sentryVerisoulTermSuspicious,
-      },
-    };
+  addStatusToUrl: true,
+  dontForwardQueryVariables: false,
+  skipQuestions: false,
+
+  verisoulProjectSettings: {
+    isEnabled: !!sentryVerisoulEnabled,
+    shouldTermFake: !!sentryVerisoulTermFake,
+    shouldTermSuspicious: !!sentryVerisoulTermSuspicious,
+  },
+};
 
     // -----------------------------
     // 4. API CALL
     // -----------------------------
-    sentryResponse = await createSentryProject(payload);
+
+
+sentryResponse = await createSentryProject(payload);
+
+
 
     const sentryProject = sentryResponse?.project;
 
@@ -434,9 +433,15 @@ if (sentryEnabled) {
     });
 
   } catch (err: any) {
-    // Keep only error logging if absolutely needed in prod
-    console.error("Sentry integration failed:", err);
+  console.error("❌ Sentry integration failed");
+
+  console.error(err);
+
+  if (err instanceof Error) {
+    console.error("MESSAGE:", err.message);
+    console.error("STACK:", err.stack);
   }
+}
 }
     let testSupplierWarning: string | null = null;
     let testSupplierMapping: {
