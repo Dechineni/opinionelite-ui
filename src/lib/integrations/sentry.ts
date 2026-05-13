@@ -5,18 +5,15 @@ function getSentryConfig() {
   const SENTRY_API_BASE = process.env.SENTRY_API_BASE;
   const SENTRY_API_KEY = process.env.SENTRY_API_KEY;
   const DEFAULT_TEMPLATE_ID = process.env.SENTRY_TEMPLATE_ID;
-  const DEFAULT_CLIENT_URL =
-    process.env.SENTRY_CLIENT_URL || "https://opinion-elite.com";
 
   if (!SENTRY_API_BASE || !SENTRY_API_KEY) {
-    throw new Error("❌ Missing Sentry environment variables");
+    throw new Error("Missing Sentry environment variables");
   }
 
   return {
     SENTRY_API_BASE,
     SENTRY_API_KEY,
     DEFAULT_TEMPLATE_ID,
-    DEFAULT_CLIENT_URL,
   };
 }
 
@@ -64,10 +61,41 @@ export function generateIdempotencyToken(): string {
 /* ---------------------------------------
  * HELPERS
  * ------------------------------------- */
-function removeUndefined(obj: any) {
+function removeUndefined(obj: Record<string, unknown>) {
   return Object.fromEntries(
-    Object.entries(obj).filter(([_, v]) => v !== undefined)
+    Object.entries(obj).filter(([, v]) => v !== undefined)
   );
+}
+
+function getAppUrl() {
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_UI_ORIGIN;
+
+  if (!appUrl) {
+    throw new Error("Missing app URL env. Set one of NEXT_PUBLIC_APP_URL, NEXT_PUBLIC_BASE_URL, NEXT_PUBLIC_SITE_URL, or NEXT_PUBLIC_UI_ORIGIN");
+  }
+
+  return appUrl.replace(/\/+$/, "");
+}
+
+function getProjectKey(project: any) {
+  return project.code || project.id;
+}
+
+function buildInternalSentryCallbackUrl(project: any) {
+  const appUrl = getAppUrl();
+  const projectKey = getProjectKey(project);
+
+  if (!projectKey) {
+    throw new Error("Missing project id/code for Sentry callback URL");
+  }
+
+  return `${appUrl}/api/projects/${encodeURIComponent(
+    projectKey
+  )}/sentry-callback`;
 }
 
 /* ---------------------------------------
@@ -102,7 +130,7 @@ async function sentryRequest<T>(
   const text = await res.text();
 
   if (!res.ok) {
-    throw new Error(`Sentry API Error ${res.status}`);
+    throw new Error(`Sentry API Error ${res.status}: ${text}`);
   }
 
   if (!text || text.trim() === "") {
@@ -176,41 +204,39 @@ export async function listSentryTemplates() {
 export function buildSentryPayload(project: any): SentryProjectPayload {
   const { DEFAULT_TEMPLATE_ID } = getSentryConfig();
 
-  const templateId =
-    project.sentryTemplateId || DEFAULT_TEMPLATE_ID;
-
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-
-  if (!appUrl) {
-    throw new Error("Missing NEXT_PUBLIC_APP_URL");
-  }
-
-  const clientUrl =
-    `${appUrl}/api/sentry/callback/${project.id}`;
+  const templateId = project.sentryTemplateId || DEFAULT_TEMPLATE_ID;
 
   if (!templateId) {
-    throw new Error("Missing templateId");
+    throw new Error("Missing Sentry templateId");
   }
+
+  const callbackUrl = buildInternalSentryCallbackUrl(project);
 
   return {
     name: project.name,
-    clientUrl,
+    clientUrl: callbackUrl,
     templateId,
 
-    testClientUrl: project.surveyTestUrl || undefined,
+    // Test respondents can also return to our callback.
+    // This keeps test/live routing controlled by our application.
+    testClientUrl: callbackUrl,
 
-    terminationUrl:
-      project.terminationUrl ||
-      `${appUrl}/api/sentry/terminate`,
+    // Sentry fail respondents should also return to our callback.
+    // Our callback will route sentry_status=2/3 to the terminate flow.
+    terminationUrl: callbackUrl,
 
+    // Required for Phase 4 routing:
+    // Sentry will append sentry_status=1/2/3 to callback URL.
     addStatusToUrl: true,
+
+    // Keep forwarded params like aid, supplierId, birthDate, gender.
     dontForwardQueryVariables: false,
+
     skipQuestions: false,
 
     verisoulProjectSettings: {
       isEnabled: project.sentryVerisoulEnabled ?? false,
-      shouldTermFake:
-        project.sentryVerisoulTermFake ?? false,
+      shouldTermFake: project.sentryVerisoulTermFake ?? false,
       shouldTermSuspicious:
         project.sentryVerisoulTermSuspicious ?? false,
     },
@@ -221,33 +247,22 @@ export function buildSentryPayload(project: any): SentryProjectPayload {
  * BUILD PAYLOAD (UPDATE)
  * ------------------------------------- */
 export function buildSentryUpdatePayload(project: any) {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-
-  if (!appUrl) {
-    throw new Error("Missing NEXT_PUBLIC_APP_URL");
-  }
-
-  const clientUrl =
-    `${appUrl}/api/sentry/callback/${project.id}`;
+  const callbackUrl = buildInternalSentryCallbackUrl(project);
 
   return {
     name: project.name,
-    clientUrl,
+
+    clientUrl: callbackUrl,
+    testClientUrl: callbackUrl,
+    terminationUrl: callbackUrl,
 
     addStatusToUrl: true,
-
-    ...(project.surveyTestUrl && {
-      testClientUrl: project.surveyTestUrl,
-    }),
-
-    terminationUrl:
-      project.terminationUrl ||
-      `${appUrl}/api/sentry/terminate`,
+    dontForwardQueryVariables: false,
+    skipQuestions: false,
 
     verisoulProjectSettings: {
       isEnabled: project.sentryVerisoulEnabled ?? false,
-      shouldTermFake:
-        project.sentryVerisoulTermFake ?? false,
+      shouldTermFake: project.sentryVerisoulTermFake ?? false,
       shouldTermSuspicious:
         project.sentryVerisoulTermSuspicious ?? false,
     },

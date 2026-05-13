@@ -1,3 +1,4 @@
+// FILE: src/app/api/projects/[projectId]/launch/route.ts
 export const runtime = "edge";
 export const preferredRegion = "auto";
 
@@ -13,6 +14,7 @@ function hasUsableBirthDate(value: string | null | undefined): boolean {
   const v = (value || "").trim();
   if (!v) return false;
 
+  // allow YYYY-MM-DD from query string
   if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return true;
 
   const d = new Date(v);
@@ -21,7 +23,7 @@ function hasUsableBirthDate(value: string | null | undefined): boolean {
 
 export async function GET(
   req: Request,
-  ctx: { params: { projectId: string } }
+  ctx: { params: Promise<{ projectId: string }> }
 ) {
   const prisma = getPrisma();
   const { projectId } = await ctx.params;
@@ -34,8 +36,9 @@ export async function GET(
   const birthDateFromQuery = (url.searchParams.get("birthDate") || "").trim();
   const genderFromQuery = (url.searchParams.get("gender") || "").trim();
 
-const isFromSentry = url.searchParams.get("fromSentry") === "1";
-const sentryDone = url.searchParams.get("sentryDone") === "1";
+  const fromPrescreen = url.searchParams.get("fromPrescreen") === "1";
+  const fromSentry = url.searchParams.get("fromSentry") === "1";
+  const sentryDone = url.searchParams.get("sentryDone") === "1";
 
   const project = await prisma.project.findFirst({
     where: { OR: [{ id: projectId }, { code: projectId }] },
@@ -43,12 +46,16 @@ const sentryDone = url.searchParams.get("sentryDone") === "1";
       id: true,
       code: true,
       sentryEnabled: true,
-      surveyLiveUrl: true,
-      sentryLiveUrl: true,
-      sentryTestUrl: true,
-      sentryProjectId: true,
-      apiSurveySelection: { select: { id: true } },
-      client: { select: { providerType: true } },
+      apiSurveySelection: {
+        select: {
+          id: true,
+        },
+      },
+      client: {
+        select: {
+          providerType: true,
+        },
+      },
     },
   });
 
@@ -62,152 +69,75 @@ const sentryDone = url.searchParams.get("sentryDone") === "1";
     !!project.apiSurveySelection?.id && !!project.client?.providerType;
 
   const qs = new URLSearchParams();
+
   if (supplierId) qs.set("supplierId", supplierId);
   if (externalId) qs.set("id", externalId);
   if (birthDateFromQuery) qs.set("birthDate", birthDateFromQuery);
   if (genderFromQuery) qs.set("gender", genderFromQuery);
 
-  // =========================
-  // STEP 1: PRESCREEN CHECK
-  // =========================
-
-  let hasBirthDate = hasUsableBirthDate(birthDateFromQuery);
-  let hasGender = hasUsableGender(genderFromQuery);
-
-  if ((!hasBirthDate || !hasGender) && externalId) {
-    const saved = await prisma.respondentLaunchProfile.findFirst({
-      where: {
-        projectId: project.id,
-        supplierId: supplierId || null,
-        externalId,
-      },
-      select: { birthDate: true, gender: true },
-    });
-
-    if (saved) {
-      if (!hasBirthDate && saved.birthDate) hasBirthDate = true;
-      if (!hasGender && saved.gender) hasGender = hasUsableGender(saved.gender);
-    }
-  }
+  if (fromPrescreen) qs.set("fromPrescreen", "1");
+  if (fromSentry) qs.set("fromSentry", "1");
+  if (sentryDone) qs.set("sentryDone", "1");
 
   // =========================
-// STEP 1B: PRESCREEN ROUTING
-// =========================
+  // STEP 1: PRESCREEN ROUTING
+  // =========================
 
-const hasPrescreenQuestions =
-  await prisma.prescreenQuestion.count({
+  const hasPrescreenQuestions = await prisma.prescreenQuestion.count({
     where: {
       projectId: project.id,
     },
   });
 
-const fromPrescreen =
-  url.searchParams.get("fromPrescreen") === "1";
+  if (hasPrescreenQuestions > 0 && !fromPrescreen) {
+    const prescreenUrl = new URL("/prescreen", url.origin);
 
-if (
-  hasPrescreenQuestions > 0 &&
-  !fromPrescreen
-) {
-  const prescreenUrl = new URL(
-    "/prescreen",
-    url.origin
-  );
+    prescreenUrl.searchParams.set("projectId", projectKey);
 
-  prescreenUrl.searchParams.set(
-    "projectId",
-    projectKey
-  );
+    if (supplierId) prescreenUrl.searchParams.set("supplierId", supplierId);
+    if (externalId) prescreenUrl.searchParams.set("id", externalId);
 
-  if (supplierId) {
-    prescreenUrl.searchParams.set(
-      "supplierId",
-      supplierId
-    );
+    return NextResponse.redirect(prescreenUrl.toString(), 302);
   }
 
-  if (externalId) {
-    prescreenUrl.searchParams.set(
-      "id",
-      externalId
-    );
-  }
-
-  return NextResponse.redirect(
-    prescreenUrl.toString(),
-    302
-  );
-}
-
   // =========================
-  // STEP 2: SENTRY FLOW
+  // STEP 2: SENTRY ROUTING
   // =========================
+  // Important:
+  // Do not build the CloudResearch Sentry URL here.
+  // Keep Sentry URL-building only inside /sentry-start.
 
-  const shouldGoSentry =
-    project.sentryEnabled && !isFromSentry && !sentryDone;
+  const shouldGoSentry = project.sentryEnabled && !sentryDone;
 
   if (shouldGoSentry) {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || url.origin;
+    const sentryStartUrl = new URL(
+      `/api/projects/${encodeURIComponent(projectKey)}/sentry-start`,
+      url.origin
+    );
 
-    const callback = new URL(
-  `/api/projects/${encodeURIComponent(projectKey)}/sentry-callback`,
-  baseUrl
-);
-    callback.searchParams.set("projectId", projectKey);
-    if (supplierId) callback.searchParams.set("supplierId", supplierId);
-    if (externalId) callback.searchParams.set("id", externalId);
-    if (birthDateFromQuery) callback.searchParams.set("birthDate", birthDateFromQuery);
-    if (genderFromQuery) callback.searchParams.set("gender", genderFromQuery);
-
-    callback.searchParams.set("fromSentry", "1");
-    callback.searchParams.set("sentryDone", "1");
-
-    const sentryBase =
-      project.sentryLiveUrl || project.sentryTestUrl;
-
-    if (!sentryBase) {
-      return NextResponse.json(
-        { error: "Missing Sentry URL configuration" },
-        { status: 400 }
-      );
+    if (supplierId) sentryStartUrl.searchParams.set("supplierId", supplierId);
+    if (externalId) sentryStartUrl.searchParams.set("id", externalId);
+    if (birthDateFromQuery) {
+      sentryStartUrl.searchParams.set("birthDate", birthDateFromQuery);
+    }
+    if (genderFromQuery) {
+      sentryStartUrl.searchParams.set("gender", genderFromQuery);
     }
 
-    const sentryUrl = new URL(sentryBase);
+    sentryStartUrl.searchParams.set("fromPrescreen", "1");
 
-    // Use CloudResearch providerId from env
-const sentryProviderId =
-  process.env.SENTRY_PROVIDER_ID?.trim();
-
-if (!sentryProviderId) {
-  return NextResponse.json(
-    { error: "Missing SENTRY_PROVIDER_ID configuration" },
-    { status: 500 }
-  );
-}
-
-sentryUrl.searchParams.set(
-  "providerId",
-  sentryProviderId
-);
-    const sentryIdField =
-  process.env.SENTRY_ID_FIELD?.trim() || "id";
-
-sentryUrl.searchParams.set(
-  sentryIdField,
-  externalId
-);
-
-    sentryUrl.searchParams.set("return_url", callback.toString());
-
-    return NextResponse.redirect(sentryUrl.toString(), 302);
+    return NextResponse.redirect(sentryStartUrl.toString(), 302);
   }
 
   // =========================
-  // STEP 3: PROVIDER ROUTING
+  // STEP 3: MANUAL PROJECT ROUTING
   // =========================
+  // Manual projects must continue through /survey-live.
+  // Do not redirect directly to project.surveyLiveUrl here.
 
-  if (isProviderBacked) {
+  if (!isProviderBacked) {
     const target = new URL(
-      `/api/projects/${encodeURIComponent(projectKey)}/provider-launch`,
+      `/api/projects/${encodeURIComponent(projectKey)}/survey-live`,
       url.origin
     );
 
@@ -219,10 +149,36 @@ sentryUrl.searchParams.set(
   }
 
   // =========================
-  // STEP 4: RESPONDENT PROFILE (FALLBACK AFTER SENTRY)
+  // STEP 4: RESPONDENT PROFILE CHECK
   // =========================
+  // Provider-backed projects may need respondent profile before provider launch.
+  // This must happen after Sentry, not before Sentry.
 
-if ((!hasBirthDate || !hasGender) && !isFromSentry && !sentryDone) {
+  let hasBirthDate = hasUsableBirthDate(birthDateFromQuery);
+  let hasGender = hasUsableGender(genderFromQuery);
+
+  if ((!hasBirthDate || !hasGender) && externalId) {
+    const saved = await prisma.respondentLaunchProfile.findFirst({
+      where: {
+        projectId: project.id,
+        supplierId: supplierId || null,
+        externalId,
+      },
+      select: {
+        birthDate: true,
+        gender: true,
+      },
+    });
+
+    if (saved) {
+      if (!hasBirthDate && saved.birthDate) hasBirthDate = true;
+      if (!hasGender && saved.gender) {
+        hasGender = hasUsableGender(saved.gender);
+      }
+    }
+  }
+
+  if (!hasBirthDate || !hasGender) {
     const next = `/api/projects/${encodeURIComponent(projectKey)}/launch${
       qs.toString() ? `?${qs.toString()}` : ""
     }`;
@@ -240,49 +196,17 @@ if ((!hasBirthDate || !hasGender) && !isFromSentry && !sentryDone) {
   }
 
   // =========================
-// STEP 5: SURVEY FALLBACK (FIXED)
-// =========================
+  // STEP 5: PROVIDER-BACKED ROUTING
+  // =========================
 
-if (!project.surveyLiveUrl) {
-  return NextResponse.json(
-    { error: "Survey URL not configured." },
-    { status: 400 }
-  );
-}
-
-const liveUrl = project.surveyLiveUrl
-  .replaceAll(
-    "[identifier]",
-    encodeURIComponent(externalId)
-  )
-  .replaceAll(
-    "{identifier}",
-    encodeURIComponent(externalId)
+  const target = new URL(
+    `/api/projects/${encodeURIComponent(projectKey)}/provider-launch`,
+    url.origin
   );
 
-const surveyUrl = new URL(liveUrl);
+  for (const [k, v] of qs.entries()) {
+    target.searchParams.set(k, v);
+  }
 
-if (supplierId) {
-  surveyUrl.searchParams.set("supplierId", supplierId);
-}
-
-if (externalId) {
-  surveyUrl.searchParams.set("id", externalId);
-}
-
-surveyUrl.searchParams.set("pid", projectKey);
-
-// preserve flow flags
-surveyUrl.searchParams.set("fromPrescreen", "1");
-surveyUrl.searchParams.set(
-  "fromSentry",
-  isFromSentry ? "1" : "0"
-);
-
-surveyUrl.searchParams.set(
-  "sentryDone",
-  sentryDone ? "1" : "0"
-);
-
-return NextResponse.redirect(surveyUrl.toString(), 302);
+  return NextResponse.redirect(target.toString(), 302);
 }

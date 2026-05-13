@@ -1,4 +1,5 @@
 export const runtime = "edge";
+export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
@@ -12,8 +13,11 @@ export async function GET(
 
   const url = new URL(req.url);
 
-  const supplierId = url.searchParams.get("supplierId") || "";
-  const externalId = url.searchParams.get("id") || "";
+  const supplierId = (url.searchParams.get("supplierId") || "").trim();
+  const externalId = (url.searchParams.get("id") || "").trim();
+
+  const birthDate = (url.searchParams.get("birthDate") || "").trim();
+  const gender = (url.searchParams.get("gender") || "").trim();
 
   if (!externalId) {
     return NextResponse.redirect(
@@ -30,10 +34,11 @@ export async function GET(
       id: true,
       code: true,
       sentryEnabled: true,
-      surveyLiveUrl: true,
       sentryProjectId: true,
       sentryLiveUrl: true,
       sentryTestUrl: true,
+      sentryProviderId: true,
+      sentryIdField: true,
     },
   });
 
@@ -46,49 +51,25 @@ export async function GET(
 
   const projectKey = project.code || project.id;
 
-  // =====================================
-  // IF SENTRY DISABLED → DIRECT LAUNCH
-  // =====================================
-
+  // If Sentry is disabled, return to central launch flow.
   if (!project.sentryEnabled) {
-    const target = new URL(
+    const launchUrl = new URL(
       `/api/projects/${encodeURIComponent(projectKey)}/launch`,
       url.origin
     );
 
-    if (supplierId) {
-      target.searchParams.set("supplierId", supplierId);
-    }
+    if (supplierId) launchUrl.searchParams.set("supplierId", supplierId);
+    launchUrl.searchParams.set("id", externalId);
 
-    target.searchParams.set("id", externalId);
+    if (birthDate) launchUrl.searchParams.set("birthDate", birthDate);
+    if (gender) launchUrl.searchParams.set("gender", gender);
 
-    return NextResponse.redirect(target, 302);
+    launchUrl.searchParams.set("fromPrescreen", "1");
+
+    return NextResponse.redirect(launchUrl.toString(), 302);
   }
 
-  // =====================================
-  // SENTRY FLOW
-  // =====================================
-
-  const callbackUrl = new URL(
-    `/api/projects/${encodeURIComponent(projectKey)}/sentry-callback`,
-    url.origin
-  );
-
-  callbackUrl.searchParams.set("projectId", projectKey);
-
-  if (supplierId) {
-    callbackUrl.searchParams.set("supplierId", supplierId);
-  }
-
-  callbackUrl.searchParams.set("id", externalId);
-  callbackUrl.searchParams.set("fromSentry", "1");
-
-  // =====================================
-  // GET SENTRY BASE URL
-  // =====================================
-
-  const baseSentryUrl =
-    project.sentryLiveUrl || project.sentryTestUrl;
+  const baseSentryUrl = project.sentryLiveUrl || project.sentryTestUrl;
 
   if (!baseSentryUrl) {
     return NextResponse.json(
@@ -97,10 +78,6 @@ export async function GET(
     );
   }
 
-  // =====================================
-  // VALIDATE REQUIRED CONFIG
-  // =====================================
-
   if (!project.sentryProjectId) {
     return NextResponse.json(
       { error: "Missing sentryProjectId in project" },
@@ -108,43 +85,34 @@ export async function GET(
     );
   }
 
-  if (!process.env.SENTRY_PROVIDER_ID) {
+  const sentryProviderId =
+    project.sentryProviderId?.trim() ||
+    process.env.SENTRY_PROVIDER_ID?.trim();
+
+  if (!sentryProviderId) {
     return NextResponse.json(
-      { error: "Missing SENTRY_PROVIDER_ID env configuration" },
+      { error: "Missing Sentry providerId configuration" },
       { status: 400 }
     );
   }
 
-  // =====================================
-  // BUILD FINAL SENTRY URL
-  // =====================================
+  const sentryIdField =
+    project.sentryIdField?.trim() ||
+    process.env.SENTRY_ID_FIELD?.trim() ||
+    "aid";
 
   const sentryUrl = new URL(baseSentryUrl);
 
-  // CORRECT FIX:
-  // providerId MUST come from CloudResearch provider API
-  // NOT from internal supplierId
-  sentryUrl.searchParams.set(
-    "providerId",
-    process.env.SENTRY_PROVIDER_ID
-  );
+  // CloudResearch providerId from Provider API, not our internal supplierId.
+  sentryUrl.searchParams.set("providerId", sentryProviderId);
 
-  // respondent external id
-  const sentryIdField =
-  process.env.SENTRY_ID_FIELD?.trim() || "aid";
+  // Respondent ID field. For current CloudResearch provider config, this is aid.
+  sentryUrl.searchParams.set(sentryIdField, externalId);
 
-sentryUrl.searchParams.set(
-  sentryIdField,
-  externalId
-);
+  // Preserve context. These parameters should be forwarded back to our configured Sentry callback URL.
+  if (supplierId) sentryUrl.searchParams.set("supplierId", supplierId);
+  if (birthDate) sentryUrl.searchParams.set("birthDate", birthDate);
+  if (gender) sentryUrl.searchParams.set("gender", gender);
 
-  // sentry callback url
-  sentryUrl.searchParams.set(
-    "return_url",
-    callbackUrl.toString()
-  );
-
-
-
-  return NextResponse.redirect(sentryUrl, 302);
+  return NextResponse.redirect(sentryUrl.toString(), 302);
 }

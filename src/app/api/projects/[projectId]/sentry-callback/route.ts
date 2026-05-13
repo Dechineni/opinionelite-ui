@@ -1,11 +1,16 @@
 export const runtime = "edge";
+export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 
+function buildTerminateUrl(origin: string) {
+  return new URL("/Thanks?status=TERMINATE", origin);
+}
+
 export async function GET(
   req: Request,
-  ctx: { params: { projectId: string } }
+  ctx: { params: Promise<{ projectId: string }> }
 ) {
   const prisma = getPrisma();
   const { projectId } = await ctx.params;
@@ -15,138 +20,110 @@ export async function GET(
   const statusRaw =
     url.searchParams.get("sentry_status") ||
     url.searchParams.get("status") ||
-    url.searchParams.get("result");
+    url.searchParams.get("result") ||
+    "";
 
+  const status = statusRaw.trim().toLowerCase();
 
-  const status = (statusRaw || "").toLowerCase();
+  const supplierId = (url.searchParams.get("supplierId") || "").trim();
 
-  const supplierId = url.searchParams.get("supplierId") || "";
-  const externalId = 
+  // Sentry provider config uses idField=aid.
+  // Keep fallback to id also, in case older URLs still return id.
+  const externalId = (
+    url.searchParams.get("aid") ||
     url.searchParams.get("id") ||
-    url.searchParams.get("aid") || "";
+    ""
+  ).trim();
 
-  // STEP 1 — Validate required params
-  if (!projectId || !externalId.trim()) {
+  const birthDate = (url.searchParams.get("birthDate") || "").trim();
+  const gender = (url.searchParams.get("gender") || "").trim();
 
-return NextResponse.redirect(
-  new URL("/Thanks?status=TERMINATE", url.origin),
-  302
-);
+  if (!projectId || !externalId) {
+    return NextResponse.redirect(buildTerminateUrl(url.origin), 302);
   }
 
-  // STEP 2 — Resolve project
   const project = await prisma.project.findFirst({
-    where: { OR: [{ id: projectId }, { code: projectId }] },
+    where: {
+      OR: [{ id: projectId }, { code: projectId }],
+    },
     select: {
       id: true,
       code: true,
-      surveyLiveUrl: true,
-      apiSurveySelection: {
-        select: { id: true },
-      },
-      client: {
-        select: { providerType: true },
-      },
     },
   });
 
   if (!project) {
-    return NextResponse.redirect(
-      new URL("/Thanks?status=TERMINATE", url.origin),
-      302
-    );
+    return NextResponse.redirect(buildTerminateUrl(url.origin), 302);
   }
 
   const projectKey = project.code || project.id;
 
-  // =========================
-// SENTRY STATUS CHECK (FINAL)
-// =========================
+  // Sentry docs:
+  // 1 = Pass
+  // 2 = Fail - Behavioral Interview
+  // 3 = Fail - Tech Security Blocked
+  const isPass = status === "1";
+  const isFail = status === "2" || status === "3";
 
-const isPass = status === "1";
-
-const isFail = status === "2" || status === "3";
-  // STEP 3 — FAIL → TERMINATE
   if (isFail) {
-  const SENTRY_TERMINATION_URL = process.env.SENTRY_TERMINATION_URL;
+    const terminateUrl = buildTerminateUrl(url.origin);
 
-  if (SENTRY_TERMINATION_URL) {
-    let urlObj: URL;
+    terminateUrl.searchParams.set("projectId", projectKey);
+    terminateUrl.searchParams.set("id", externalId);
 
-try {
-  urlObj = new URL(SENTRY_TERMINATION_URL);
-} catch {
-  return NextResponse.redirect(
-    new URL("/Thanks?status=TERMINATE", url.origin),
-    302
-  );
-}
+    if (supplierId) {
+      terminateUrl.searchParams.set("supplierId", supplierId);
+    }
 
-    if (supplierId) urlObj.searchParams.set("supplierId", supplierId);
-    urlObj.searchParams.set("id", externalId);
+    terminateUrl.searchParams.set("fromSentry", "1");
+    terminateUrl.searchParams.set("sentry_status", status);
 
-    return NextResponse.redirect(urlObj.toString(), 302);
+    return NextResponse.redirect(terminateUrl.toString(), 302);
   }
 
-  return NextResponse.redirect(
-    new URL("/Thanks?status=TERMINATE", url.origin),
-    302
-  );
-}
+  if (isPass) {
+    const launchUrl = new URL(
+      `/api/projects/${encodeURIComponent(projectKey)}/launch`,
+      url.origin
+    );
 
-// STEP 4 — PASS → CONTINUE FLOW
-if (isPass) {
+    launchUrl.searchParams.set("id", externalId);
 
-  // =====================================
-// PASS → RETURN TO CENTRAL LAUNCH FLOW
-// =====================================
+    if (supplierId) {
+      launchUrl.searchParams.set("supplierId", supplierId);
+    }
 
-const launchUrl = new URL(
-    `/api/projects/${encodeURIComponent(projectKey)}/launch`,
-    url.origin
-  );
+    if (birthDate) {
+      launchUrl.searchParams.set("birthDate", birthDate);
+    }
 
-if (supplierId) {
-  launchUrl.searchParams.set(
-    "supplierId",
-    supplierId
-  );
-}
+    if (gender) {
+      launchUrl.searchParams.set("gender", gender);
+    }
 
-launchUrl.searchParams.set(
-  "id",
-  externalId
-);
+    // Preserve routing state so launch route does not send user back to Prescreen/Sentry.
+    launchUrl.searchParams.set("fromPrescreen", "1");
+    launchUrl.searchParams.set("fromSentry", "1");
+    launchUrl.searchParams.set("sentryDone", "1");
+    launchUrl.searchParams.set("sentry_status", status);
 
-// preserve flow state
-launchUrl.searchParams.set(
-  "fromPrescreen",
-  "1"
-);
+    return NextResponse.redirect(launchUrl.toString(), 302);
+  }
 
-launchUrl.searchParams.set(
-  "fromSentry",
-  "1"
-);
+  // Missing or unknown sentry_status should not launch survey.
+  const fallbackUrl = buildTerminateUrl(url.origin);
 
-launchUrl.searchParams.set(
-  "sentryDone",
-  "1"
-);
+  fallbackUrl.searchParams.set("projectId", projectKey);
+  fallbackUrl.searchParams.set("id", externalId);
+  fallbackUrl.searchParams.set("fromSentry", "1");
 
-return NextResponse.redirect(
-  launchUrl.toString(),
-  302
-);
+  if (supplierId) {
+    fallbackUrl.searchParams.set("supplierId", supplierId);
+  }
 
-}
+  if (status) {
+    fallbackUrl.searchParams.set("sentry_status", status);
+  }
 
-// =====================================
-  // SAFE FALLBACK
-  // =====================================
-
-  return NextResponse.redirect(
-    new URL("/Thanks?status=TERMINATE", url.origin),
-    302
-  );
+  return NextResponse.redirect(fallbackUrl.toString(), 302);
 }
