@@ -130,6 +130,21 @@ model Project {
 
   apiSurveySelection ApiSurveySelection?
   respondentLaunchProfiles RespondentLaunchProfile[]
+
+  sentryEnabled        Boolean  @default(false)
+  sentryProjectId      String?
+  sentryTemplateId     String?
+  sentryLiveUrl        String?
+  sentryTestUrl        String?
+  sentryReportingUrl   String?
+  sentryProjectStatus  String?
+  sentryHashingEnabled Boolean @default(false)
+  sentryVerisoulEnabled        Boolean @default(false)
+  sentryVerisoulTermFake       Boolean @default(false)
+  sentryVerisoulTermSuspicious Boolean @default(false)
+  sentryProviderId     String?
+  sentryIdField        String?
+  sentryRespondentResults SentryRespondentResult[]
 }
 
 /// A supplier mapped to a project (1 row per supplier per project)
@@ -269,6 +284,38 @@ model SupplierRedirectEvent {
 
   @@index([projectId, supplierId, outcome])
   @@index([pid])
+}
+
+model SentryRespondentResult {
+  id             String   @id @default(cuid())
+
+  projectId      String
+  projectCode    String?
+  supplierCode   String   @default("")
+  externalId     String
+
+  sentryStatus   String
+  sentryResult   String
+
+  verisoulStatus String?
+  verisoulResult String?
+
+  providerId     String?
+  language       String?
+  rawQuery       String?
+
+  firstSeenAt    DateTime @default(now())
+  lastSeenAt     DateTime @updatedAt
+
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, supplierCode, externalId], map: "SentryRespondentResult_unique_respondent")
+  @@index([projectId])
+  @@index([supplierCode])
+  @@index([externalId])
+  @@index([sentryStatus])
+  @@index([sentryResult])
+  @@index([verisoulResult])
 }
 
 model Reconciliation {
