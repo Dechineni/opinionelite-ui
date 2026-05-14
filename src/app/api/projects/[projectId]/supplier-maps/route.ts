@@ -131,8 +131,70 @@ export async function GET(
     // ignore aggregation failures
   }
 
+  type SentrySupplierCounts = {
+  sentryPass: number;
+  sentryFail: number;
+  verisoulPass: number;
+  verisoulFail: number;
+};
+
+let sentryBySupplier: Record<string, SentrySupplierCounts> = {};
+
+try {
+  const sentryAgg = await prisma.sentryRespondentResult.groupBy({
+    by: ["supplierCode", "sentryResult", "verisoulResult"],
+    where: {
+      projectId: projId,
+      supplierCode: { not: "" },
+    },
+    _count: { _all: true },
+  });
+
+  sentryBySupplier = sentryAgg.reduce((acc, row) => {
+    const supplierCode = row.supplierCode || "";
+    if (!supplierCode) return acc;
+
+    acc[supplierCode] ??= {
+      sentryPass: 0,
+      sentryFail: 0,
+      verisoulPass: 0,
+      verisoulFail: 0,
+    };
+
+    const count = row._count._all;
+    const sentryResult = String(row.sentryResult || "").toUpperCase();
+    const verisoulResult = String(row.verisoulResult || "").toUpperCase();
+
+    if (sentryResult === "PASS") {
+      acc[supplierCode].sentryPass += count;
+    } else {
+      acc[supplierCode].sentryFail += count;
+    }
+
+    // Pending CloudResearch confirmation on exact Verisoul values.
+    // For now, only count Verisoul when a separate result value exists.
+    if (verisoulResult) {
+      if (verisoulResult === "PASS") {
+        acc[supplierCode].verisoulPass += count;
+      } else {
+        acc[supplierCode].verisoulFail += count;
+      }
+    }
+
+    return acc;
+  }, {} as Record<string, SentrySupplierCounts>);
+} catch {
+  // ignore Sentry aggregation failures
+}
+
   const items = maps.map((m) => {
     const c = bySupplier[m.supplierId] ?? {};
+    const sc = sentryBySupplier[m.supplier?.code ?? ""] ?? {
+      sentryPass: 0,
+      sentryFail: 0,
+      verisoulPass: 0,
+      verisoulFail: 0,
+    };
     const complete = c.COMPLETE ?? 0;
     const terminate = c.TERMINATE ?? 0;
     const overQuota = c.OVERQUOTA ?? 0;
@@ -168,8 +230,12 @@ export async function GET(
       complete,
       terminate,
       overQuota,
-      dropOut: 0,
+      dropOut: c.DROPOUT ?? 0,
       qualityTerm,
+      sentryPass: sc.sentryPass,
+      sentryFail: sc.sentryFail,
+      verisoulPass: sc.verisoulPass,
+      verisoulFail: sc.verisoulFail,
     };
   });
 
@@ -290,6 +356,10 @@ export async function POST(
           overQuota: 0,
           dropOut: 0,
           qualityTerm: 0,
+          sentryPass: 0,
+          sentryFail: 0,
+          verisoulPass: 0,
+          verisoulFail: 0,
         },
       },
       { status: 201 }

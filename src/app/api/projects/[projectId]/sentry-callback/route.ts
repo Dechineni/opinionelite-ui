@@ -8,6 +8,21 @@ function buildTerminateUrl(origin: string) {
   return new URL("/Thanks?status=TERMINATE", origin);
 }
 
+function normalizeSentryResult(status: string) {
+  if (status === "1") return "PASS";
+  if (status === "2") return "FAIL_BEHAVIORAL";
+  if (status === "3") return "FAIL_TECH_SECURITY";
+  return "UNKNOWN";
+}
+
+function getFirstParam(url: URL, keys: string[]) {
+  for (const key of keys) {
+    const value = url.searchParams.get(key);
+    if (value) return value;
+  }
+  return null;
+}
+
 export async function GET(
   req: Request,
   ctx: { params: Promise<{ projectId: string }> }
@@ -57,6 +72,65 @@ export async function GET(
   }
 
   const projectKey = project.code || project.id;
+
+  const sentryResult = normalizeSentryResult(status);
+const supplierCode = supplierId || "";
+
+try {
+  await prisma.sentryRespondentResult.upsert({
+    where: {
+      projectId_supplierCode_externalId: {
+        projectId: project.id,
+        supplierCode,
+        externalId,
+      },
+    },
+    create: {
+      projectId: project.id,
+      projectCode: project.code,
+      supplierCode,
+      externalId,
+
+      sentryStatus: status || "UNKNOWN",
+      sentryResult,
+
+      providerId: url.searchParams.get("providerId"),
+      language: url.searchParams.get("language"),
+      rawQuery: url.searchParams.toString(),
+
+      // These are placeholders until CloudResearch confirms exact Verisoul fields.
+      verisoulStatus: getFirstParam(url, [
+        "verisoul_status",
+        "verisoulStatus",
+      ]),
+      verisoulResult: getFirstParam(url, [
+        "verisoul_result",
+        "verisoulResult",
+      ]),
+    },
+    update: {
+      projectCode: project.code,
+
+      sentryStatus: status || "UNKNOWN",
+      sentryResult,
+
+      providerId: url.searchParams.get("providerId"),
+      language: url.searchParams.get("language"),
+      rawQuery: url.searchParams.toString(),
+
+      verisoulStatus: getFirstParam(url, [
+        "verisoul_status",
+        "verisoulStatus",
+      ]),
+      verisoulResult: getFirstParam(url, [
+        "verisoul_result",
+        "verisoulResult",
+      ]),
+    },
+  });
+} catch (err) {
+  console.error("Failed to store Sentry respondent result:", err);
+}
 
   // Sentry docs:
   // 1 = Pass
