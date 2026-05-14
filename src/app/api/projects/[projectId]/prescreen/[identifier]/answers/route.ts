@@ -76,13 +76,19 @@ export async function POST(
     const answers: AnswerPayload[] = Array.isArray(raw)
       ? (raw as AnswerPayload[]).slice(0, 100)
       : [];
-
-    if (answers.length === 0) {
-      return NextResponse.json({ ok: true, saved: 0, pass: false });
-    }
-
     const projId = await resolveProjectId(prisma, projectId);
 
+    if (answers.length === 0) {
+  return NextResponse.json({
+    ok: true,
+    saved: 0,
+    pass: false,
+    projectId: projId,
+    respondentId: identifier,
+    supplierId
+  });
+}
+    
     // ---------- Ensure respondent ----------
     let respondentId: string | null = null;
 
@@ -179,8 +185,15 @@ export async function POST(
     const filtered = answers.filter((a) => questionMap.has(String(a.questionId)));
 
     if (filtered.length === 0) {
-      return NextResponse.json({ ok: true, saved: 0, pass: false });
-    }
+  return NextResponse.json({
+    ok: true,
+    saved: 0,
+    pass: false,
+    projectId: projId,
+    respondentId,
+    supplierId
+  });
+}
 
     // ---------- Write answers ----------
     const now = new Date();
@@ -301,12 +314,25 @@ export async function POST(
       }
     }
 
-    return NextResponse.json({ ok: true, saved, pass });
-  } catch (err: any) {
+return NextResponse.json({
+  ok: true,
+  saved,
+  pass,
+  projectId: projId,
+  respondentId,
+  supplierId,
+  stage: "prescreen"
+});
+
+} catch (err: any) {
     const msg = String(err?.message || "Failed to save answers");
     if (msg.includes("Transactions are not supported in HTTP mode")) {
       return NextResponse.json({ ok: true, saved: 0, pass: false });
     }
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({
+  ok: false,
+  error: msg,
+  stage: "prescreen"
+}, { status: 500 });
   }
 }

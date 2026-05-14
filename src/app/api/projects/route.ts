@@ -1,9 +1,14 @@
+// File: src/app/api/projects/route.ts
 export const runtime = "edge";
 export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { Prisma, ProjectStatus, RedirectOutcome } from "@prisma/client";
+import {
+  createSentryProject,
+  buildSentryPayload,
+} from "@/lib/integrations/sentry";
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -13,7 +18,9 @@ const pageInt = (v: string | null, d: number) =>
 const normalizeStatus = (s: string | null): ProjectStatus | undefined => {
   if (!s) return undefined;
   const up = s.toUpperCase() as ProjectStatus;
-  return (Object.values(ProjectStatus) as string[]).includes(up) ? up : undefined;
+  return (Object.values(ProjectStatus) as string[]).includes(up)
+    ? up
+    : undefined;
 };
 
 function buildSupplierUrl(opts: {
@@ -32,7 +39,9 @@ function buildInternalThanksUrl(opts: {
   auth: "10" | "20" | "40" | "30" | "70";
 }) {
   const ui = (opts.uiBase || "").replace(/\/+$/, "");
-  return `${ui}/Thanks/Index?auth=${encodeURIComponent(opts.auth)}&rid=[identifier]`;
+  return `${ui}/Thanks/Index?auth=${encodeURIComponent(
+    opts.auth
+  )}&rid=[identifier]`;
 }
 
 async function ensureTestSupplierMapping(args: {
@@ -47,9 +56,24 @@ async function ensureTestSupplierMapping(args: {
   const testSupplier = await prisma.supplier.findFirst({
     where: {
       OR: [
-        { name: { equals: "Test Supplier", mode: Prisma.QueryMode.insensitive } },
-        { code: { equals: "TEST_SUPPLIER", mode: Prisma.QueryMode.insensitive } },
-        { code: { equals: "TEST", mode: Prisma.QueryMode.insensitive } },
+        {
+          name: {
+            equals: "Test Supplier",
+            mode: Prisma.QueryMode.insensitive,
+          },
+        },
+        {
+          code: {
+            equals: "TEST_SUPPLIER",
+            mode: Prisma.QueryMode.insensitive,
+          },
+        },
+        {
+          code: {
+            equals: "TEST",
+            mode: Prisma.QueryMode.insensitive,
+          },
+        },
       ],
     },
     select: {
@@ -62,7 +86,8 @@ async function ensureTestSupplierMapping(args: {
   if (!testSupplier) {
     return {
       ok: false as const,
-      reason: 'Test Supplier record not found. Create a Supplier named "Test Supplier" or code "TEST_SUPPLIER".',
+      reason:
+        'Test Supplier record not found. Create a Supplier named "Test Supplier" or code "TEST_SUPPLIER".',
     };
   }
 
@@ -144,12 +169,28 @@ export async function GET(req: Request) {
     ...(q
       ? {
           OR: [
-            { code: { contains: q, mode: Prisma.QueryMode.insensitive } },
-            { name: { contains: q, mode: Prisma.QueryMode.insensitive } },
-            { managerEmail: { contains: q, mode: Prisma.QueryMode.insensitive } },
+            {
+              code: {
+                contains: q,
+                mode: Prisma.QueryMode.insensitive,
+              },
+            },
+            {
+              name: {
+                contains: q,
+                mode: Prisma.QueryMode.insensitive,
+              },
+            },
+            {
+              managerEmail: {
+                contains: q,
+                mode: Prisma.QueryMode.insensitive,
+              },
+            },
           ],
         }
       : {}),
+
     ...(status ? { status } : {}),
     ...(clientId ? { clientId } : {}),
     ...(groupId ? { groupId } : {}),
@@ -163,7 +204,9 @@ export async function GET(req: Request) {
       take: pageSize,
       include: { client: { select: { name: true } } },
     }),
+
     prisma.project.count({ where }),
+
     prisma.project.groupBy({
       by: ["status"],
       _count: { _all: true },
@@ -189,9 +232,19 @@ export async function GET(req: Request) {
     outcomeGrouped = groupedOutcomes as typeof outcomeGrouped;
   }
 
-  const byProject: Record<string, { c: number; t: number; q: number; d: number }> = {};
+  const byProject: Record<
+    string,
+    { c: number; t: number; q: number; d: number }
+  > = {};
+
   for (const g of outcomeGrouped) {
-    const bucket = (byProject[g.projectId] ??= { c: 0, t: 0, q: 0, d: 0 });
+    const bucket = (byProject[g.projectId] ??= {
+      c: 0,
+      t: 0,
+      q: 0,
+      d: 0,
+    });
+
     switch (g.outcome) {
       case "COMPLETE":
         bucket.c += g._count._all;
@@ -211,7 +264,13 @@ export async function GET(req: Request) {
   }
 
   const items = itemsRaw.map(({ client, ...rest }) => {
-    const totals = byProject[rest.id] ?? { c: 0, t: 0, q: 0, d: 0 };
+    const totals = byProject[rest.id] ?? {
+      c: 0,
+      t: 0,
+      q: 0,
+      d: 0,
+    };
+
     return {
       ...rest,
       clientName: client?.name ?? null,
@@ -222,57 +281,97 @@ export async function GET(req: Request) {
     };
   });
 
-  const statusCounts = Object.values(ProjectStatus).reduce<Record<ProjectStatus, number>>(
-    (acc, s) => {
-      acc[s] = 0;
-      return acc;
-    },
-    {} as Record<ProjectStatus, number>
-  );
-  for (const g of grouped) statusCounts[g.status as ProjectStatus] = g._count._all;
+  const statusCounts = Object.values(ProjectStatus).reduce<
+    Record<ProjectStatus, number>
+  >((acc, s) => {
+    acc[s] = 0;
+    return acc;
+  }, {} as Record<ProjectStatus, number>);
+
+  for (const g of grouped) {
+    statusCounts[g.status as ProjectStatus] = g._count._all;
+  }
 
   return NextResponse.json({ items, total, statusCounts });
 }
 
 /* ------------------------------- POST ------------------------------ */
-// Create project (server validates numbers/decimals/dates)
+// Create project
 export async function POST(req: Request) {
   const prisma = getPrisma();
   const raw = await req.json();
 
   const { code: _ignore, ...b } = raw;
 
+  const {
+    sentryEnabled,
+    sentryTemplateId,
+    sentryHashingEnabled,
+    sentryVerisoulEnabled,
+    sentryVerisoulTermFake,
+    sentryVerisoulTermSuspicious,
+    sentryProviderId,
+    sentryIdField,
+  } = b;
+
   const loi = Number(b.loi);
   const ir = Number(b.ir);
   const sampleSize = Number(b.sampleSize);
+
   if (![loi, ir, sampleSize].every(Number.isFinite)) {
-    return NextResponse.json({ error: "Invalid LOI/IR/Sample Size" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid LOI, IR, or Sample Size" },
+      { status: 400 }
+    );
   }
 
   const clickQuota =
     b.clickQuota === undefined || b.clickQuota === null || b.clickQuota === ""
       ? sampleSize
       : Number(b.clickQuota);
+
   if (!Number.isFinite(clickQuota)) {
-    return NextResponse.json({ error: "Invalid Click Quota" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid Click Quota" },
+      { status: 400 }
+    );
   }
 
-  if (b.projectCpi === undefined || b.projectCpi === null || b.projectCpi === "") {
-    return NextResponse.json({ error: "Project CPI is required" }, { status: 400 });
+  if (
+    b.projectCpi === undefined ||
+    b.projectCpi === null ||
+    b.projectCpi === ""
+  ) {
+    return NextResponse.json(
+      { error: "Project CPI is required" },
+      { status: 400 }
+    );
   }
+
   const projectCpi = new Prisma.Decimal(b.projectCpi);
+
   const supplierCpi =
-    b.supplierCpi === null || b.supplierCpi === undefined || b.supplierCpi === ""
+    b.supplierCpi === null ||
+    b.supplierCpi === undefined ||
+    b.supplierCpi === ""
       ? null
       : new Prisma.Decimal(b.supplierCpi);
 
   if (!b.startDate || !b.endDate) {
-    return NextResponse.json({ error: "Start and End dates are required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Start and End dates are required" },
+      { status: 400 }
+    );
   }
+
   const startDate = new Date(b.startDate);
   const endDate = new Date(b.endDate);
+
   if (isNaN(+startDate) || isNaN(+endDate)) {
-    return NextResponse.json({ error: "Invalid dates" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid dates" },
+      { status: 400 }
+    );
   }
 
   try {
@@ -304,35 +403,105 @@ export async function POST(req: Request) {
         preScreen: !!b.preScreen,
         exclude: !!b.exclude,
         geoLocation: !!b.geoLocation,
+
         dynamicThanksUrl:
           typeof b.dynamicThanks === "boolean"
             ? b.dynamicThanks
             : !!b.dynamicThanksUrl,
+
         uniqueIp: !!b.uniqueIp,
         uniqueIpDepth:
-          b.uniqueIpDepth === "" || b.uniqueIpDepth === null || b.uniqueIpDepth === undefined
+          b.uniqueIpDepth === "" ||
+          b.uniqueIpDepth === null ||
+          b.uniqueIpDepth === undefined
             ? null
             : Number(b.uniqueIpDepth),
+
         tSign: !!b.tSign,
+
         speeder: !!b.speeder,
         speederDepth:
-          b.speederDepth === "" || b.speederDepth === null || b.speederDepth === undefined
+          b.speederDepth === "" ||
+          b.speederDepth === null ||
+          b.speederDepth === undefined
             ? null
             : Number(b.speederDepth),
 
         mobile: !!b.mobile,
         tablet: !!b.tablet,
         desktop: !!b.desktop,
+
+        sentryEnabled: !!sentryEnabled,
+        sentryTemplateId: sentryTemplateId ?? null,
+
+        sentryProviderId:
+          sentryProviderId?.trim() ||
+          process.env.SENTRY_PROVIDER_ID?.trim() ||
+          null,
+
+        sentryIdField:
+          sentryIdField?.trim() ||
+          process.env.SENTRY_ID_FIELD?.trim() ||
+          "aid",
+
+        sentryHashingEnabled: !!sentryHashingEnabled,
+        sentryVerisoulEnabled: !!sentryVerisoulEnabled,
+        sentryVerisoulTermFake: !!sentryVerisoulTermFake,
+        sentryVerisoulTermSuspicious: !!sentryVerisoulTermSuspicious,
       },
       select: {
         id: true,
         code: true,
+        name: true,
+
         sampleSize: true,
         clickQuota: true,
         supplierCpi: true,
         projectCpi: true,
+
+        sentryTemplateId: true,
+        sentryProviderId: true,
+        sentryIdField: true,
+        sentryVerisoulEnabled: true,
+        sentryVerisoulTermFake: true,
+        sentryVerisoulTermSuspicious: true,
       },
     });
+
+    let sentryResponse: any = null;
+
+    if (sentryEnabled) {
+      try {
+        const payload = buildSentryPayload(created);
+
+        sentryResponse = await createSentryProject(payload);
+
+        const sentryProject = sentryResponse?.project;
+
+        if (!sentryProject) {
+          throw new Error("Sentry project missing in response");
+        }
+
+        await prisma.project.update({
+          where: { id: created.id },
+          data: {
+            sentryProjectId: sentryProject.projectId,
+            sentryLiveUrl: sentryProject.liveUrl,
+            sentryTestUrl: sentryProject.testUrl,
+            sentryReportingUrl: sentryProject.projectReportingUrl,
+            sentryProjectStatus: sentryProject.projectStatus,
+          },
+        });
+      } catch (err: any) {
+        console.error("❌ Sentry integration failed");
+        console.error(err);
+
+        if (err instanceof Error) {
+          console.error("MESSAGE:", err.message);
+          console.error("STACK:", err.stack);
+        }
+      }
+    }
 
     let testSupplierWarning: string | null = null;
     let testSupplierMapping: {
@@ -380,7 +549,10 @@ export async function POST(req: Request) {
     );
   } catch (e: any) {
     return NextResponse.json(
-      { error: "Create failed", detail: String(e?.message ?? e) },
+      {
+        error: "Create failed",
+        detail: String(e?.message ?? e),
+      },
       { status: 400 }
     );
   }
