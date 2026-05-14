@@ -75,7 +75,9 @@ function getAppUrl() {
     process.env.NEXT_PUBLIC_UI_ORIGIN;
 
   if (!appUrl) {
-    throw new Error("Missing app URL env. Set one of NEXT_PUBLIC_APP_URL, NEXT_PUBLIC_BASE_URL, NEXT_PUBLIC_SITE_URL, or NEXT_PUBLIC_UI_ORIGIN");
+    throw new Error(
+      "Missing app URL env. Set one of NEXT_PUBLIC_APP_URL, NEXT_PUBLIC_BASE_URL, NEXT_PUBLIC_SITE_URL, or NEXT_PUBLIC_UI_ORIGIN"
+    );
   }
 
   return appUrl.replace(/\/+$/, "");
@@ -93,9 +95,48 @@ function buildInternalSentryCallbackUrl(project: any) {
     throw new Error("Missing project id/code for Sentry callback URL");
   }
 
-  return `${appUrl}/api/projects/${encodeURIComponent(
-    projectKey
-  )}/sentry-callback`;
+  const callbackUrl = new URL(
+    `${appUrl}/api/projects/${encodeURIComponent(projectKey)}/sentry-callback`
+  );
+
+  /*
+   * Variable replacement values from Sentry.
+   *
+   * CloudResearch replaces these reserved variables before redirecting back
+   * to our callback URL.
+   *
+   * SENTRY_VERISOUL_DECISION:
+   *   0 = Real
+   *   1 = Suspicious
+   *   2 = Fake
+   *
+   * SENTRY_PRIMARY_ANALYSIS_CODE:
+   *   30 = Verisoul Blocked
+   *
+   * SENTRY_ANALYSIS_FLAGS_CODES:
+   *   comma-separated list of all flagged analysis codes.
+   */
+  callbackUrl.searchParams.set(
+    "verisoul_decision",
+    "SENTRY_VERISOUL_DECISION"
+  );
+
+  callbackUrl.searchParams.set(
+    "verisoul_score",
+    "SENTRY_VERISOUL_RISK_SIGNALS_SCORE"
+  );
+
+  callbackUrl.searchParams.set(
+    "primary_analysis",
+    "SENTRY_PRIMARY_ANALYSIS_CODE"
+  );
+
+  callbackUrl.searchParams.set(
+    "analysis_flags",
+    "SENTRY_ANALYSIS_FLAGS_CODES"
+  );
+
+  return callbackUrl.toString();
 }
 
 /* ---------------------------------------

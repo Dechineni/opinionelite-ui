@@ -15,12 +15,47 @@ function normalizeSentryResult(status: string) {
   return "UNKNOWN";
 }
 
+function cleanParamValue(value: string | null) {
+  const v = (value || "").trim();
+
+  if (!v) return null;
+
+  // If CloudResearch has not replaced the reserved variable for any reason,
+  // do not store the literal placeholder as a real value.
+  if (v.startsWith("SENTRY_")) return null;
+
+  return v;
+}
+
 function getFirstParam(url: URL, keys: string[]) {
   for (const key of keys) {
-    const value = url.searchParams.get(key);
+    const value = cleanParamValue(url.searchParams.get(key));
     if (value) return value;
   }
+
   return null;
+}
+
+function normalizeVerisoulResult(value: string | null) {
+  const v = cleanParamValue(value);
+
+  if (!v) return null;
+
+  // SENTRY_VERISOUL_DECISION values:
+  // 0 = Real
+  // 1 = Suspicious
+  // 2 = Fake
+  if (v === "0") return "PASS";
+  if (v === "1") return "FAIL_SUSPICIOUS";
+  if (v === "2") return "FAIL_FAKE";
+
+  const normalized = v.toUpperCase();
+
+  if (normalized === "REAL") return "PASS";
+  if (normalized === "SUSPICIOUS") return "FAIL_SUSPICIOUS";
+  if (normalized === "FAKE") return "FAIL_FAKE";
+
+  return normalized;
 }
 
 export async function GET(
@@ -74,63 +109,74 @@ export async function GET(
   const projectKey = project.code || project.id;
 
   const sentryResult = normalizeSentryResult(status);
-const supplierCode = supplierId || "";
+  const supplierCode = supplierId || "";
 
-try {
-  await prisma.sentryRespondentResult.upsert({
-    where: {
-      projectId_supplierCode_externalId: {
+  const verisoulDecision = getFirstParam(url, [
+    "verisoul_decision",
+    "verisoul_status",
+    "verisoulStatus",
+  ]);
+
+  const verisoulResult = normalizeVerisoulResult(
+    getFirstParam(url, [
+      "verisoul_decision",
+      "verisoul_result",
+      "verisoulResult",
+    ])
+  );
+
+  try {
+    await prisma.sentryRespondentResult.upsert({
+      where: {
+        projectId_supplierCode_externalId: {
+          projectId: project.id,
+          supplierCode,
+          externalId,
+        },
+      },
+      create: {
         projectId: project.id,
+        projectCode: project.code,
         supplierCode,
         externalId,
+
+        sentryStatus: status || "UNKNOWN",
+        sentryResult,
+
+        providerId: url.searchParams.get("providerId"),
+        language: url.searchParams.get("language"),
+        rawQuery: url.searchParams.toString(),
+
+        // Verisoul variable replacement fields from CloudResearch.
+        // verisoul_decision:
+        // 0 = Real
+        // 1 = Suspicious
+        // 2 = Fake
+        verisoulStatus: verisoulDecision,
+        verisoulResult,
       },
-    },
-    create: {
-      projectId: project.id,
-      projectCode: project.code,
-      supplierCode,
-      externalId,
+      update: {
+        projectCode: project.code,
 
-      sentryStatus: status || "UNKNOWN",
-      sentryResult,
+        sentryStatus: status || "UNKNOWN",
+        sentryResult,
 
-      providerId: url.searchParams.get("providerId"),
-      language: url.searchParams.get("language"),
-      rawQuery: url.searchParams.toString(),
+        providerId: url.searchParams.get("providerId"),
+        language: url.searchParams.get("language"),
+        rawQuery: url.searchParams.toString(),
 
-      // These are placeholders until CloudResearch confirms exact Verisoul fields.
-      verisoulStatus: getFirstParam(url, [
-        "verisoul_status",
-        "verisoulStatus",
-      ]),
-      verisoulResult: getFirstParam(url, [
-        "verisoul_result",
-        "verisoulResult",
-      ]),
-    },
-    update: {
-      projectCode: project.code,
-
-      sentryStatus: status || "UNKNOWN",
-      sentryResult,
-
-      providerId: url.searchParams.get("providerId"),
-      language: url.searchParams.get("language"),
-      rawQuery: url.searchParams.toString(),
-
-      verisoulStatus: getFirstParam(url, [
-        "verisoul_status",
-        "verisoulStatus",
-      ]),
-      verisoulResult: getFirstParam(url, [
-        "verisoul_result",
-        "verisoulResult",
-      ]),
-    },
-  });
-} catch (err) {
-  console.error("Failed to store Sentry respondent result:", err);
-}
+        // Verisoul variable replacement fields from CloudResearch.
+        // verisoul_decision:
+        // 0 = Real
+        // 1 = Suspicious
+        // 2 = Fake
+        verisoulStatus: verisoulDecision,
+        verisoulResult,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to store Sentry respondent result:", err);
+  }
 
   // Sentry docs:
   // 1 = Pass
