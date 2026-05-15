@@ -45,6 +45,7 @@ export async function GET(
     select: {
       id: true,
       code: true,
+      preScreen: true,
       sentryEnabled: true,
       apiSurveySelection: {
         select: {
@@ -89,8 +90,8 @@ export async function GET(
     },
   });
 
-  if (hasPrescreenQuestions > 0 && !fromPrescreen) {
-    const prescreenUrl = new URL("/prescreen", url.origin);
+  if (project.preScreen && hasPrescreenQuestions > 0 && !fromPrescreen) {
+    const prescreenUrl = new URL("/Prescreen", url.origin);
 
     prescreenUrl.searchParams.set("projectId", projectKey);
 
