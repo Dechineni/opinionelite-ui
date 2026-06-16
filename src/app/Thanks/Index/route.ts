@@ -258,6 +258,35 @@ export async function GET(req: Request) {
         .catch(() => {});
     }
 
+    // Mark the initial supplier entry as finalized.
+    // This removes the respondent from the In Progress count.
+    if (projectId && externalId && supplierRecord?.code) {
+      try {
+        await prisma.supplierEntry.updateMany({
+          where: {
+            projectId,
+            supplierCode: supplierRecord.code,
+            externalId,
+
+            // Preserve the first final result if a duplicate or conflicting
+            // callback is received later.
+            finalOutcome: null,
+          },
+          data: {
+            currentStage: "FINALIZED",
+            finalOutcome: mapped.eventOutcome,
+            finalOutcomeAt: new Date(),
+          },
+        });
+      } catch (entryError) {
+        // Tracking failure must not block the respondent redirect.
+        console.error(
+          "Failed to finalize SupplierEntry:",
+          entryError
+        );
+      }
+    }
+
     if (projectId) {
       try {
         await prisma.supplierRedirectEvent.create({
