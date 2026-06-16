@@ -145,6 +145,35 @@ model Project {
   sentryProviderId     String?
   sentryIdField        String?
   sentryRespondentResults SentryRespondentResult[]
+
+  supplierEntries SupplierEntry[]
+}
+
+model SupplierEntry {
+  id            String   @id @default(cuid())
+
+  projectId     String
+  projectCode   String?
+  supplierCode  String
+  externalId    String
+
+  firstEnteredAt DateTime @default(now())
+  lastEnteredAt  DateTime @updatedAt
+  entryCount     Int      @default(1)
+
+  currentStage   String   @default("ENTERED")
+  finalOutcome   String?
+  finalOutcomeAt DateTime?
+
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, supplierCode, externalId], map: "SupplierEntry_unique_respondent")
+  @@index([projectId])
+  @@index([supplierCode])
+  @@index([externalId])
+  @@index([currentStage])
+  @@index([finalOutcome])
+  @@index([firstEnteredAt])
 }
 
 /// A supplier mapped to a project (1 row per supplier per project)
