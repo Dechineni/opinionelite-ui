@@ -33,7 +33,28 @@ function SurveyLandingInner() {
 
     (async () => {
       try {
-        // Single source of truth:
+        // Track the respondent immediately when the Supplier URL is opened.
+        // Failure here must not block Prescreen/Sentry/survey launch.
+        try {
+          await fetch(
+            `/api/projects/${encodeURIComponent(projectId)}/entry`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                supplierId,
+                externalId: id,
+              }),
+              cache: "no-store",
+            }
+          );
+        } catch (error) {
+          console.error("Failed to track supplier entry:", error);
+        }
+
+        // Existing Prescreen pending request continues below.
         // This endpoint accepts project *id or code* and now also returns preScreenEnabled.
         const res = await fetch(
           `/api/projects/${encodeURIComponent(projectId)}/prescreen/${encodeURIComponent(
