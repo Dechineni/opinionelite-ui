@@ -158,7 +158,7 @@ model SupplierEntry {
   externalId    String
 
   firstEnteredAt DateTime @default(now())
-  lastEnteredAt  DateTime @updatedAt
+  lastEnteredAt DateTime @default(now())
   entryCount     Int      @default(1)
 
   currentStage   String   @default("ENTERED")
