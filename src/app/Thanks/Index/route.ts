@@ -95,9 +95,9 @@ const looksLikePid = (s: string) => /^[0-9A-Za-z]{20}$/.test(s);
 function isTestSupplier(
   supplier:
     | {
-      code?: string | null;
-      name?: string | null;
-    }
+        code?: string | null;
+        name?: string | null;
+      }
     | null
     | undefined
 ) {
@@ -172,19 +172,19 @@ export async function GET(req: Request) {
     let redirect =
       ridIn && looksLikePid(ridIn)
         ? await prisma.surveyRedirect.findUnique({
-          where: {
-            id: ridIn,
-          },
-          select: {
-            id: true,
-            projectId: true,
-            supplierId: true,
-            respondentId: true,
-            externalId: true,
-            destination: true,
-            result: true,
-          },
-        })
+            where: {
+              id: ridIn,
+            },
+            select: {
+              id: true,
+              projectId: true,
+              supplierId: true,
+              respondentId: true,
+              externalId: true,
+              destination: true,
+              result: true,
+            },
+          })
         : null;
 
     if (!redirect && callbackExternalId) {
@@ -248,22 +248,21 @@ export async function GET(req: Request) {
 
     let supplierRecord:
       | {
-        id: string;
-        code: string;
-        name: string | null;
-        completeUrl: string | null;
-        terminateUrl: string | null;
-        overQuotaUrl: string | null;
-        qualityTermUrl: string | null;
-        surveyCloseUrl: string | null;
-      }
+          id: string;
+          code: string;
+          name: string | null;
+          completeUrl: string | null;
+          terminateUrl: string | null;
+          overQuotaUrl: string | null;
+          qualityTermUrl: string | null;
+          surveyCloseUrl: string | null;
+        }
       | null = null;
 
     if (supplierId) {
       /*
-       * Some older records may contain the Supplier database ID,
-       * while current SurveyRedirect rows generally contain the
-       * supplier code such as S1007.
+       * Some older SurveyRedirect rows may contain the Supplier database ID,
+       * while current rows generally contain the supplier code, such as S1007.
        */
       supplierRecord = await prisma.supplier.findUnique({
         where: {
@@ -397,7 +396,7 @@ export async function GET(req: Request) {
             respondentId,
           },
         })
-        .catch(() => { });
+        .catch(() => {});
     }
 
     if (redirect.result !== mapped.redirectResult) {
@@ -410,29 +409,21 @@ export async function GET(req: Request) {
             result: mapped.redirectResult,
           },
         })
-        .catch(() => { });
+        .catch(() => {});
     }
 
     /*
-     * Finalize the initial SupplierEntry using the original context
-     * resolved from SurveyRedirect.
+     * Finalize SupplierEntry using the context resolved from SurveyRedirect.
      *
-     * SupplierEntry stores:
-     * - Project database ID in projectId
-     * - Supplier code such as S1007 in supplierCode
-     * - Original supplier respondent ID in externalId
-     *
-     * Do not use the callback rid as the SupplierEntry externalId,
-     * because rid is the generated SurveyRedirect PID.
+     * Do not use updateMany here. The Cloudflare Edge deployment uses
+     * Neon HTTP mode, where Prisma updateMany may require a transaction.
+     * Transactions are not supported in that mode.
      */
     if (projectId && externalId) {
-      // These values are guaranteed to be strings inside this block.
       const entryProjectId = projectId;
       const entryExternalId = externalId;
 
       try {
-        const finalizedAt = new Date();
-
         const redirectSupplierValue = String(
           redirect.supplierId || ""
         ).trim();
@@ -441,143 +432,136 @@ export async function GET(req: Request) {
           supplierRecord?.code || ""
         ).trim();
 
-        let updatedRows = 0;
-        let matchedSupplierCode: string | null = null;
+        const possibleSupplierCodes = Array.from(
+          new Set(
+            [redirectSupplierValue, resolvedSupplierCode].filter(
+              (value): value is string => Boolean(value)
+            )
+          )
+        );
+
+        let matchedEntry:
+          | {
+              id: string;
+              supplierCode: string;
+              finalOutcome: string | null;
+            }
+          | null = null;
 
         /*
-         * Primary match:
-         * SurveyRedirect.supplierId normally stores the supplier code.
+         * Primary lookup using the compound unique key:
+         * projectId + supplierCode + externalId.
          */
-        if (redirectSupplierValue) {
-          const primaryUpdate =
-            await prisma.supplierEntry.updateMany({
-              where: {
+        for (const supplierCode of possibleSupplierCodes) {
+          const entry = await prisma.supplierEntry.findUnique({
+            where: {
+              projectId_supplierCode_externalId: {
                 projectId: entryProjectId,
-                supplierCode: redirectSupplierValue,
+                supplierCode,
                 externalId: entryExternalId,
-                finalOutcome: null,
               },
-              data: {
-                currentStage: "FINALIZED",
-                finalOutcome: mapped.eventOutcome,
-                finalOutcomeAt: finalizedAt,
-              },
-            });
+            },
+            select: {
+              id: true,
+              supplierCode: true,
+              finalOutcome: true,
+            },
+          });
 
-          updatedRows += primaryUpdate.count;
-
-          if (primaryUpdate.count > 0) {
-            matchedSupplierCode = redirectSupplierValue;
+          if (entry) {
+            matchedEntry = entry;
+            break;
           }
         }
 
         /*
-         * Secondary match:
-         * Use the supplier record's code when SurveyRedirect contains
-         * a Supplier database ID or another legacy supplier value.
-         */
-        if (
-          updatedRows === 0 &&
-          resolvedSupplierCode &&
-          resolvedSupplierCode !== redirectSupplierValue
-        ) {
-          const secondaryUpdate =
-            await prisma.supplierEntry.updateMany({
-              where: {
-                projectId: entryProjectId,
-                supplierCode: resolvedSupplierCode,
-                externalId: entryExternalId,
-                finalOutcome: null,
-              },
-              data: {
-                currentStage: "FINALIZED",
-                finalOutcome: mapped.eventOutcome,
-                finalOutcomeAt: finalizedAt,
-              },
-            });
-
-          updatedRows += secondaryUpdate.count;
-
-          if (secondaryUpdate.count > 0) {
-            matchedSupplierCode = resolvedSupplierCode;
-          }
-        }
-
-        /*
-         * Final safe fallback:
-         * If there is exactly one unfinished SupplierEntry for the
-         * same project and external ID, update that row.
+         * Safe fallback for older or inconsistent supplier values.
          *
-         * This avoids updating the wrong supplier when the same
-         * external ID exists under multiple suppliers.
+         * Only use this fallback when exactly one SupplierEntry exists
+         * for the project and external ID. This prevents finalizing an
+         * entry under the wrong supplier.
          */
-        if (updatedRows === 0) {
+        if (!matchedEntry) {
           const candidateEntries =
             await prisma.supplierEntry.findMany({
               where: {
                 projectId: entryProjectId,
                 externalId: entryExternalId,
-                finalOutcome: null,
               },
               select: {
                 id: true,
                 supplierCode: true,
+                finalOutcome: true,
               },
               take: 2,
             });
 
           if (candidateEntries.length === 1) {
-            await prisma.supplierEntry.update({
-              where: {
-                id: candidateEntries[0].id,
-              },
-              data: {
-                currentStage: "FINALIZED",
-                finalOutcome: mapped.eventOutcome,
-                finalOutcomeAt: finalizedAt,
-              },
-            });
-
-            updatedRows = 1;
-            matchedSupplierCode =
-              candidateEntries[0].supplierCode;
+            matchedEntry = candidateEntries[0];
           } else if (candidateEntries.length > 1) {
             console.warn(
-              "SupplierEntry finalization skipped because multiple unfinished entries matched the same project and external ID:",
+              "SupplierEntry finalization skipped because multiple entries matched:",
               {
                 pid,
-                projectId: redirect.projectId,
-                externalId: redirect.externalId,
+                projectId: entryProjectId,
+                externalId: entryExternalId,
                 redirectSupplierValue,
                 resolvedSupplierCode,
-                candidateSupplierCodes:
-                  candidateEntries.map(
-                    (entry) => entry.supplierCode
-                  ),
+                candidateSupplierCodes: candidateEntries.map(
+                  (entry) => entry.supplierCode
+                ),
               }
             );
           }
         }
 
-        console.log("SupplierEntry finalization result:", {
-          updatedRows,
-          pid,
-          projectId: entryProjectId,
-          redirectSupplierValue,
-          resolvedSupplierCode,
-          matchedSupplierCode,
-          externalId: entryExternalId,
-          finalOutcome: mapped.eventOutcome,
-        });
-
-        if (updatedRows === 0) {
+        if (!matchedEntry) {
           console.warn(
-            "No unfinished SupplierEntry row was finalized:",
+            "No SupplierEntry found for finalization:",
             {
               pid,
               projectId: entryProjectId,
+              externalId: entryExternalId,
               redirectSupplierValue,
               resolvedSupplierCode,
+              finalOutcome: mapped.eventOutcome,
+            }
+          );
+        } else if (matchedEntry.finalOutcome !== null) {
+          /*
+           * Preserve the first final result if a duplicate callback arrives.
+           */
+          console.log(
+            "SupplierEntry was already finalized; duplicate callback ignored:",
+            {
+              pid,
+              supplierEntryId: matchedEntry.id,
+              projectId: entryProjectId,
+              supplierCode: matchedEntry.supplierCode,
+              externalId: entryExternalId,
+              existingFinalOutcome: matchedEntry.finalOutcome,
+              receivedFinalOutcome: mapped.eventOutcome,
+            }
+          );
+        } else {
+          await prisma.supplierEntry.update({
+            where: {
+              id: matchedEntry.id,
+            },
+            data: {
+              currentStage: "FINALIZED",
+              finalOutcome: mapped.eventOutcome,
+              finalOutcomeAt: new Date(),
+            },
+          });
+
+          console.log(
+            "SupplierEntry finalized successfully:",
+            {
+              pid,
+              supplierEntryId: matchedEntry.id,
+              projectId: entryProjectId,
+              supplierCode: matchedEntry.supplierCode,
               externalId: entryExternalId,
               finalOutcome: mapped.eventOutcome,
             }
@@ -585,7 +569,7 @@ export async function GET(req: Request) {
         }
       } catch (entryError) {
         /*
-         * SupplierEntry tracking failure must never block the existing
+         * SupplierEntry tracking failure must not interrupt the existing
          * result count or respondent redirect flow.
          */
         console.error(
