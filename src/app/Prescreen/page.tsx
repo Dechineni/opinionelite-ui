@@ -140,10 +140,20 @@ if (nextUrl && nextUrl.startsWith("/api/projects/") && !nextUrl.includes("://"))
 }
 
   function terminateDestination(): string {
-    const u = new URL("/Thanks", window.location.origin);
-    u.searchParams.set("status", "TERMINATE");
-    return u.toString();
+  const u = new URL("/Thanks", window.location.origin);
+
+  u.searchParams.set("status", "TERMINATE");
+  u.searchParams.set("projectId", projectId);
+  u.searchParams.set("id", rid);
+  u.searchParams.set("stage", "prescreen");
+  u.searchParams.set("reason", "prescreen_failed");
+
+  if (supplierId) {
+    u.searchParams.set("supplierId", supplierId);
   }
+
+  return u.toString();
+}
 
   function buildAnswersPayload() {
     const flat = questions.map((q) => {
