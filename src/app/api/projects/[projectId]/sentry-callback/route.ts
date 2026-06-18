@@ -155,23 +155,23 @@ export async function GET(
     }
 
     try {
-      const result = await prisma.supplierEntry.updateMany({
+      const entry = await prisma.supplierEntry.findUnique({
         where: {
-          projectId: project.id,
-          supplierCode,
-          externalId,
-          finalOutcome: null,
+          projectId_supplierCode_externalId: {
+            projectId: project.id,
+            supplierCode,
+            externalId,
+          },
         },
-        data: {
-          currentStage: "FINALIZED",
-          finalOutcome: "TERMINATE",
-          finalOutcomeAt: new Date(),
+        select: {
+          id: true,
+          finalOutcome: true,
         },
       });
 
-      if (result.count === 0) {
+      if (!entry) {
         console.warn(
-          `No unfinished SupplierEntry found for ${callbackReason}`,
+          `No SupplierEntry found for ${callbackReason}`,
           {
             projectId: project.id,
             projectCode: project.code,
@@ -180,7 +180,46 @@ export async function GET(
             sentryStatus: status || "UNKNOWN",
           }
         );
+
+        return;
       }
+
+      if (entry.finalOutcome !== null) {
+        console.log(
+          `SupplierEntry already finalized for ${callbackReason}`,
+          {
+            supplierEntryId: entry.id,
+            projectId: project.id,
+            supplierCode,
+            externalId,
+            existingFinalOutcome: entry.finalOutcome,
+          }
+        );
+
+        return;
+      }
+
+      await prisma.supplierEntry.update({
+        where: {
+          id: entry.id,
+        },
+        data: {
+          currentStage: "FINALIZED",
+          finalOutcome: "TERMINATE",
+          finalOutcomeAt: new Date(),
+        },
+      });
+
+      console.log(
+        `SupplierEntry finalized for ${callbackReason}`,
+        {
+          supplierEntryId: entry.id,
+          projectId: project.id,
+          supplierCode,
+          externalId,
+          finalOutcome: "TERMINATE",
+        }
+      );
     } catch (entryError) {
       console.error(
         `Failed to finalize SupplierEntry for ${callbackReason}:`,
