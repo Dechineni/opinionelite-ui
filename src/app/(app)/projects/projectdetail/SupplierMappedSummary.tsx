@@ -1,4 +1,4 @@
-// FILE: src/app/(app)/projects/projectdetail/SupplierMappedSummary.tsx
+// FILE:src/app/(app)/projects/projectdetail/SupplierMappedSummary.tsx
 
 "use client";
 
