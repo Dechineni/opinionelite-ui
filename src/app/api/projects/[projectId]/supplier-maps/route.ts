@@ -81,6 +81,17 @@ async function resolveProjectId(projectKey: string) {
 }
 
 /**
+ * Build a stable lookup key for matching SupplierEntry and
+ * SentryRespondentResult records.
+ */
+function buildEntryKey(
+  supplierCode: string,
+  externalId: string
+) {
+  return `${supplierCode}\u0000${externalId}`;
+}
+
+/**
  * Build the Supplier Mapping URL that OP Panel will show
  * and persist in the database.
  */
@@ -90,9 +101,11 @@ function buildSupplierUrl(opts: {
   supplierCode: string;
 }) {
   const ui = (opts.uiBase || "").replace(/\/+$/, "");
+
   const projectCode = encodeURIComponent(
     opts.projectCode || ""
   );
+
   const supplierCode = encodeURIComponent(
     opts.supplierCode || ""
   );
@@ -105,11 +118,20 @@ function buildSupplierUrl(opts: {
 /**
  * List supplier mappings with flattened supplier details and counts.
  *
- * Entrants:
- * Unique SupplierEntry rows for the project and supplier.
+ * SupplierEntry is the single source of truth for:
  *
- * In Progress:
- * SupplierEntry rows where finalOutcome is still null.
+ * - Entrants
+ * - In Progress
+ * - Finalized / Total
+ * - Complete
+ * - Terminate
+ * - OverQuota
+ * - DropOut
+ * - QualityTerm
+ * - Survey Close
+ *
+ * Sentry and Verisoul results are counted only when a matching
+ * SupplierEntry exists for the same project, supplier and external ID.
  */
 export async function GET(
   _req: Request,
@@ -151,138 +173,140 @@ export async function GET(
   });
 
   /*
-   * Existing final outcome counts.
-   *
-   * SupplierRedirectEvent.supplierId stores the Supplier database ID.
-   */
-  let bySupplier: Record<
-    string,
-    Record<string, number>
-  > = {};
-
-  try {
-    const outcomeAggregation =
-      await prisma.supplierRedirectEvent.groupBy({
-        by: ["supplierId", "outcome"],
-        where: {
-          projectId: projId,
-          supplierId: {
-            not: null,
-          },
-        },
-        _count: {
-          _all: true,
-        },
-      });
-
-    bySupplier = outcomeAggregation.reduce(
-      (acc, row) => {
-        if (!row.supplierId || !row.outcome) {
-          return acc;
-        }
-
-        const supplierDbId = row.supplierId;
-
-        acc[supplierDbId] ??= {};
-
-        const key =
-          row.outcome === "COMPLETE"
-            ? "COMPLETE"
-            : row.outcome === "TERMINATE"
-              ? "TERMINATE"
-              : row.outcome === "OVER_QUOTA"
-                ? "OVERQUOTA"
-                : row.outcome === "DROP_OUT"
-                  ? "DROPOUT"
-                  : row.outcome === "QUALITY_TERM"
-                    ? "QUALITYTERM"
-                    : row.outcome === "SURVEY_CLOSE"
-                      ? "CLOSE"
-                      : String(row.outcome);
-
-        acc[supplierDbId][key] =
-          row._count._all;
-
-        return acc;
-      },
-      {} as Record<
-        string,
-        Record<string, number>
-      >
-    );
-  } catch (error) {
-    console.error(
-      "Failed to aggregate supplier outcome counts:",
-      error
-    );
-  }
-
-  /*
-   * Entrant and In Progress counts.
-   *
-   * SupplierEntry.supplierCode stores values such as S1007.
+   * All lifecycle counts now come from SupplierEntry.
    */
   type EntrySupplierCounts = {
     entrants: number;
     inProgress: number;
+    finalized: number;
+    complete: number;
+    terminate: number;
+    overQuota: number;
+    dropOut: number;
+    qualityTerm: number;
+    surveyClose: number;
   };
+
+  const emptyEntryCounts = (): EntrySupplierCounts => ({
+    entrants: 0,
+    inProgress: 0,
+    finalized: 0,
+    complete: 0,
+    terminate: 0,
+    overQuota: 0,
+    dropOut: 0,
+    qualityTerm: 0,
+    surveyClose: 0,
+  });
 
   let entryBySupplier: Record<
     string,
     EntrySupplierCounts
   > = {};
 
+  /*
+   * These keys are also used to exclude direct/manual
+   * Sentry callback tests that never had a SupplierEntry.
+   */
+  const trackedEntryKeys = new Set<string>();
+
   try {
-    const entryAggregation =
-      await prisma.supplierEntry.groupBy({
-        by: ["supplierCode", "finalOutcome"],
+    const entryRows =
+      await prisma.supplierEntry.findMany({
         where: {
           projectId: projId,
           supplierCode: {
             not: "",
           },
         },
-        _count: {
-          _all: true,
+        select: {
+          supplierCode: true,
+          externalId: true,
+          finalOutcome: true,
         },
       });
 
-    entryBySupplier = entryAggregation.reduce(
-      (acc, row) => {
-        const supplierCode = String(
-          row.supplierCode || ""
-        ).trim();
+    for (const row of entryRows) {
+      const supplierCode = String(
+        row.supplierCode || ""
+      ).trim();
 
-        if (!supplierCode) {
-          return acc;
-        }
+      const externalId = String(
+        row.externalId || ""
+      );
 
-        acc[supplierCode] ??= {
-          entrants: 0,
-          inProgress: 0,
-        };
+      if (!supplierCode || !externalId) {
+        continue;
+      }
 
-        const count = row._count._all;
+      trackedEntryKeys.add(
+        buildEntryKey(supplierCode, externalId)
+      );
 
-        /*
-         * Every SupplierEntry row represents one unique entrant
-         * because the table has a unique key on:
-         *
-         * projectId + supplierCode + externalId.
-         */
-        acc[supplierCode].entrants += count;
+      entryBySupplier[supplierCode] ??=
+        emptyEntryCounts();
 
-        if (row.finalOutcome === null) {
-          acc[supplierCode].inProgress += count;
-        }
+      const counts =
+        entryBySupplier[supplierCode];
 
-        return acc;
-      },
-      {} as Record<
-        string,
-        EntrySupplierCounts
-      >
-    );
+      /*
+       * SupplierEntry has a unique constraint on:
+       *
+       * projectId + supplierCode + externalId
+       *
+       * Therefore, every row represents one unique entrant.
+       */
+      counts.entrants += 1;
+
+      if (row.finalOutcome === null) {
+        counts.inProgress += 1;
+        continue;
+      }
+
+      counts.finalized += 1;
+
+      const finalOutcome = String(
+        row.finalOutcome
+      ).toUpperCase();
+
+      switch (finalOutcome) {
+        case "COMPLETE":
+          counts.complete += 1;
+          break;
+
+        case "TERMINATE":
+          counts.terminate += 1;
+          break;
+
+        case "OVER_QUOTA":
+          counts.overQuota += 1;
+          break;
+
+        case "DROP_OUT":
+          counts.dropOut += 1;
+          break;
+
+        case "QUALITY_TERM":
+          counts.qualityTerm += 1;
+          break;
+
+        case "SURVEY_CLOSE":
+          counts.surveyClose += 1;
+          break;
+
+        default:
+          console.warn(
+            "Unknown SupplierEntry finalOutcome:",
+            {
+              projectId: projId,
+              supplierCode,
+              externalId,
+              finalOutcome,
+            }
+          );
+          break;
+      }
+    }
   } catch (error) {
     console.error(
       "Failed to aggregate SupplierEntry counts:",
@@ -291,7 +315,10 @@ export async function GET(
   }
 
   /*
-   * Existing Sentry and Verisoul counts.
+   * Sentry and Verisoul counts.
+   *
+   * Only include provider results that have a matching
+   * SupplierEntry. This excludes direct/manual callback tests.
    */
   type SentrySupplierCounts = {
     sentryPass: number;
@@ -300,92 +327,133 @@ export async function GET(
     verisoulFail: number;
   };
 
+  type SentrySupplierSets = {
+    sentryPass: Set<string>;
+    sentryFail: Set<string>;
+    verisoulPass: Set<string>;
+    verisoulFail: Set<string>;
+  };
+
   let sentryBySupplier: Record<
     string,
     SentrySupplierCounts
   > = {};
 
   try {
-    const sentryAggregation =
-      await prisma.sentryRespondentResult.groupBy({
-        by: [
-          "supplierCode",
-          "sentryResult",
-          "verisoulResult",
-        ],
+    const sentryRows =
+      await prisma.sentryRespondentResult.findMany({
         where: {
           projectId: projId,
           supplierCode: {
             not: "",
           },
         },
-        _count: {
-          _all: true,
+        select: {
+          supplierCode: true,
+          externalId: true,
+          sentryResult: true,
+          verisoulResult: true,
         },
       });
 
-    sentryBySupplier =
-      sentryAggregation.reduce(
-        (acc, row) => {
-          const supplierCode = String(
-            row.supplierCode || ""
-          ).trim();
+    const sentrySetsBySupplier: Record<
+      string,
+      SentrySupplierSets
+    > = {};
 
-          if (!supplierCode) {
-            return acc;
-          }
+    for (const row of sentryRows) {
+      const supplierCode = String(
+        row.supplierCode || ""
+      ).trim();
 
-          acc[supplierCode] ??= {
-            sentryPass: 0,
-            sentryFail: 0,
-            verisoulPass: 0,
-            verisoulFail: 0,
-          };
-
-          const count = row._count._all;
-
-          const sentryResult = String(
-            row.sentryResult || ""
-          ).toUpperCase();
-
-          const verisoulResult = String(
-            row.verisoulResult || ""
-          ).toUpperCase();
-
-          if (sentryResult === "PASS") {
-            acc[supplierCode].sentryPass +=
-              count;
-          } else {
-            acc[supplierCode].sentryFail +=
-              count;
-          }
-
-          /*
-           * Only count Verisoul when a separate result
-           * value is available.
-           */
-          if (verisoulResult) {
-            if (verisoulResult === "PASS") {
-              acc[
-                supplierCode
-              ].verisoulPass += count;
-            } else {
-              acc[
-                supplierCode
-              ].verisoulFail += count;
-            }
-          }
-
-          return acc;
-        },
-        {} as Record<
-          string,
-          SentrySupplierCounts
-        >
+      const externalId = String(
+        row.externalId || ""
       );
+
+      if (!supplierCode || !externalId) {
+        continue;
+      }
+
+      const entryKey = buildEntryKey(
+        supplierCode,
+        externalId
+      );
+
+      /*
+       * Exclude Sentry/Verisoul records that did not enter
+       * through a tracked supplier entry.
+       */
+      if (!trackedEntryKeys.has(entryKey)) {
+        continue;
+      }
+
+      sentrySetsBySupplier[supplierCode] ??= {
+        sentryPass: new Set<string>(),
+        sentryFail: new Set<string>(),
+        verisoulPass: new Set<string>(),
+        verisoulFail: new Set<string>(),
+      };
+
+      const sets =
+        sentrySetsBySupplier[supplierCode];
+
+      const sentryResult = String(
+        row.sentryResult || ""
+      )
+        .trim()
+        .toUpperCase();
+
+      const verisoulResult = String(
+        row.verisoulResult || ""
+      )
+        .trim()
+        .toUpperCase();
+
+      /*
+       * Count one Sentry result per external ID.
+       */
+      if (sentryResult === "PASS") {
+        sets.sentryPass.add(externalId);
+      } else if (
+        sentryResult.startsWith("FAIL")
+      ) {
+        sets.sentryFail.add(externalId);
+      }
+
+      /*
+       * Verisoul may return PASS, FAIL, FAKE,
+       * SUSPICIOUS or another non-pass fraud result.
+       */
+      if (verisoulResult === "PASS") {
+        sets.verisoulPass.add(externalId);
+      } else if (verisoulResult) {
+        sets.verisoulFail.add(externalId);
+      }
+    }
+
+    sentryBySupplier = Object.entries(
+      sentrySetsBySupplier
+    ).reduce(
+      (acc, [supplierCode, sets]) => {
+        acc[supplierCode] = {
+          sentryPass: sets.sentryPass.size,
+          sentryFail: sets.sentryFail.size,
+          verisoulPass:
+            sets.verisoulPass.size,
+          verisoulFail:
+            sets.verisoulFail.size,
+        };
+
+        return acc;
+      },
+      {} as Record<
+        string,
+        SentrySupplierCounts
+      >
+    );
   } catch (error) {
     console.error(
-      "Failed to aggregate Sentry counts:",
+      "Failed to aggregate tracked Sentry counts:",
       error
     );
   }
@@ -394,14 +462,9 @@ export async function GET(
     const supplierCode =
       mapping.supplier?.code ?? "";
 
-    const outcomeCounts =
-      bySupplier[mapping.supplierId] ?? {};
-
     const entryCounts =
-      entryBySupplier[supplierCode] ?? {
-        entrants: 0,
-        inProgress: 0,
-      };
+      entryBySupplier[supplierCode] ??
+      emptyEntryCounts();
 
     const sentryCounts =
       sentryBySupplier[supplierCode] ?? {
@@ -410,24 +473,6 @@ export async function GET(
         verisoulPass: 0,
         verisoulFail: 0,
       };
-
-    const complete =
-      outcomeCounts.COMPLETE ?? 0;
-
-    const terminate =
-      outcomeCounts.TERMINATE ?? 0;
-
-    const overQuota =
-      outcomeCounts.OVERQUOTA ?? 0;
-
-    const dropOut =
-      outcomeCounts.DROPOUT ?? 0;
-
-    const qualityTerm =
-      outcomeCounts.QUALITYTERM ?? 0;
-
-    const close =
-      outcomeCounts.CLOSE ?? 0;
 
     return {
       id: mapping.id,
@@ -471,27 +516,35 @@ export async function GET(
       updatedAt: mapping.updatedAt,
 
       /*
-       * New SupplierEntry-based counts.
+       * SupplierEntry lifecycle counts.
        */
       entrants: entryCounts.entrants,
       inProgress: entryCounts.inProgress,
 
       /*
-       * Existing final-outcome total remains unchanged.
+       * New explicit name.
        */
-      total:
-        complete +
-        terminate +
-        overQuota +
-        qualityTerm +
-        close,
+      finalized: entryCounts.finalized,
 
-      complete,
-      terminate,
-      overQuota,
-      dropOut,
-      qualityTerm,
+      /*
+       * Backward-compatible field for the existing UI.
+       *
+       * Total now means every SupplierEntry that has
+       * a non-null finalOutcome.
+       */
+      total: entryCounts.finalized,
 
+      complete: entryCounts.complete,
+      terminate: entryCounts.terminate,
+      overQuota: entryCounts.overQuota,
+      dropOut: entryCounts.dropOut,
+      qualityTerm: entryCounts.qualityTerm,
+      surveyClose: entryCounts.surveyClose,
+
+      /*
+       * Provider-security counts restricted to
+       * respondents having a matching SupplierEntry.
+       */
       sentryPass: sentryCounts.sentryPass,
       sentryFail: sentryCounts.sentryFail,
       verisoulPass:
@@ -727,13 +780,20 @@ export async function POST(
 
           entrants: 0,
           inProgress: 0,
+          finalized: 0,
 
+          /*
+           * Retained for compatibility with the
+           * current SupplierMappedSummary UI.
+           */
           total: 0,
+
           complete: 0,
           terminate: 0,
           overQuota: 0,
           dropOut: 0,
           qualityTerm: 0,
+          surveyClose: 0,
 
           sentryPass: 0,
           sentryFail: 0,
