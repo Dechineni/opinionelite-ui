@@ -214,6 +214,7 @@ async function finalizePrescreenFailure(
         currentStage: "FINALIZED",
         finalOutcome: "TERMINATE",
         finalOutcomeAt: new Date(),
+        finalSource: "PRESCREEN_FAIL",
       },
     });
 
