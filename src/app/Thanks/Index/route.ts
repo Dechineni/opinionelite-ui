@@ -552,6 +552,7 @@ export async function GET(req: Request) {
               currentStage: "FINALIZED",
               finalOutcome: mapped.eventOutcome,
               finalOutcomeAt: new Date(),
+               finalSource: "SURVEY_CALLBACK",
             },
           });
 

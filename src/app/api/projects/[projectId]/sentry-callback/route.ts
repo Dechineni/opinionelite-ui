@@ -207,6 +207,7 @@ export async function GET(
           currentStage: "FINALIZED",
           finalOutcome: "TERMINATE",
           finalOutcomeAt: new Date(),
+          finalSource: "SENTRY_FAIL",
         },
       });
 

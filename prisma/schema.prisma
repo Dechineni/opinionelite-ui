@@ -165,6 +165,10 @@ model SupplierEntry {
   finalOutcome   String?
   finalOutcomeAt DateTime?
 
+  entrySource    String   @default("LIVE")
+  finalSource    String?
+  isBackfilled   Boolean  @default(false)
+
   project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, supplierCode, externalId], map: "SupplierEntry_unique_respondent")
@@ -173,6 +177,7 @@ model SupplierEntry {
   @@index([externalId])
   @@index([currentStage])
   @@index([finalOutcome])
+  @@index([finalSource])
   @@index([firstEnteredAt])
 }
 
