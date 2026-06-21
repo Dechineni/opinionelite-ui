@@ -537,12 +537,10 @@ export async function GET(
       complete: entryCounts.complete,
       terminate: entryCounts.terminate,
       overQuota: entryCounts.overQuota,
-      qualityTerm: entryCounts.qualityTerm,
-
       /*
        * The business-facing Drop Out column combines:
-       * - legacy DROP_OUT outcomes
-       * - current SURVEY_CLOSE callbacks (auth=sc / auth=70)
+       * legacy DROP_OUT outcomes
+       * current SURVEY_CLOSE callback (auth=sc / auth=70)
        */
       dropOut:
         entryCounts.dropOut +
@@ -553,6 +551,7 @@ export async function GET(
        * diagnostics and backward compatibility.
        * The Supplier Mapped UI does not display it separately.
        */
+      qualityTerm: entryCounts.qualityTerm,
       surveyClose: entryCounts.surveyClose,
 
       /*
