@@ -537,8 +537,22 @@ export async function GET(
       complete: entryCounts.complete,
       terminate: entryCounts.terminate,
       overQuota: entryCounts.overQuota,
-      dropOut: entryCounts.dropOut,
       qualityTerm: entryCounts.qualityTerm,
+
+      /*
+       * The business-facing Drop Out column combines:
+       * - legacy DROP_OUT outcomes
+       * - current SURVEY_CLOSE callbacks (auth=sc / auth=70)
+       */
+      dropOut:
+        entryCounts.dropOut +
+        entryCounts.surveyClose,
+
+      /*
+       * Keep the raw Survey Close value in the API for
+       * diagnostics and backward compatibility.
+       * The Supplier Mapped UI does not display it separately.
+       */
       surveyClose: entryCounts.surveyClose,
 
       /*
