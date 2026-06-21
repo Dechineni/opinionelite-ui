@@ -29,6 +29,10 @@ type ApiProject = {
   startDate: string;
   endDate: string;
 
+  // SupplierEntry lifecycle counts
+  entrants?: number;
+  inProgress?: number;
+
   // NEW (optional so existing API doesn’t break):
   clientName?: string | null;
   c?: number; // completes
@@ -100,7 +104,7 @@ export default function ProjectList() {
     </button>
   );
 
-  const COLS = 12; // total columns rendered
+  const COLS = 14; // total columns rendered
 
   return (
     <div className="space-y-4">
@@ -136,6 +140,8 @@ export default function ProjectList() {
                 <td className="px-4 py-3">ProjectManager</td>
                 <td className="px-4 py-3 text-right">LOI</td>
                 <td className="px-4 py-3 text-right">IR%</td>
+                <td className="px-4 py-3 text-right">Entrants</td>
+                <td className="px-4 py-3 text-right">In Progress</td>
                 <td className="px-4 py-3 text-right">C</td>
                 <td className="px-4 py-3 text-right">T</td>
                 <td className="px-4 py-3 text-right">Q</td>
@@ -169,6 +175,8 @@ export default function ProjectList() {
                     <td className="px-4 py-3">{r.managerEmail}</td>
                     <td className="px-4 py-3 text-right">{r.loi}</td>
                     <td className="px-4 py-3 text-right">{r.ir}</td>
+                    <td className="px-4 py-3 text-right">{r.entrants ?? 0}</td>
+                    <td className="px-4 py-3 text-right">{r.inProgress ?? 0}</td>
                     <td className="px-4 py-3 text-right">{r.c ?? 0}</td>
                     <td className="px-4 py-3 text-right">{r.t ?? 0}</td>
                     <td className="px-4 py-3 text-right">{r.q ?? 0}</td>

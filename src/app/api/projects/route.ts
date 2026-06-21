@@ -4,7 +4,7 @@ export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
-import { Prisma, ProjectStatus, RedirectOutcome } from "@prisma/client";
+import { Prisma, ProjectStatus } from "@prisma/client";
 import {
   createSentryProject,
   buildSentryPayload,
@@ -214,72 +214,147 @@ export async function GET(req: Request) {
     }),
   ]);
 
-  const projectIds = itemsRaw.map((p) => p.id);
+  const projectIds = itemsRaw.map((project) => project.id);
 
-  let outcomeGrouped: {
-    projectId: string;
-    outcome: RedirectOutcome;
-    _count: { _all: number };
-  }[] = [];
+  type ProjectLifecycleCounts = {
+    entrants: number;
+    inProgress: number;
+    c: number;
+    t: number;
+    q: number;
+    d: number;
+  };
 
-  if (projectIds.length > 0) {
-    const groupedOutcomes = await prisma.supplierRedirectEvent.groupBy({
-      by: ["projectId", "outcome"] as const,
-      where: { projectId: { in: projectIds } },
-      _count: { _all: true },
+  const emptyLifecycleCounts =
+    (): ProjectLifecycleCounts => ({
+      entrants: 0,
+      inProgress: 0,
+      c: 0,
+      t: 0,
+      q: 0,
+      d: 0,
     });
-
-    outcomeGrouped = groupedOutcomes as typeof outcomeGrouped;
-  }
 
   const byProject: Record<
     string,
-    { c: number; t: number; q: number; d: number }
+    ProjectLifecycleCounts
   > = {};
 
-  for (const g of outcomeGrouped) {
-    const bucket = (byProject[g.projectId] ??= {
-      c: 0,
-      t: 0,
-      q: 0,
-      d: 0,
-    });
+  /*
+   * SupplierEntry is the single source of truth for
+   * project lifecycle counts.
+   *
+   * One grouped query is used for all projects on the
+   * current page, avoiding one query per project.
+   */
+  if (projectIds.length > 0) {
+    const entryGroups =
+      await prisma.supplierEntry.groupBy({
+        by: [
+          "projectId",
+          "finalOutcome",
+        ],
+        where: {
+          projectId: {
+            in: projectIds,
+          },
+        },
+        _count: {
+          _all: true,
+        },
+      });
 
-    switch (g.outcome) {
-      case "COMPLETE":
-        bucket.c += g._count._all;
-        break;
-      case "TERMINATE":
-        bucket.t += g._count._all;
-        break;
-      case "OVER_QUOTA":
-        bucket.q += g._count._all;
-        break;
-      case "DROP_OUT":
-        bucket.d += g._count._all;
-        break;
-      default:
-        break;
+    for (const group of entryGroups) {
+      const bucket =
+        (byProject[group.projectId] ??=
+          emptyLifecycleCounts());
+
+      const count = group._count._all;
+
+      /*
+       * Every SupplierEntry represents one unique
+       * project/supplier/respondent entrant.
+       */
+      bucket.entrants += count;
+
+      if (group.finalOutcome === null) {
+        bucket.inProgress += count;
+        continue;
+      }
+
+      const finalOutcome = String(
+        group.finalOutcome
+      ).toUpperCase();
+
+      switch (finalOutcome) {
+        case "COMPLETE":
+          bucket.c += count;
+          break;
+
+        case "TERMINATE":
+          bucket.t += count;
+          break;
+
+        case "OVER_QUOTA":
+        case "OVERQUOTA":
+          bucket.q += count;
+          break;
+
+        /*
+         * Survey Close is displayed operationally
+         * as Drop Out.
+         */
+        case "DROP_OUT":
+        case "SURVEY_CLOSE":
+          bucket.d += count;
+          break;
+
+        /*
+         * QUALITY_TERM remains a separate outcome,
+         * but the current Project List does not have
+         * a Quality Term column.
+         */
+        case "QUALITY_TERM":
+          break;
+
+        default:
+          console.warn(
+            "Unknown SupplierEntry final outcome in project list:",
+            {
+              projectId: group.projectId,
+              finalOutcome,
+            }
+          );
+          break;
+      }
     }
   }
 
-  const items = itemsRaw.map(({ client, ...rest }) => {
-    const totals = byProject[rest.id] ?? {
-      c: 0,
-      t: 0,
-      q: 0,
-      d: 0,
-    };
+  const items = itemsRaw.map(
+    ({ client, ...rest }) => {
+      const lifecycle =
+        byProject[rest.id] ??
+        emptyLifecycleCounts();
 
-    return {
-      ...rest,
-      clientName: client?.name ?? null,
-      c: totals.c,
-      t: totals.t,
-      q: totals.q,
-      d: totals.d,
-    };
-  });
+      return {
+        ...rest,
+
+        clientName:
+          client?.name ?? null,
+
+        entrants:
+          lifecycle.entrants,
+
+        inProgress:
+          lifecycle.inProgress,
+
+        c: lifecycle.c,
+        t: lifecycle.t,
+        q: lifecycle.q,
+        d: lifecycle.d,
+      };
+    }
+  );
 
   const statusCounts = Object.values(ProjectStatus).reduce<
     Record<ProjectStatus, number>
