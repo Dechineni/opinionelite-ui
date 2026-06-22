@@ -12,6 +12,7 @@ function normalizeSentryResult(status: string) {
   if (status === "1") return "PASS";
   if (status === "2") return "FAIL_BEHAVIORAL";
   if (status === "3") return "FAIL_TECH_SECURITY";
+
   return "UNKNOWN";
 }
 
@@ -30,7 +31,10 @@ function cleanParamValue(value: string | null) {
 function getFirstParam(url: URL, keys: string[]) {
   for (const key of keys) {
     const value = cleanParamValue(url.searchParams.get(key));
-    if (value) return value;
+
+    if (value) {
+      return value;
+    }
   }
 
   return null;
@@ -125,6 +129,106 @@ export async function GET(
     ])
   );
 
+  /*
+   * Finalize the matching SupplierEntry when Sentry terminates the respondent.
+   *
+   * This removes the respondent from the In Progress count.
+   * The finalOutcome:null condition preserves the first final result if
+   * CloudResearch sends the callback more than once.
+   *
+   * Tracking failures must never block the respondent routing flow.
+   */
+  const finalizeSupplierEntryAsTerminate = async (
+    callbackReason: string
+  ): Promise<void> => {
+    if (!supplierCode || !externalId) {
+      console.warn(
+        `SupplierEntry was not finalized for ${callbackReason}: missing supplierCode or externalId`,
+        {
+          projectId: project.id,
+          supplierCode,
+          externalId,
+        }
+      );
+
+      return;
+    }
+
+    try {
+      const entry = await prisma.supplierEntry.findUnique({
+        where: {
+          projectId_supplierCode_externalId: {
+            projectId: project.id,
+            supplierCode,
+            externalId,
+          },
+        },
+        select: {
+          id: true,
+          finalOutcome: true,
+        },
+      });
+
+      if (!entry) {
+        console.warn(
+          `No SupplierEntry found for ${callbackReason}`,
+          {
+            projectId: project.id,
+            projectCode: project.code,
+            supplierCode,
+            externalId,
+            sentryStatus: status || "UNKNOWN",
+          }
+        );
+
+        return;
+      }
+
+      if (entry.finalOutcome !== null) {
+        console.log(
+          `SupplierEntry already finalized for ${callbackReason}`,
+          {
+            supplierEntryId: entry.id,
+            projectId: project.id,
+            supplierCode,
+            externalId,
+            existingFinalOutcome: entry.finalOutcome,
+          }
+        );
+
+        return;
+      }
+
+      await prisma.supplierEntry.update({
+        where: {
+          id: entry.id,
+        },
+        data: {
+          currentStage: "FINALIZED",
+          finalOutcome: "TERMINATE",
+          finalOutcomeAt: new Date(),
+          finalSource: "SENTRY_FAIL",
+        },
+      });
+
+      console.log(
+        `SupplierEntry finalized for ${callbackReason}`,
+        {
+          supplierEntryId: entry.id,
+          projectId: project.id,
+          supplierCode,
+          externalId,
+          finalOutcome: "TERMINATE",
+        }
+      );
+    } catch (entryError) {
+      console.error(
+        `Failed to finalize SupplierEntry for ${callbackReason}:`,
+        entryError
+      );
+    }
+  };
+
   try {
     await prisma.sentryRespondentResult.upsert({
       where: {
@@ -175,6 +279,7 @@ export async function GET(
       },
     });
   } catch (err) {
+    // Result tracking must not interrupt respondent routing.
     console.error("Failed to store Sentry respondent result:", err);
   }
 
@@ -186,6 +291,9 @@ export async function GET(
   const isFail = status === "2" || status === "3";
 
   if (isFail) {
+    // A failed Sentry result is a final termination for this respondent.
+    await finalizeSupplierEntryAsTerminate(`Sentry failure status ${status}`);
+
     const terminateUrl = buildTerminateUrl(url.origin);
 
     terminateUrl.searchParams.set("projectId", projectKey);
@@ -221,7 +329,8 @@ export async function GET(
       launchUrl.searchParams.set("gender", gender);
     }
 
-    // Preserve routing state so launch route does not send user back to Prescreen/Sentry.
+    // Preserve routing state so the launch route does not send the user
+    // back to Prescreen or Sentry.
     launchUrl.searchParams.set("fromPrescreen", "1");
     launchUrl.searchParams.set("fromSentry", "1");
     launchUrl.searchParams.set("sentryDone", "1");
@@ -230,7 +339,17 @@ export async function GET(
     return NextResponse.redirect(launchUrl.toString(), 302);
   }
 
-  // Missing or unknown sentry_status should not launch survey.
+  /*
+   * Missing or unknown sentry_status must not launch the survey.
+   * Because the respondent is being terminated, finalize SupplierEntry
+   * with TERMINATE before redirecting to the Thanks page.
+   */
+  await finalizeSupplierEntryAsTerminate(
+    status
+      ? `unknown Sentry status ${status}`
+      : "missing Sentry status"
+  );
+
   const fallbackUrl = buildTerminateUrl(url.origin);
 
   fallbackUrl.searchParams.set("projectId", projectKey);

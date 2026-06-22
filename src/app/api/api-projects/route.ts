@@ -1,9 +1,10 @@
+// File: src/app/api/api-projects/route.ts
+
 export const runtime = "edge";
 export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
-import { RedirectOutcome } from "@prisma/client";
 
 type ProjectStatus =
   | "ACTIVE"
@@ -12,8 +13,28 @@ type ProjectStatus =
   | "INVOICED"
   | "BID";
 
-const toInt = (v: string | null, d: number) =>
-  v ? Math.max(1, parseInt(v, 10) || d) : d;
+type ProjectLifecycleCounts = {
+  entrants: number;
+  inProgress: number;
+  c: number;
+  t: number;
+  q: number;
+  d: number;
+};
+
+const toInt = (value: string | null, defaultValue: number) =>
+  value
+    ? Math.max(1, parseInt(value, 10) || defaultValue)
+    : defaultValue;
+
+const emptyLifecycleCounts = (): ProjectLifecycleCounts => ({
+  entrants: 0,
+  inProgress: 0,
+  c: 0,
+  t: 0,
+  q: 0,
+  d: 0,
+});
 
 export async function GET(req: Request) {
   try {
@@ -21,11 +42,18 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
 
     const q = (searchParams.get("q") ?? "").trim();
+
     const status = (searchParams.get("status") ?? "").trim() as
       | ProjectStatus
       | "";
+
     const page = toInt(searchParams.get("page"), 1);
-    const pageSize = Math.min(100, toInt(searchParams.get("pageSize"), 10));
+
+    const pageSize = Math.min(
+      100,
+      toInt(searchParams.get("pageSize"), 10)
+    );
+
     const skip = (page - 1) * pageSize;
 
     const whereProject: any = {
@@ -33,24 +61,50 @@ export async function GET(req: Request) {
       ...(q
         ? {
             OR: [
-              { code: { contains: q, mode: "insensitive" } },
-              { name: { contains: q, mode: "insensitive" } },
-              { managerEmail: { contains: q, mode: "insensitive" } },
-              { client: { name: { contains: q, mode: "insensitive" } } },
+              {
+                code: {
+                  contains: q,
+                  mode: "insensitive",
+                },
+              },
+              {
+                name: {
+                  contains: q,
+                  mode: "insensitive",
+                },
+              },
+              {
+                managerEmail: {
+                  contains: q,
+                  mode: "insensitive",
+                },
+              },
+              {
+                client: {
+                  name: {
+                    contains: q,
+                    mode: "insensitive",
+                  },
+                },
+              },
             ],
           }
         : {}),
     };
 
     const baseWhere = {
-      projectId: { not: null },
+      projectId: {
+        not: null,
+      },
       project: whereProject,
     } as any;
 
     const [rows, total, grouped] = await Promise.all([
       prisma.apiSurveySelection.findMany({
         where: baseWhere,
-        orderBy: { updatedAt: "desc" },
+        orderBy: {
+          updatedAt: "desc",
+        },
         skip,
         take: pageSize,
         select: {
@@ -85,9 +139,11 @@ export async function GET(req: Request) {
           },
         },
       }),
+
       prisma.apiSurveySelection.count({
         where: baseWhere,
       }),
+
       prisma.project.groupBy({
         by: ["status"],
         where: {
@@ -109,81 +165,158 @@ export async function GET(req: Request) {
       BID: 0,
     };
 
-    for (const g of grouped) {
-      statusCounts[g.status as ProjectStatus] = g._count.status;
+    for (const group of grouped) {
+      statusCounts[group.status as ProjectStatus] =
+        group._count.status;
     }
 
-    const projectIds = rows
-      .map((r) => r.project?.id)
-      .filter(Boolean) as string[];
+    const projectIds = Array.from(
+      new Set(
+        rows
+          .map((row) => row.project?.id)
+          .filter(
+            (projectId): projectId is string =>
+              Boolean(projectId)
+          )
+      )
+    );
 
-    let outcomeGrouped: {
-      projectId: string;
-      outcome: RedirectOutcome;
-      _count: { _all: number };
-    }[] = [];
+    const byProject: Record<
+      string,
+      ProjectLifecycleCounts
+    > = {};
 
+    /*
+     * SupplierEntry is the lifecycle source for:
+     *
+     * - Entrants
+     * - In Progress
+     * - Complete
+     * - Terminate
+     * - OverQuota
+     * - Drop Out
+     *
+     * One grouped query is used for all projects on the
+     * current page to avoid separate queries per project.
+     */
     if (projectIds.length > 0) {
-      const groupedOutcomes = await prisma.supplierRedirectEvent.groupBy({
-        by: ["projectId", "outcome"] as const,
-        where: { projectId: { in: projectIds } },
-        _count: { _all: true },
-      });
+      const entryGroups =
+        await prisma.supplierEntry.groupBy({
+          by: ["projectId", "finalOutcome"],
+          where: {
+            projectId: {
+              in: projectIds,
+            },
+          },
+          _count: {
+            _all: true,
+          },
+        });
 
-      outcomeGrouped = groupedOutcomes as typeof outcomeGrouped;
-    }
+      for (const group of entryGroups) {
+        const lifecycle =
+          (byProject[group.projectId] ??=
+            emptyLifecycleCounts());
 
-    const byProject: Record<string, { c: number; t: number; q: number; d: number }> = {};
-    for (const g of outcomeGrouped) {
-      const bucket = (byProject[g.projectId] ??= { c: 0, t: 0, q: 0, d: 0 });
-      switch (g.outcome) {
-        case "COMPLETE":
-          bucket.c += g._count._all;
-          break;
-        case "TERMINATE":
-          bucket.t += g._count._all;
-          break;
-        case "OVER_QUOTA":
-          bucket.q += g._count._all;
-          break;
-        case "DROP_OUT":
-          bucket.d += g._count._all;
-          break;
-        default:
-          break;
+        const count = group._count._all;
+
+        /*
+         * Every SupplierEntry row represents one unique
+         * tracked project/supplier/respondent entrant.
+         */
+        lifecycle.entrants += count;
+
+        if (group.finalOutcome === null) {
+          lifecycle.inProgress += count;
+          continue;
+        }
+
+        const finalOutcome = String(
+          group.finalOutcome
+        ).toUpperCase();
+
+        switch (finalOutcome) {
+          case "COMPLETE":
+            lifecycle.c += count;
+            break;
+
+          case "TERMINATE":
+            lifecycle.t += count;
+            break;
+
+          case "OVER_QUOTA":
+          case "OVERQUOTA":
+            lifecycle.q += count;
+            break;
+
+          /*
+           * Survey Close is displayed operationally
+           * under the Drop Out column.
+           */
+          case "DROP_OUT":
+          case "SURVEY_CLOSE":
+            lifecycle.d += count;
+            break;
+
+          /*
+           * The API Project List currently has no
+           * separate Quality Term column.
+           */
+          case "QUALITY_TERM":
+            break;
+
+          default:
+            console.warn(
+              "Unknown SupplierEntry final outcome in API project list:",
+              {
+                projectId: group.projectId,
+                finalOutcome,
+              }
+            );
+            break;
+        }
       }
     }
 
     const items = rows
-      .filter((r) => r.project)
-      .map((r) => {
-        const totals = byProject[r.project!.id] ?? { c: 0, t: 0, q: 0, d: 0 };
+      .filter((row) => row.project)
+      .map((row) => {
+        const project = row.project!;
+
+        const lifecycle =
+          byProject[project.id] ??
+          emptyLifecycleCounts();
 
         return {
-          id: r.project!.id,
-          code: r.project!.code,
-          name: r.project!.name,
-          managerEmail: r.project!.managerEmail,
-          category: r.project!.category,
-          status: r.project!.status,
-          countryCode: r.project!.countryCode,
-          languageCode: r.project!.languageCode,
-          currency: r.project!.currency,
-          loi: r.project!.loi,
-          ir: r.project!.ir,
-          sampleSize: r.project!.sampleSize,
-          projectCpi: r.project!.projectCpi,
-          supplierCpi: r.project!.supplierCpi,
-          startDate: r.project!.startDate,
-          endDate: r.project!.endDate,
-          clientName: r.project!.client?.name ?? null,
-          c: totals.c,
-          t: totals.t,
-          q: totals.q,
-          d: totals.d,
-          surveyCode: r.surveyCode,
-          quotaId: r.quotaId,
-          providerType: r.providerType,
+          id: project.id,
+          code: project.code,
+          name: project.name,
+          managerEmail: project.managerEmail,
+          category: project.category,
+          status: project.status,
+          countryCode: project.countryCode,
+          languageCode: project.languageCode,
+          currency: project.currency,
+          loi: project.loi,
+          ir: project.ir,
+          sampleSize: project.sampleSize,
+          projectCpi: project.projectCpi,
+          supplierCpi: project.supplierCpi,
+          startDate: project.startDate,
+          endDate: project.endDate,
+          clientName: project.client?.name ?? null,
+
+          entrants: lifecycle.entrants,
+          inProgress: lifecycle.inProgress,
+
+          c: lifecycle.c,
+          t: lifecycle.t,
+          q: lifecycle.q,
+          d: lifecycle.d,
+
+          surveyCode: row.surveyCode,
+          quotaId: row.quotaId,
+          providerType: row.providerType,
         };
       });
 
@@ -198,7 +331,9 @@ export async function GET(req: Request) {
         error: "Failed to load API projects",
         detail: String(err?.message ?? err),
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }

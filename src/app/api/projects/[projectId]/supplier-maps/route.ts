@@ -22,7 +22,9 @@ const BaseSchema = z.object({
   cpi: z.coerce.number().nonnegative(),
   redirectionType: RedirectionType,
   allowTraffic: z.coerce.boolean().optional().default(false),
-  supplierProjectId: z.union([z.string().min(1), z.null()]).optional(),
+  supplierProjectId: z
+    .union([z.string().min(1), z.null()])
+    .optional(),
 });
 
 const RedirectUrls = z.object({
@@ -53,250 +55,639 @@ const CreateSchema = z.discriminatedUnion("redirectionType", [
 ]);
 
 function badJSON(msg: string, code = 400) {
-  return NextResponse.json({ error: msg }, { status: code });
+  return NextResponse.json(
+    {
+      error: msg,
+    },
+    {
+      status: code,
+    }
+  );
 }
 
 async function resolveProjectId(projectKey: string) {
   const prisma = getPrisma();
-  const p = await prisma.project.findFirst({
-    where: { OR: [{ id: projectKey }, { code: projectKey }] },
-    select: { id: true },
+
+  const project = await prisma.project.findFirst({
+    where: {
+      OR: [{ id: projectKey }, { code: projectKey }],
+    },
+    select: {
+      id: true,
+    },
   });
-  return p?.id ?? null;
+
+  return project?.id ?? null;
 }
 
-/** Build the Supplier Mapping URL that OP Panel will show (persisted in DB). */
-function buildSupplierUrl(opts: { uiBase: string; projectCode: string; supplierCode: string }) {
+/**
+ * Build a stable lookup key for matching SupplierEntry and
+ * SentryRespondentResult records.
+ */
+function buildEntryKey(
+  supplierCode: string,
+  externalId: string
+) {
+  return `${supplierCode}\u0000${externalId}`;
+}
+
+/**
+ * Build the Supplier Mapping URL that OP Panel will show
+ * and persist in the database.
+ */
+function buildSupplierUrl(opts: {
+  uiBase: string;
+  projectCode: string;
+  supplierCode: string;
+}) {
   const ui = (opts.uiBase || "").replace(/\/+$/, "");
-  const p = encodeURIComponent(opts.projectCode || "");
-  const s = encodeURIComponent(opts.supplierCode || "");
-  return `${ui}/Survey?projectId=${p}&supplierId=${s}&id=[identifier]`;
+
+  const projectCode = encodeURIComponent(
+    opts.projectCode || ""
+  );
+
+  const supplierCode = encodeURIComponent(
+    opts.supplierCode || ""
+  );
+
+  return `${ui}/Survey?projectId=${projectCode}&supplierId=${supplierCode}&id=[identifier]`;
 }
 
 /* ---------------------------------- GET ---------------------------------- */
-/** List supplier maps with flattened supplier info + counts (CPU-light). */
+
+/**
+ * List supplier mappings with flattened supplier details and counts.
+ *
+ * SupplierEntry is the single source of truth for:
+ *
+ * - Entrants
+ * - In Progress
+ * - Finalized / Total
+ * - Complete
+ * - Terminate
+ * - OverQuota
+ * - DropOut
+ * - QualityTerm
+ * - Survey Close
+ *
+ * Sentry and Verisoul results are counted only when a matching
+ * SupplierEntry exists for the same project, supplier and external ID.
+ */
 export async function GET(
   _req: Request,
-  ctx: { params: Promise<{ projectId: string }> }
+  ctx: {
+    params: Promise<{
+      projectId: string;
+    }>;
+  }
 ) {
   const prisma = getPrisma();
   const { projectId: projectKey } = await ctx.params;
 
   const projId = await resolveProjectId(projectKey);
-  if (!projId) return badJSON("Project not found", 404);
 
-  const maps = await prisma.projectSupplierMap.findMany({
-    where: { projectId: projId },
-    orderBy: { createdAt: "asc" },
-    include: { supplier: { select: { id: true, 
-                                     code: true, 
-                                     name: true,
-                                     countryCode: true,
-                                     contactNumber: true,
-                                     email: true,
-                                     website: true,
-                                    } } },
-  });
-
-  let bySupplier: Record<string, Record<string, number>> = {};
-  try {
-    const agg = await prisma.supplierRedirectEvent.groupBy({
-      by: ["supplierId", "outcome"],
-      where: { projectId: projId, supplierId: { not: null } },
-      _count: { _all: true },
-    });
-
-    bySupplier = agg.reduce((acc, row) => {
-      if (!row.supplierId || !row.outcome) return acc;
-      const sid = row.supplierId;
-      acc[sid] ??= {};
-      const key =
-        row.outcome === "COMPLETE"
-          ? "COMPLETE"
-          : row.outcome === "TERMINATE"
-          ? "TERMINATE"
-          : row.outcome === "OVER_QUOTA"
-          ? "OVERQUOTA"
-          : row.outcome === "DROP_OUT"
-          ? "DROPOUT"
-          : row.outcome === "QUALITY_TERM"
-          ? "QUALITYTERM"
-          : row.outcome === "SURVEY_CLOSE"
-          ? "CLOSE"
-          : String(row.outcome);
-      acc[sid][key] = row._count._all;
-      return acc;
-    }, {} as Record<string, Record<string, number>>);
-  } catch {
-    // ignore aggregation failures
+  if (!projId) {
+    return badJSON("Project not found", 404);
   }
 
-  type SentrySupplierCounts = {
-  sentryPass: number;
-  sentryFail: number;
-  verisoulPass: number;
-  verisoulFail: number;
-};
-
-let sentryBySupplier: Record<string, SentrySupplierCounts> = {};
-
-try {
-  const sentryAgg = await prisma.sentryRespondentResult.groupBy({
-    by: ["supplierCode", "sentryResult", "verisoulResult"],
+  const maps = await prisma.projectSupplierMap.findMany({
     where: {
       projectId: projId,
-      supplierCode: { not: "" },
     },
-    _count: { _all: true },
+    orderBy: {
+      createdAt: "asc",
+    },
+    include: {
+      supplier: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          countryCode: true,
+          contactNumber: true,
+          email: true,
+          website: true,
+        },
+      },
+    },
   });
 
-  sentryBySupplier = sentryAgg.reduce((acc, row) => {
-    const supplierCode = row.supplierCode || "";
-    if (!supplierCode) return acc;
+  /*
+   * All lifecycle counts now come from SupplierEntry.
+   */
+  type EntrySupplierCounts = {
+    entrants: number;
+    inProgress: number;
+    finalized: number;
+    complete: number;
+    terminate: number;
+    overQuota: number;
+    dropOut: number;
+    qualityTerm: number;
+    surveyClose: number;
+  };
 
-    acc[supplierCode] ??= {
-      sentryPass: 0,
-      sentryFail: 0,
-      verisoulPass: 0,
-      verisoulFail: 0,
-    };
+  const emptyEntryCounts = (): EntrySupplierCounts => ({
+    entrants: 0,
+    inProgress: 0,
+    finalized: 0,
+    complete: 0,
+    terminate: 0,
+    overQuota: 0,
+    dropOut: 0,
+    qualityTerm: 0,
+    surveyClose: 0,
+  });
 
-    const count = row._count._all;
-    const sentryResult = String(row.sentryResult || "").toUpperCase();
-    const verisoulResult = String(row.verisoulResult || "").toUpperCase();
+  let entryBySupplier: Record<
+    string,
+    EntrySupplierCounts
+  > = {};
 
-    if (sentryResult === "PASS") {
-      acc[supplierCode].sentryPass += count;
-    } else {
-      acc[supplierCode].sentryFail += count;
+  /*
+   * These keys are also used to exclude direct/manual
+   * Sentry callback tests that never had a SupplierEntry.
+   */
+  const trackedEntryKeys = new Set<string>();
+
+  try {
+    const entryRows =
+      await prisma.supplierEntry.findMany({
+        where: {
+          projectId: projId,
+          supplierCode: {
+            not: "",
+          },
+        },
+        select: {
+          supplierCode: true,
+          externalId: true,
+          finalOutcome: true,
+        },
+      });
+
+    for (const row of entryRows) {
+      const supplierCode = String(
+        row.supplierCode || ""
+      ).trim();
+
+      const externalId = String(
+        row.externalId || ""
+      );
+
+      if (!supplierCode || !externalId) {
+        continue;
+      }
+
+      trackedEntryKeys.add(
+        buildEntryKey(supplierCode, externalId)
+      );
+
+      entryBySupplier[supplierCode] ??=
+        emptyEntryCounts();
+
+      const counts =
+        entryBySupplier[supplierCode];
+
+      /*
+       * SupplierEntry has a unique constraint on:
+       *
+       * projectId + supplierCode + externalId
+       *
+       * Therefore, every row represents one unique entrant.
+       */
+      counts.entrants += 1;
+
+      if (row.finalOutcome === null) {
+        counts.inProgress += 1;
+        continue;
+      }
+
+      counts.finalized += 1;
+
+      const finalOutcome = String(
+        row.finalOutcome
+      ).toUpperCase();
+
+      switch (finalOutcome) {
+        case "COMPLETE":
+          counts.complete += 1;
+          break;
+
+        case "TERMINATE":
+          counts.terminate += 1;
+          break;
+
+        case "OVER_QUOTA":
+          counts.overQuota += 1;
+          break;
+
+        case "DROP_OUT":
+          counts.dropOut += 1;
+          break;
+
+        case "QUALITY_TERM":
+          counts.qualityTerm += 1;
+          break;
+
+        case "SURVEY_CLOSE":
+          counts.surveyClose += 1;
+          break;
+
+        default:
+          console.warn(
+            "Unknown SupplierEntry finalOutcome:",
+            {
+              projectId: projId,
+              supplierCode,
+              externalId,
+              finalOutcome,
+            }
+          );
+          break;
+      }
     }
+  } catch (error) {
+    console.error(
+      "Failed to aggregate SupplierEntry counts:",
+      error
+    );
+  }
 
-    // Pending CloudResearch confirmation on exact Verisoul values.
-    // For now, only count Verisoul when a separate result value exists.
-    if (verisoulResult) {
+  /*
+   * Sentry and Verisoul counts.
+   *
+   * Only include provider results that have a matching
+   * SupplierEntry. This excludes direct/manual callback tests.
+   */
+  type SentrySupplierCounts = {
+    sentryPass: number;
+    sentryFail: number;
+    verisoulPass: number;
+    verisoulFail: number;
+  };
+
+  type SentrySupplierSets = {
+    sentryPass: Set<string>;
+    sentryFail: Set<string>;
+    verisoulPass: Set<string>;
+    verisoulFail: Set<string>;
+  };
+
+  let sentryBySupplier: Record<
+    string,
+    SentrySupplierCounts
+  > = {};
+
+  try {
+    const sentryRows =
+      await prisma.sentryRespondentResult.findMany({
+        where: {
+          projectId: projId,
+          supplierCode: {
+            not: "",
+          },
+        },
+        select: {
+          supplierCode: true,
+          externalId: true,
+          sentryResult: true,
+          verisoulResult: true,
+        },
+      });
+
+    const sentrySetsBySupplier: Record<
+      string,
+      SentrySupplierSets
+    > = {};
+
+    for (const row of sentryRows) {
+      const supplierCode = String(
+        row.supplierCode || ""
+      ).trim();
+
+      const externalId = String(
+        row.externalId || ""
+      );
+
+      if (!supplierCode || !externalId) {
+        continue;
+      }
+
+      const entryKey = buildEntryKey(
+        supplierCode,
+        externalId
+      );
+
+      /*
+       * Exclude Sentry/Verisoul records that did not enter
+       * through a tracked supplier entry.
+       */
+      if (!trackedEntryKeys.has(entryKey)) {
+        continue;
+      }
+
+      sentrySetsBySupplier[supplierCode] ??= {
+        sentryPass: new Set<string>(),
+        sentryFail: new Set<string>(),
+        verisoulPass: new Set<string>(),
+        verisoulFail: new Set<string>(),
+      };
+
+      const sets =
+        sentrySetsBySupplier[supplierCode];
+
+      const sentryResult = String(
+        row.sentryResult || ""
+      )
+        .trim()
+        .toUpperCase();
+
+      const verisoulResult = String(
+        row.verisoulResult || ""
+      )
+        .trim()
+        .toUpperCase();
+
+      /*
+       * Count one Sentry result per external ID.
+       */
+      if (sentryResult === "PASS") {
+        sets.sentryPass.add(externalId);
+      } else if (
+        sentryResult.startsWith("FAIL")
+      ) {
+        sets.sentryFail.add(externalId);
+      }
+
+      /*
+       * Verisoul may return PASS, FAIL, FAKE,
+       * SUSPICIOUS or another non-pass fraud result.
+       */
       if (verisoulResult === "PASS") {
-        acc[supplierCode].verisoulPass += count;
-      } else {
-        acc[supplierCode].verisoulFail += count;
+        sets.verisoulPass.add(externalId);
+      } else if (verisoulResult) {
+        sets.verisoulFail.add(externalId);
       }
     }
 
-    return acc;
-  }, {} as Record<string, SentrySupplierCounts>);
-} catch {
-  // ignore Sentry aggregation failures
-}
+    sentryBySupplier = Object.entries(
+      sentrySetsBySupplier
+    ).reduce(
+      (acc, [supplierCode, sets]) => {
+        acc[supplierCode] = {
+          sentryPass: sets.sentryPass.size,
+          sentryFail: sets.sentryFail.size,
+          verisoulPass:
+            sets.verisoulPass.size,
+          verisoulFail:
+            sets.verisoulFail.size,
+        };
 
-  const items = maps.map((m) => {
-    const c = bySupplier[m.supplierId] ?? {};
-    const sc = sentryBySupplier[m.supplier?.code ?? ""] ?? {
-      sentryPass: 0,
-      sentryFail: 0,
-      verisoulPass: 0,
-      verisoulFail: 0,
-    };
-    const complete = c.COMPLETE ?? 0;
-    const terminate = c.TERMINATE ?? 0;
-    const overQuota = c.OVERQUOTA ?? 0;
-    const qualityTerm = c.QUALITYTERM ?? 0;
-    const close = c.CLOSE ?? 0;
+        return acc;
+      },
+      {} as Record<
+        string,
+        SentrySupplierCounts
+      >
+    );
+  } catch (error) {
+    console.error(
+      "Failed to aggregate tracked Sentry counts:",
+      error
+    );
+  }
+
+  const items = maps.map((mapping) => {
+    const supplierCode =
+      mapping.supplier?.code ?? "";
+
+    const entryCounts =
+      entryBySupplier[supplierCode] ??
+      emptyEntryCounts();
+
+    const sentryCounts =
+      sentryBySupplier[supplierCode] ?? {
+        sentryPass: 0,
+        sentryFail: 0,
+        verisoulPass: 0,
+        verisoulFail: 0,
+      };
 
     return {
-      id: m.id,
-      projectId: m.projectId,
-      supplierId: m.supplierId,
-      supplierCode: m.supplier?.code ?? "",
-      supplierName: m.supplier?.name ?? "",
-      supplierCountry: m.supplier?.countryCode ?? "",
-      contactNumber: m.supplier?.contactNumber ?? "",
-      email: m.supplier?.email ?? "",
-      website: m.supplier?.website ?? "",
-      supplierQuota: m.quota,
-      clickQuota: m.clickQuota,
-      cpi: m.cpi?.toString(),
-      redirectionType: m.redirectionType,
-      postBackUrl: m.postBackUrl,
-      completeUrl: m.completeUrl,
-      terminateUrl: m.terminateUrl,
-      overQuotaUrl: m.overQuotaUrl,
-      qualityTermUrl: m.qualityTermUrl,
-      surveyCloseUrl: m.surveyCloseUrl,
-      allowTraffic: m.allowTraffic,
-      supplierProjectId: m.supplierProjectId,
-      supplierUrl: (m as any).supplierUrl ?? null, // ✅ NEW
-      createdAt: m.createdAt,
-      updatedAt: m.updatedAt,
-      total: complete + terminate + overQuota + qualityTerm + close,
-      complete,
-      terminate,
-      overQuota,
-      dropOut: c.DROPOUT ?? 0,
-      qualityTerm,
-      sentryPass: sc.sentryPass,
-      sentryFail: sc.sentryFail,
-      verisoulPass: sc.verisoulPass,
-      verisoulFail: sc.verisoulFail,
+      id: mapping.id,
+      projectId: mapping.projectId,
+      supplierId: mapping.supplierId,
+
+      supplierCode,
+      supplierName:
+        mapping.supplier?.name ?? "",
+      supplierCountry:
+        mapping.supplier?.countryCode ?? "",
+      contactNumber:
+        mapping.supplier?.contactNumber ?? "",
+      email: mapping.supplier?.email ?? "",
+      website:
+        mapping.supplier?.website ?? "",
+
+      supplierQuota: mapping.quota,
+      clickQuota: mapping.clickQuota,
+      cpi: mapping.cpi?.toString(),
+
+      redirectionType:
+        mapping.redirectionType,
+      postBackUrl: mapping.postBackUrl,
+      completeUrl: mapping.completeUrl,
+      terminateUrl: mapping.terminateUrl,
+      overQuotaUrl: mapping.overQuotaUrl,
+      qualityTermUrl:
+        mapping.qualityTermUrl,
+      surveyCloseUrl:
+        mapping.surveyCloseUrl,
+
+      allowTraffic: mapping.allowTraffic,
+      supplierProjectId:
+        mapping.supplierProjectId,
+
+      supplierUrl:
+        (mapping as any).supplierUrl ?? null,
+
+      createdAt: mapping.createdAt,
+      updatedAt: mapping.updatedAt,
+
+      /*
+       * SupplierEntry lifecycle counts.
+       */
+      entrants: entryCounts.entrants,
+      inProgress: entryCounts.inProgress,
+
+      /*
+       * New explicit name.
+       */
+      finalized: entryCounts.finalized,
+
+      /*
+       * Backward-compatible field for the existing UI.
+       *
+       * Total now means every SupplierEntry that has
+       * a non-null finalOutcome.
+       */
+      total: entryCounts.finalized,
+
+      complete: entryCounts.complete,
+      terminate: entryCounts.terminate,
+      overQuota: entryCounts.overQuota,
+      /*
+       * The business-facing Drop Out column combines:
+       * legacy DROP_OUT outcomes
+       * current SURVEY_CLOSE callback (auth=sc / auth=70)
+       */
+      dropOut:
+        entryCounts.dropOut +
+        entryCounts.surveyClose,
+
+      /*
+       * Keep the raw Survey Close value in the API for
+       * diagnostics and backward compatibility.
+       * The Supplier Mapped UI does not display it separately.
+       */
+      qualityTerm: entryCounts.qualityTerm,
+      surveyClose: entryCounts.surveyClose,
+
+      /*
+       * Provider-security counts restricted to
+       * respondents having a matching SupplierEntry.
+       */
+      sentryPass: sentryCounts.sentryPass,
+      sentryFail: sentryCounts.sentryFail,
+      verisoulPass:
+        sentryCounts.verisoulPass,
+      verisoulFail:
+        sentryCounts.verisoulFail,
     };
   });
 
-  return NextResponse.json({ items });
+  return NextResponse.json({
+    items,
+  });
 }
 
 /* ---------------------------------- POST --------------------------------- */
+
 export async function POST(
   req: Request,
-  ctx: { params: Promise<{ projectId: string }> }
+  ctx: {
+    params: Promise<{
+      projectId: string;
+    }>;
+  }
 ) {
   const prisma = getPrisma();
-  const { projectId: projectKey } = await ctx.params;
+  const { projectId: projectKey } =
+    await ctx.params;
 
   try {
-    const projId = await resolveProjectId(projectKey);
-    if (!projId) return badJSON("Project not found", 404);
+    const projId =
+      await resolveProjectId(projectKey);
+
+    if (!projId) {
+      return badJSON(
+        "Project not found",
+        404
+      );
+    }
 
     let body: unknown;
+
     try {
       body = await req.json();
     } catch {
-      return badJSON("Invalid JSON", 400);
+      return badJSON(
+        "Invalid JSON",
+        400
+      );
     }
 
-    const parsed = CreateSchema.safeParse(body);
+    const parsed =
+      CreateSchema.safeParse(body);
+
     if (!parsed.success) {
-      const flat = parsed.error.flatten();
-      const msg =
+      const flat =
+        parsed.error.flatten();
+
+      const message =
         flat.formErrors.join("; ") ||
-        Object.values(flat.fieldErrors).flat().join("; ") ||
+        Object.values(
+          flat.fieldErrors
+        )
+          .flat()
+          .join("; ") ||
         "Invalid payload";
-      return badJSON(msg, 400);
+
+      return badJSON(message, 400);
     }
+
     const data = parsed.data;
 
-    // Verify supplier exists
-    const supplier = await prisma.supplier.findUnique({
-      where: { id: data.supplierId },
-      select: { id: true, code: true, name: true },
-    });
-    if (!supplier) return badJSON("Supplier not found", 404);
+    const supplier =
+      await prisma.supplier.findUnique({
+        where: {
+          id: data.supplierId,
+        },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+        },
+      });
 
-    // Fetch project code for URL
-    const project = await prisma.project.findUnique({
-      where: { id: projId },
-      select: { code: true },
-    });
-    const projectCode = String(project?.code ?? "");
-    if (!projectCode) return badJSON("Project code missing", 400);
+    if (!supplier) {
+      return badJSON(
+        "Supplier not found",
+        404
+      );
+    }
+
+    const project =
+      await prisma.project.findUnique({
+        where: {
+          id: projId,
+        },
+        select: {
+          code: true,
+        },
+      });
+
+    const projectCode = String(
+      project?.code ?? ""
+    );
+
+    if (!projectCode) {
+      return badJSON(
+        "Project code missing",
+        400
+      );
+    }
 
     const uiBase =
-      (process.env.APP_PUBLIC_BASE_URL || "").trim() ||
-      (process.env.NEXT_PUBLIC_UI_ORIGIN || "").trim() ||
+      (
+        process.env.APP_PUBLIC_BASE_URL ||
+        ""
+      ).trim() ||
+      (
+        process.env.NEXT_PUBLIC_UI_ORIGIN ||
+        ""
+      ).trim() ||
       "https://opinion-elite.com";
 
-    const supplierUrl = buildSupplierUrl({
-      uiBase,
-      projectCode,
-      supplierCode: String(supplier.code ?? ""),
-    });
+    const supplierUrl =
+      buildSupplierUrl({
+        uiBase,
+        projectCode,
+        supplierCode: String(
+          supplier.code ?? ""
+        ),
+      });
 
     const createData: any = {
       projectId: projId,
@@ -304,75 +695,149 @@ export async function POST(
       quota: data.supplierQuota,
       clickQuota: data.clickQuota,
       cpi: data.cpi,
-      redirectionType: data.redirectionType,
-      allowTraffic: data.allowTraffic ?? false,
-      supplierProjectId: data.supplierProjectId ?? null,
-      supplierUrl, // ✅ NEW (persist)
+      redirectionType:
+        data.redirectionType,
+      allowTraffic:
+        data.allowTraffic ?? false,
+      supplierProjectId:
+        data.supplierProjectId ?? null,
+      supplierUrl,
     };
 
     if (
-      data.redirectionType === "STATIC_REDIRECT" ||
-      data.redirectionType === "DYNAMIC_REDIRECT"
+      data.redirectionType ===
+        "STATIC_REDIRECT" ||
+      data.redirectionType ===
+        "DYNAMIC_REDIRECT"
     ) {
-      createData.completeUrl = (data as any).completeUrl;
-      createData.terminateUrl = (data as any).terminateUrl;
-      createData.overQuotaUrl = (data as any).overQuotaUrl;
-      createData.qualityTermUrl = (data as any).qualityTermUrl;
-      createData.surveyCloseUrl = (data as any).surveyCloseUrl;
+      createData.completeUrl = (
+        data as any
+      ).completeUrl;
+
+      createData.terminateUrl = (
+        data as any
+      ).terminateUrl;
+
+      createData.overQuotaUrl = (
+        data as any
+      ).overQuotaUrl;
+
+      createData.qualityTermUrl = (
+        data as any
+      ).qualityTermUrl;
+
+      createData.surveyCloseUrl = (
+        data as any
+      ).surveyCloseUrl;
     } else {
-      createData.postBackUrl = (data as any).postBackUrl;
+      createData.postBackUrl = (
+        data as any
+      ).postBackUrl;
     }
 
-    const created = await prisma.projectSupplierMap.create({
-      data: createData,
-    });
+    const created =
+      await prisma.projectSupplierMap.create({
+        data: createData,
+      });
 
     return NextResponse.json(
       {
         item: {
           id: created.id,
           projectId: created.projectId,
-          supplierId: created.supplierId,
-          supplierCode: supplier.code ?? "",
-          supplierName: supplier.name ?? "",
-          supplierQuota: created.quota,
-          clickQuota: created.clickQuota,
-          cpi: created.cpi?.toString(),
-          redirectionType: created.redirectionType,
-          postBackUrl: created.postBackUrl,
-          completeUrl: created.completeUrl,
-          terminateUrl: created.terminateUrl,
-          overQuotaUrl: created.overQuotaUrl,
-          qualityTermUrl: created.qualityTermUrl,
-          surveyCloseUrl: created.surveyCloseUrl,
-          allowTraffic: created.allowTraffic,
-          supplierProjectId: created.supplierProjectId,
-          supplierUrl: (created as any).supplierUrl ?? supplierUrl, // ✅ NEW
-          createdAt: created.createdAt,
-          updatedAt: created.updatedAt,
+          supplierId:
+            created.supplierId,
+
+          supplierCode:
+            supplier.code ?? "",
+          supplierName:
+            supplier.name ?? "",
+
+          supplierQuota:
+            created.quota,
+          clickQuota:
+            created.clickQuota,
+          cpi:
+            created.cpi?.toString(),
+
+          redirectionType:
+            created.redirectionType,
+          postBackUrl:
+            created.postBackUrl,
+
+          completeUrl:
+            created.completeUrl,
+          terminateUrl:
+            created.terminateUrl,
+          overQuotaUrl:
+            created.overQuotaUrl,
+          qualityTermUrl:
+            created.qualityTermUrl,
+          surveyCloseUrl:
+            created.surveyCloseUrl,
+
+          allowTraffic:
+            created.allowTraffic,
+          supplierProjectId:
+            created.supplierProjectId,
+
+          supplierUrl:
+            (created as any)
+              .supplierUrl ??
+            supplierUrl,
+
+          createdAt:
+            created.createdAt,
+          updatedAt:
+            created.updatedAt,
+
+          entrants: 0,
+          inProgress: 0,
+          finalized: 0,
+
+          /*
+           * Retained for compatibility with the
+           * current SupplierMappedSummary UI.
+           */
           total: 0,
+
           complete: 0,
           terminate: 0,
           overQuota: 0,
           dropOut: 0,
           qualityTerm: 0,
+          surveyClose: 0,
+
           sentryPass: 0,
           sentryFail: 0,
           verisoulPass: 0,
           verisoulFail: 0,
         },
       },
-      { status: 201 }
+      {
+        status: 201,
+      }
     );
-  } catch (e: any) {
-    const msg = String(e?.message || e);
-    const hint = msg.includes("Transactions are not supported")
+  } catch (error: any) {
+    const message = String(
+      error?.message || error
+    );
+
+    const hint = message.includes(
+      "Transactions are not supported"
+    )
       ? " Prisma HTTP/Data Proxy on Cloudflare does not support $transaction or nested writes. This route uses only simple single-table reads/writes."
       : "";
 
     return NextResponse.json(
-      { error: "Failed to create supplier map", detail: msg + hint },
-      { status: 400 }
+      {
+        error:
+          "Failed to create supplier map",
+        detail: message + hint,
+      },
+      {
+        status: 400,
+      }
     );
   }
 }
