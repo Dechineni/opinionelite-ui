@@ -609,8 +609,23 @@ export async function GET(req: Request) {
 
     let nextUrl: string | null = null;
 
+    /*
+ * Supplier callback URLs require the external respondent identifier.
+ */
     const supplierIdent =
-      supplierRecord?.id || pid || externalId || "";
+      externalId || pid || "";
+
+    if (!externalId) {
+      console.warn(
+        "Supplier callback is missing the external respondent identifier:",
+        {
+          pid,
+          projectId,
+          supplierCode: supplierRecord?.code ?? null,
+          redirectResult: mapped.redirectResult,
+        }
+      );
+    }
 
     if (supplierRecord) {
       const r = mapped.redirectResult;
