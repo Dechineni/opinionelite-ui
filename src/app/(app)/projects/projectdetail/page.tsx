@@ -183,7 +183,13 @@ export default async function ProjectDetail({
       ) : tab === "supplier" ? (
         <SupplierMappingPanel projectId={projectId} />
       ) : tab === "report" ? (
-        <ProjectReportPanel projectId={projectId} />
+        <ProjectReportPanel projectId={projectId} 
+          project={{
+              id: project.id,
+              code: project.code,
+              name: project.name,
+            }}
+          />
       ) : tab === "prescreen" ? (
         <PrescreenPanel projectId={projectId} initialStatus={preScreenstatus} />
       ) : (
