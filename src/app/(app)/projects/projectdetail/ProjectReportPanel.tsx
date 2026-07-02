@@ -17,14 +17,8 @@ export default function ProjectReportPanel({
   project : Project;
 }) {
   const [reportType, setReportType] = useState("");
-  const [loading, setLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [alertMessage, setAlertMessage] = useState("")
-
-  const handleRefresh = () => {
-    setLoading(true);
-    setTimeout(() => setLoading(false), 500);
-  };
 
   // TIMESTAMP FUNCTION
   const getFormattedTimestamp = () => {
@@ -50,14 +44,6 @@ export default function ProjectReportPanel({
         // IF NO PROJECTID LOG PROJECT ID IS REQUIRED
         if (!projectId) {
           console.log("ProjectId is required");
-          return;
-        }
-
-        // FOR TESTING 
-        if (reportType === "prescreen") {
-          setAlertMessage(
-            "Prescreen Report is currently on hold and not available for download."
-          );
           return;
         }
 
@@ -129,16 +115,6 @@ export default function ProjectReportPanel({
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
 
-      {/* ✅ Top Right Refresh Button */}
-      <div className="flex justify-end mb-2">
-        <button
-          onClick={handleRefresh}
-          className="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
-        >
-          {loading ? "..." : "↻"}
-        </button>
-      </div>
-
       {/* ✅ Report Row */}
       <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-md px-4 py-3">
 
@@ -179,15 +155,6 @@ export default function ProjectReportPanel({
       >
         {isDownloading ? "Downloading..." : "Download"}
       </button>
-      </div>
-
-      {/* ✅ Placeholder area */}
-      <div className="mt-6 text-center text-sm text-slate-500">
-        {!reportType
-          ? "Please select a report type"
-          : reportType === "project"
-          ? "Project Report preview will appear here"
-          : "PreScreen Report preview will appear here"}
       </div>
 
       {/* Alert Message for Downloading Report */}

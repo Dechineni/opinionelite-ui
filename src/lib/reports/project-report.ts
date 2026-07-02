@@ -34,7 +34,10 @@ export async function generateProjectReport(
       projectCpi: true,
       managerEmail: true,
 
-      supplierEntries: {
+      supplierEntries:{
+        orderBy: {
+          firstEnteredAt: "asc",
+        },
         select: {
           supplierCode: true,
           externalId: true,
@@ -65,6 +68,28 @@ export async function generateProjectReport(
   if (!project) {
     throw new Error("Project not found");
   }
+
+  // GET ALL SUPPLIER CODES FROM ENTRIES
+  const supplierCodes = [
+    ...new Set(
+      project.supplierEntries.map(
+        (entry) => entry.supplierCode
+      )
+    ),
+  ];
+
+  // QUERY SUPPLIER TABLE
+  const suppliers = await prisma.supplier.findMany({
+    where: {
+      code: {
+        in: supplierCodes,
+      },
+    },
+    select: {
+      code: true,
+      name: true,
+    },
+  });
 
   // GET TOTAL NUMBER OF ENTRANTS
   const entrants = project.supplierEntries.length;
@@ -159,14 +184,19 @@ export async function generateProjectReport(
     reconciliationPassed,
   };
 
-  // SUPPLIER LOOKUP
-  const supplierLookup = new Map(
+  // SUPPLIER NAME LOOKUP
+  const supplierNameLookup = new Map(
+    suppliers.map((supplier) => [
+      supplier.code,
+      supplier.name,
+    ])
+  );
+
+  // SUPPLIER CPI LOOKUP
+  const supplierCpiLookup = new Map(
     project.supplierMappings.map((mapping) => [
       mapping.supplier.code,
-      {
-        supplierName: mapping.supplier.name,
-        supplierCpi: Number(mapping.cpi),
-      },
+      Number(mapping.cpi),
     ])
   );
 
@@ -217,8 +247,9 @@ export async function generateProjectReport(
   const respondentDetailsData =
     project.supplierEntries.map(
       (entry, index) => {
-        const supplierInfo =
-          supplierLookup.get(entry.supplierCode);
+      const supplierName = supplierNameLookup.get(entry.supplierCode);
+
+      const supplierCpi = supplierCpiLookup.get(entry.supplierCode);
 
        // Calculate LOI (Length of Interview) in minutes
         const loi =
@@ -239,7 +270,7 @@ export async function generateProjectReport(
             entry.supplierCode,
 
           supplierName:
-            supplierInfo?.supplierName ?? "",
+            supplierName ?? "",
 
           supplierIdentifier:
             entry.externalId,
@@ -248,7 +279,7 @@ export async function generateProjectReport(
             Number(project.projectCpi),
 
           supplierCpi:
-            supplierInfo?.supplierCpi ?? null,
+            supplierCpi ?? null,
 
           statusDescription:
             getStatusDescription(

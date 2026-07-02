@@ -2,6 +2,7 @@ export const runtime = "edge";
 export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import {generateProjectReport, generatePrescreenReport} from "@/lib/reports/project-report"
 import XLSX from "xlsx-js-style";
 
@@ -24,6 +25,21 @@ export async function GET(
   ctx: { params: Promise<{ projectId: string }> }
 ) {
   try {
+    // ACCESS REQUEST COOKIES.
+    const cookieStore = await cookies();
+
+    // RETRIEVE THE APPLICATION AUTHENTICATION TOKEN
+    const token = cookieStore.get("OE_AUTH")?.value;
+
+    // REJECT UNAUTHENTICATED REQUESTS
+    if(!token)
+    {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      )
+    };
+
     // GET PROJECT ID FROM ROUTE PARAMS
     const { projectId } = await ctx.params;
 
@@ -371,11 +387,11 @@ export async function GET(
         item.supplierName,
         item.supplierIdentifier ?? "",
         Number(item.projectCpi ?? 0),
-        Number(item.supplierCpi ?? 0),
+        item.supplierCpi === null ? "" : Number(item.supplierCpi),
         item.statusDescription,
         formatDate(item.startDateTime),
         formatDate(item.endDateTime),
-        Number(item.loi ?? 0),
+        item.loi === "" ? "" : Number(item.loi)
       ]
     );
 
@@ -432,7 +448,7 @@ export async function GET(
 
         // LOI
         if (respondentSheet[`J${row}`]) {
-          respondentSheet[`J${row}`].z = "0";
+          respondentSheet[`J${row}`].z = "0.00";
         }
       }
 
@@ -446,12 +462,6 @@ export async function GET(
       // FILTERS
       respondentSheet["!autofilter"] = {
         ref: "A2:J2",
-      };
-
-      // FREEZE HEADER
-      respondentSheet["!freeze"] = {
-        xSplit: 0,
-        ySplit: 2,
       };
 
       // COLUMN WIDTHS
@@ -519,12 +529,12 @@ export async function GET(
 
       return NextResponse.json(
         {
-          success: true,
-          message: "Prescreen report generated successfully.",
-          data: reportData,
+          success: false,
+          message: "Prescreen report generation is currently on hold and not available.",
+          data: null,
         },
         {
-          status: 200,
+          status: 501,
         }
       );
     }
@@ -542,14 +552,26 @@ export async function GET(
   } catch (error) {
     console.error("Report Error:", error);
 
+    // FOR PROJECT NOT FOUND 404 ERROR
+    if(error instanceof Error && error.message === "Project not found")
+    {
+      return NextResponse.json(
+        {
+          success : false,
+          message : "Project not found",
+          data : null
+        },
+        {
+          status : 404
+        }
+      )
+    }
+
     return NextResponse.json(
       {
-        success: false,
-        message:
-          error instanceof Error
-            ? error.message
-            : "Internal server error",
-        data: null,
+        success : false,
+        message : "Unable to generate the report",
+        data : null,
       },
       {
         status: 500,
