@@ -68,8 +68,12 @@ export default function ProjectReportPanel({
 
         // IF API WILL FAIL SHOWING DOWNLOAD FAILED ERROR
         if (!response.ok) {
-            const message = await response.text();
-            throw new Error(message);
+          // GET ERROR MESSAGE FROM API RESPONSE AND DISPLAY IT TO THE USER
+          const errorData = await response.json();
+
+          setAlertMessage(errorData?.message || "Unable to download the report. Please try again.");
+          return;
+
         }
 
         // VERIFY THAT THE API RESPONSE IS AN EXCEL FILE BEFORE DOWNLOADING
