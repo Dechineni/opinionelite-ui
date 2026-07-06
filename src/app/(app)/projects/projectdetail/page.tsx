@@ -8,6 +8,7 @@ import SupplierMappingPanel from "./SupplierMappingPanel";
 import PrescreenPanel from "./PrescreenPanel";
 import SupplierMappedSummary from "./SupplierMappedSummary";
 import ProjectStatusControl from "./ProjectStatusControl";
+import ProjectReportPanel from "./ProjectReportPanel";
 
 function fmt(n: number | null | undefined, d = 2) {
   if (n === null || n === undefined) return "—";
@@ -158,8 +159,14 @@ export default async function ProjectDetail({
                 active={tab === "prescreen"}
               >
                 Prescreen
-              </Tab>
+              </Tab> 
             )}
+             <Tab
+                href={`/projects/projectdetail?id=${qid}&tab=report&from=${fromQs}`}
+                active={tab === "report"}
+              >
+                Project Report
+              </Tab> 
           </div>
 
           {tab !== "prescreen" && (
@@ -175,6 +182,14 @@ export default async function ProjectDetail({
         <SurveyLinkPanel projectId={projectId} />
       ) : tab === "supplier" ? (
         <SupplierMappingPanel projectId={projectId} />
+      ) : tab === "report" ? (
+        <ProjectReportPanel projectId={projectId} 
+          project={{
+              id: project.id,
+              code: project.code,
+              name: project.name,
+            }}
+          />
       ) : tab === "prescreen" ? (
         <PrescreenPanel projectId={projectId} initialStatus={preScreenstatus} />
       ) : (
