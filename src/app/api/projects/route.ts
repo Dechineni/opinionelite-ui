@@ -458,6 +458,7 @@ export async function POST(req: Request) {
         name: b.name ?? b.projectName,
         managerEmail: b.manager ?? b.managerEmail,
         category: b.category ?? "",
+        projectType: b.projectType === "Recontact" ? "Recontact" : "Adhocs",
         description: b.description ?? null,
 
         countryCode: b.country ?? b.countryCode,
