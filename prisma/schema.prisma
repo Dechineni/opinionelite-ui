@@ -8,8 +8,8 @@ datasource db {
 }
 
 model Client {
-  id            String         @id @default(cuid())
-  code          String         @unique @default(dbgenerated("('C'::text || (nextval('client_code_seq'::regclass))::text)"))
+  id            String  @id @default(cuid())
+  code          String  @unique @default(dbgenerated("('C'::text || (nextval('client_code_seq'::regclass))::text)"))
   name          String
   contactPerson String
   email         String?
@@ -17,10 +17,10 @@ model Client {
   countryCode   String
   website       String?
 
-// NEW: API-provider support
-  apiUrl        String?
-  apiKey        String?
-  secretKey     String?
+  // NEW: API-provider support
+  apiUrl    String?
+  apiKey    String?
+  secretKey String?
 
   // NEW: provider-specific support
   providerType  String?
@@ -129,53 +129,56 @@ model Project {
   SurveyRedirect        SurveyRedirect[]
   reconciliations       Reconciliation[]
 
-  apiSurveySelection ApiSurveySelection?
+  apiSurveySelection       ApiSurveySelection?
   respondentLaunchProfiles RespondentLaunchProfile[]
 
-  sentryEnabled        Boolean  @default(false)
-  sentryProjectId      String?
-  sentryTemplateId     String?
-  sentryLiveUrl        String?
-  sentryTestUrl        String?
-  sentryReportingUrl   String?
-  sentryProjectStatus  String?
-  sentryHashingEnabled Boolean @default(false)
-  sentryVerisoulEnabled        Boolean @default(false)
-  sentryVerisoulTermFake       Boolean @default(false)
-  sentryVerisoulTermSuspicious Boolean @default(false)
-  sentryProviderId     String?
-  sentryIdField        String?
-  sentryRespondentResults SentryRespondentResult[]
+  sentryEnabled                Boolean                  @default(false)
+  sentryProjectId              String?
+  sentryTemplateId             String?
+  sentryLiveUrl                String?
+  sentryTestUrl                String?
+  sentryReportingUrl           String?
+  sentryProjectStatus          String?
+  sentryHashingEnabled         Boolean                  @default(false)
+  sentryVerisoulEnabled        Boolean                  @default(false)
+  sentryVerisoulTermFake       Boolean                  @default(false)
+  sentryVerisoulTermSuspicious Boolean                  @default(false)
+  sentryProviderId             String?
+  sentryIdField                String?
+  sentryRespondentResults      SentryRespondentResult[]
 
   supplierEntries SupplierEntry[]
 }
 
 model SupplierEntry {
-  id            String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  projectId     String
-  projectCode   String?
-  supplierCode  String
-  externalId    String
+  projectId    String
+  projectCode  String?
+  supplierCode String
+  externalId   String
+  recid        String?
 
   firstEnteredAt DateTime @default(now())
-  lastEnteredAt DateTime @default(now())
+  lastEnteredAt  DateTime @default(now())
   entryCount     Int      @default(1)
 
-  currentStage   String   @default("ENTERED")
+  currentStage   String    @default("ENTERED")
   finalOutcome   String?
   finalOutcomeAt DateTime?
 
-  entrySource    String   @default("LIVE")
-  finalSource    String?
-  isBackfilled   Boolean  @default(false)
+  entrySource  String  @default("LIVE")
+  finalSource  String?
+  isBackfilled Boolean @default(false)
 
-  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, supplierCode, externalId], map: "SupplierEntry_unique_respondent")
   @@index([projectId])
   @@index([supplierCode])
   @@index([externalId])
+  @@index([recid])
+  @@index([projectId, supplierCode, recid])
   @@index([currentStage])
   @@index([finalOutcome])
   @@index([finalSource])
@@ -253,6 +256,7 @@ model Respondent {
   projectId             String
   externalId            String
   supplierId            String?
+  recid                 String?
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt
   answers               PrescreenAnswer[]
@@ -262,6 +266,8 @@ model Respondent {
 
   @@unique([projectId, externalId, supplierId], map: "respondent_project_ext_supplier_unique")
   @@index([projectId])
+  @@index([recid])
+  @@index([projectId, supplierId, recid])
 }
 
 model PrescreenAnswer {
@@ -294,6 +300,7 @@ model SurveyRedirect {
   /// For convenience/auditing
   supplierId   String?
   externalId   String?
+  recid        String?
   destination  String
   createdAt    DateTime        @default(now())
   result       RedirectResult?
@@ -303,6 +310,8 @@ model SurveyRedirect {
   @@unique([projectId, supplierId, externalId], name: "SurveyRedirect_nat_unique", map: "SurveyRedirect_nat_unique")
   @@index([projectId])
   @@index([respondentId])
+  @@index([recid])
+  @@index([projectId, supplierId, recid])
 }
 
 model SupplierRedirectEvent {
@@ -322,27 +331,27 @@ model SupplierRedirectEvent {
 }
 
 model SentryRespondentResult {
-  id             String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  projectId      String
-  projectCode    String?
-  supplierCode   String   @default("")
-  externalId     String
+  projectId    String
+  projectCode  String?
+  supplierCode String  @default("")
+  externalId   String
 
-  sentryStatus   String
-  sentryResult   String
+  sentryStatus String
+  sentryResult String
 
   verisoulStatus String?
   verisoulResult String?
 
-  providerId     String?
-  language       String?
-  rawQuery       String?
+  providerId String?
+  language   String?
+  rawQuery   String?
 
-  firstSeenAt    DateTime @default(now())
-  lastSeenAt     DateTime @updatedAt
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @updatedAt
 
-  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, supplierCode, externalId], map: "SentryRespondentResult_unique_respondent")
   @@index([projectId])
@@ -385,34 +394,34 @@ model Reconciliation {
 }
 
 model ApiSurveySelection {
-  id           String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  clientId      String
-  client        Client   @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
 
-  providerType  String
-  countryCode   String
+  providerType String
+  countryCode  String
 
-  surveyCode    String
-  quotaId       String
-  surveyName    String
+  surveyCode String
+  quotaId    String
+  surveyName String
 
-  quota         String?
-  loi           String?
-  ir            String?
-  cpi           String?
+  quota String?
+  loi   String?
+  ir    String?
+  cpi   String?
 
-  liveUrl       String?
-  testUrl       String?
+  liveUrl String?
+  testUrl String?
 
   targetingJson String?
   rawSurveyJson String?
 
-  projectId     String?  @unique
-  project       Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId String?  @unique
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([clientId, countryCode, surveyCode, quotaId], map: "ApiSurveySelection_unique_selection")
   @@index([clientId])
@@ -423,16 +432,16 @@ model ApiSurveySelection {
 }
 
 model RespondentLaunchProfile {
-  id          String   @id @default(cuid())
-  projectId   String
-  supplierId  String?
-  externalId  String
-  birthDate   DateTime
-  gender      String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  projectId  String
+  supplierId String?
+  externalId String
+  birthDate  DateTime
+  gender     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, supplierId, externalId])
   @@index([projectId])
