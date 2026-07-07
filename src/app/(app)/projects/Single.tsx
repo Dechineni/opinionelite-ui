@@ -76,6 +76,7 @@ export default function SingleProject() {
     projectName: "",
     managerEmail: "",
     category: "",
+    projectType: "Adhocs",
     description: "",
 
     country: "",
@@ -201,6 +202,7 @@ export default function SingleProject() {
         name: form.projectName,
         manager: form.managerEmail,
         category: form.category,
+        projectType: form.projectType,
         description: form.description || null,
 
         country: form.country,
@@ -374,6 +376,21 @@ export default function SingleProject() {
                   {l.name}
                 </option>
               ))}
+            </select>
+          </div>
+
+          <div className="col-span-12 md:col-span-6 xl:col-span-4">
+            <label className="mb-1 block text-xs font-medium">
+              Project Type*
+            </label>
+            <select
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              value={form.projectType}
+              onChange={(e) => update("projectType", e.target.value)}
+              required
+            >
+              <option value="Adhocs">Adhocs</option>
+              <option value="Recontact">Recontact</option>
             </select>
           </div>
 

@@ -87,6 +87,7 @@ model Project {
   name                  String
   managerEmail          String
   category              String
+  projectType           String                  @default("Adhocs")
   status                ProjectStatus           @default(ACTIVE)
   description           String?
   countryCode           String
