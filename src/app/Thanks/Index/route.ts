@@ -183,6 +183,7 @@ export async function GET(req: Request) {
               externalId: true,
               destination: true,
               result: true,
+              recid : true
             },
           })
         : null;
@@ -204,6 +205,7 @@ export async function GET(req: Request) {
           externalId: true,
           destination: true,
           result: true,
+          recid : true
         },
       });
 
@@ -223,6 +225,7 @@ export async function GET(req: Request) {
             externalId: true,
             destination: true,
             result: true,
+            recid : true
           },
         });
       }
@@ -245,6 +248,7 @@ export async function GET(req: Request) {
     const projectId = redirect.projectId ?? null;
     const supplierId = redirect.supplierId ?? null;
     const externalId = redirect.externalId ?? null;
+    const recid = redirect.recid || null;
 
     let supplierRecord:
       | {
@@ -311,6 +315,7 @@ export async function GET(req: Request) {
               projectId,
               externalId,
               supplierId,
+              recid
             },
             select: {
               id: true,
@@ -359,6 +364,7 @@ export async function GET(req: Request) {
                 projectId,
                 externalId,
                 supplierId: null,
+                recid
               },
               select: {
                 id: true,

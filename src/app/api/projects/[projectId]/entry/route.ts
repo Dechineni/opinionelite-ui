@@ -16,6 +16,7 @@ export async function POST(
 
     const supplierCode = String(body?.supplierId || "").trim();
     const externalId = String(body?.externalId || body?.id || "").trim();
+    const recid = String(body?.recid || "").trim();
 
     if (!projectId || !supplierCode || !externalId) {
       return NextResponse.json(
@@ -59,6 +60,7 @@ export async function POST(
         externalId,
         currentStage: "ENTERED",
         entryCount: 1,
+        recid
       },
 
       update: {
@@ -67,6 +69,7 @@ export async function POST(
         entryCount: {
           increment: 1,
         },
+        recid
       },
 
       select: {

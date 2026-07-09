@@ -16,18 +16,22 @@ function SurveyLandingInner() {
     const supplierId = sp.get("supplierId") || "";
     const id = sp.get("id") || "";
 
+    // CAPTURE FIXED RECONTACT PANELIST ID FROM SUPPLIER URL 
+    const recid = sp.get("recid") || "";
+    console.log("Recid from from line number 21@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@:", recid)
+
     if (!projectId || !id) return;
 
     const toLive = () => {
       window.location.href = `/api/projects/${encodeURIComponent(
         projectId
-      )}/launch?supplierId=${encodeURIComponent(supplierId)}&id=${encodeURIComponent(id)}`;
+      )}/launch?supplierId=${encodeURIComponent(supplierId)}&id=${encodeURIComponent(id)}&recid=${encodeURIComponent(recid)}`;
     };
     const toPrescreen = () => {
       router.replace(
         `/Prescreen?projectId=${encodeURIComponent(projectId)}&supplierId=${encodeURIComponent(
           supplierId
-        )}&id=${encodeURIComponent(id)}`
+        )}&id=${encodeURIComponent(id)}&recid=${encodeURIComponent(recid)}`
       );
     };
 
@@ -46,6 +50,7 @@ function SurveyLandingInner() {
               body: JSON.stringify({
                 supplierId,
                 externalId: id,
+                recid : recid
               }),
               cache: "no-store",
             }

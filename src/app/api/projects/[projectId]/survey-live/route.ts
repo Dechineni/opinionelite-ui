@@ -101,6 +101,8 @@ export async function GET(
   const url = new URL(req.url);
   const supplierId = (url.searchParams.get("supplierId") || "").trim();
   const externalId = (url.searchParams.get("id") || "").trim();
+  const recid = (url.searchParams.get("recid") || "").trim();
+  console.log("Recid from line number 105@@@@@@@@@@@@@@@@from surveu-live@@@@@@@@@@@@@:", recid)
 
   const cached = memGet(`live:${projectId}`);
 
@@ -200,7 +202,7 @@ export async function GET(
         if (!found) {
           try {
             await prisma.respondent.create({
-              data: { projectId: projectIdReal, externalId, supplierId },
+              data: { projectId: projectIdReal, externalId, supplierId, recid },
             });
           } catch (e) {
             if (!isUniqueViolation(e)) throw e;
@@ -215,7 +217,7 @@ export async function GET(
         if (!found) {
           try {
             await prisma.respondent.create({
-              data: { projectId: projectIdReal, externalId, supplierId: null },
+              data: { projectId: projectIdReal, externalId, supplierId: null, recid },
             });
           } catch (e) {
             if (!isUniqueViolation(e)) throw e;
@@ -238,6 +240,7 @@ export async function GET(
     supplierId,
     identifier: pid,
     externalId,
+    recid : recid
   });
 
   let absolute: URL;
@@ -284,6 +287,7 @@ export async function GET(
             supplierId: supplierId || null,
             externalId: externalId || null,
             destination: absolute.toString(),
+            recid
           },
         });
       }
