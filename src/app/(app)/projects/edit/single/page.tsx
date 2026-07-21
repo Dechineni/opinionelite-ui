@@ -72,6 +72,8 @@ export default function EditSingleProject() {
     category: "",
     description: "",
 
+    projectType: "", //1
+
     country: "",
     language: "",
     currency: "USD",
@@ -139,6 +141,8 @@ export default function EditSingleProject() {
           managerEmail: p.managerEmail ?? "",
           category: p.category ?? "",
           description: p.description ?? "",
+
+          projectType: p.projectType ?? "", //2
 
           country: p.countryCode ?? "",
           language: p.languageCode ?? "",
@@ -212,6 +216,8 @@ export default function EditSingleProject() {
 
     setSaving(true);
     setErr(null);
+  
+
     try {
       const body = {
         clientId: form.clientId,
@@ -266,11 +272,26 @@ export default function EditSingleProject() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const errorData = await res.json();
+
+        const message =
+        errorData.message ||
+        errorData.error ||
+        "Update failed";
+
+        setErr(
+          errorData.message ||
+          errorData.error ||
+          "Update failed"
+        );
+        return;
+      }
 
       setSuccessOpen(true);
     } catch (e: any) {
       setErr(e?.message || "Update failed");
+      console.error("Failed to update project:", e);
     } finally {
       setSaving(false);
     }
@@ -389,6 +410,23 @@ export default function EditSingleProject() {
           </div>
 
           <div className="col-span-12 md:col-span-6 xl:col-span-4">
+            <Label required>Project Type</Label>
+
+            <select
+              value={form.projectType}
+              disabled
+              className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-600 cursor-not-allowed"
+            >
+              <option value="Adhocs">Adhocs</option>
+              <option value="Recontact">Recontact</option>
+            </select>
+
+            <p className="mt-1 text-xs text-slate-500">
+              Project Type cannot be changed after project creation
+            </p>
+          </div>
+
+          <div className="col-span-12 md:col-span-6 xl:col-span-4">
             <Label>Currency</Label>
             <input
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -500,8 +538,8 @@ export default function EditSingleProject() {
                   onChange={(e) => update(k, e.target.checked)}
                 />
                 <span>
-  {k === "sentryEnabled" ? "Sentry" : k.charAt(0).toUpperCase() + k.slice(1)}
-</span>
+                  {k === "sentryEnabled" ? "Sentry" : k.charAt(0).toUpperCase() + k.slice(1)}
+                </span>
               </label>
             ))}
           </div>
@@ -539,111 +577,111 @@ export default function EditSingleProject() {
 
 
           {form.sentryEnabled && (
-  <>
-    <div className="col-span-12">
-      <h3 className="text-sm font-semibold text-slate-700 mt-4">
-        Sentry Configuration
-      </h3>
-    </div>
+            <>
+              <div className="col-span-12">
+                <h3 className="text-sm font-semibold text-slate-700 mt-4">
+                  Sentry Configuration
+                </h3>
+              </div>
 
-    <div className="col-span-12 md:col-span-6">
-      <Label>Sentry Project ID</Label>
-      <input
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        value={form.sentryProjectId}
-        onChange={(e) => update("sentryProjectId", e.target.value)}
-      />
-    </div>
+              <div className="col-span-12 md:col-span-6">
+                <Label>Sentry Project ID</Label>
+                <input
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={form.sentryProjectId}
+                  onChange={(e) => update("sentryProjectId", e.target.value)}
+                />
+              </div>
 
-    <div className="col-span-12 md:col-span-6">
-      <Label>Sentry Template ID</Label>
-      <input
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        value={form.sentryTemplateId}
-        onChange={(e) => update("sentryTemplateId", e.target.value)}
-      />
-    </div>
+              <div className="col-span-12 md:col-span-6">
+                <Label>Sentry Template ID</Label>
+                <input
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={form.sentryTemplateId}
+                  onChange={(e) => update("sentryTemplateId", e.target.value)}
+                />
+              </div>
 
-    <div className="col-span-12 md:col-span-6">
-      <Label>Sentry Live URL</Label>
-      <input
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        value={form.sentryLiveUrl}
-        onChange={(e) => update("sentryLiveUrl", e.target.value)}
-      />
-    </div>
+              <div className="col-span-12 md:col-span-6">
+                <Label>Sentry Live URL</Label>
+                <input
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={form.sentryLiveUrl}
+                  onChange={(e) => update("sentryLiveUrl", e.target.value)}
+                />
+              </div>
 
-    <div className="col-span-12 md:col-span-6">
-      <Label>Sentry Test URL</Label>
-      <input
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        value={form.sentryTestUrl}
-        onChange={(e) => update("sentryTestUrl", e.target.value)}
-      />
-    </div>
+              <div className="col-span-12 md:col-span-6">
+                <Label>Sentry Test URL</Label>
+                <input
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={form.sentryTestUrl}
+                  onChange={(e) => update("sentryTestUrl", e.target.value)}
+                />
+              </div>
 
-    <div className="col-span-12 md:col-span-6">
-      <Label>Sentry Reporting URL</Label>
-      <input
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        value={form.sentryReportingUrl}
-        onChange={(e) => update("sentryReportingUrl", e.target.value)}
-      />
-    </div>
+              <div className="col-span-12 md:col-span-6">
+                <Label>Sentry Reporting URL</Label>
+                <input
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={form.sentryReportingUrl}
+                  onChange={(e) => update("sentryReportingUrl", e.target.value)}
+                />
+              </div>
 
-    <div className="col-span-12 md:col-span-6">
-      <Label>Sentry Project Status</Label>
-      <input
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        value={form.sentryProjectStatus}
-        onChange={(e) => update("sentryProjectStatus", e.target.value)}
-      />
-    </div>
+              <div className="col-span-12 md:col-span-6">
+                <Label>Sentry Project Status</Label>
+                <input
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={form.sentryProjectStatus}
+                  onChange={(e) => update("sentryProjectStatus", e.target.value)}
+                />
+              </div>
 
-    <div className="col-span-12 md:col-span-6">
-  <label className="mb-1 block text-xs font-medium">Sentry Hashing Enabled</label>
-  <input
-  type="checkbox"
-  checked={form.sentryHashingEnabled}
-onChange={(e) =>
-  update("sentryHashingEnabled", e.target.checked)
-}
-/>
-</div>
+              <div className="col-span-12 md:col-span-6">
+                <label className="mb-1 block text-xs font-medium">Sentry Hashing Enabled</label>
+                <input
+                  type="checkbox"
+                  checked={form.sentryHashingEnabled}
+                  onChange={(e) =>
+                    update("sentryHashingEnabled", e.target.checked)
+                  }
+                />
+              </div>
 
-    <div className="col-span-12 md:col-span-6">
-  <label className="mb-1 block text-xs font-medium">Enable Verisoul</label>
-  <input
-  type="checkbox"
-  checked={form.sentryVerisoulEnabled}
-  onChange={(e) =>
-    update("sentryVerisoulEnabled", e.target.checked)
-  }
-/>
-</div>
+              <div className="col-span-12 md:col-span-6">
+                <label className="mb-1 block text-xs font-medium">Enable Verisoul</label>
+                <input
+                  type="checkbox"
+                  checked={form.sentryVerisoulEnabled}
+                  onChange={(e) =>
+                    update("sentryVerisoulEnabled", e.target.checked)
+                  }
+                />
+              </div>
 
-<div className="col-span-12 md:col-span-6">
-  <label className="mb-1 block text-xs font-medium">Terminate Fake</label>
-  <input
-type="checkbox"
-    checked={form.sentryVerisoulTermFake}
-onChange={(e) =>
-  update("sentryVerisoulTermFake", e.target.checked)
-}
-  />
-</div>
+              <div className="col-span-12 md:col-span-6">
+                <label className="mb-1 block text-xs font-medium">Terminate Fake</label>
+                <input
+                  type="checkbox"
+                  checked={form.sentryVerisoulTermFake}
+                  onChange={(e) =>
+                    update("sentryVerisoulTermFake", e.target.checked)
+                  }
+                />
+              </div>
 
-<div className="col-span-12 md:col-span-6">
-  <label className="mb-1 block text-xs font-medium">Terminate Suspicious</label>
-  <input
-type="checkbox"
-    checked={form.sentryVerisoulTermSuspicious}
-onChange={(e) =>
-  update("sentryVerisoulTermSuspicious", e.target.checked)
-}
-  />
-</div>
-  </>
+              <div className="col-span-12 md:col-span-6">
+                <label className="mb-1 block text-xs font-medium">Terminate Suspicious</label>
+                <input
+                  type="checkbox"
+                  checked={form.sentryVerisoulTermSuspicious}
+                  onChange={(e) =>
+                    update("sentryVerisoulTermSuspicious", e.target.checked)
+                  }
+                />
+              </div>
+            </>
           )}
         </div>
 
