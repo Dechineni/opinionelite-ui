@@ -21,17 +21,37 @@ function SurveyLandingInner() {
 
     if (!projectId || !id) return;
 
-    const toLive = () => {
-      window.location.href = `/api/projects/${encodeURIComponent(
-        projectId
-      )}/launch?supplierId=${encodeURIComponent(supplierId)}&id=${encodeURIComponent(id)}&recid=${encodeURIComponent(recid)}`;
+    const buildParams = () =>{
+      const params = new URLSearchParams({
+        supplierId,
+        id
+      });
+
+      if(recid.trim())
+      {
+        params.set("recid", recid.trim());
+      };
+
+      return params.toString();
     };
-    const toPrescreen = () => {
-      router.replace(
-        `/Prescreen?projectId=${encodeURIComponent(projectId)}&supplierId=${encodeURIComponent(
-          supplierId
-        )}&id=${encodeURIComponent(id)}&recid=${encodeURIComponent(recid)}`
-      );
+
+    const toLive = () =>{
+      window.location.href = `/api/projects/${encodeURIComponent(projectId)}/launch?${buildParams()}`
+    };
+
+    const toPrescreen = () =>{
+      const params = new URLSearchParams({
+        projectId,
+        supplierId,
+        id
+      });
+
+      if(recid.trim())
+      {
+        params.set("recid" , recid.trim());
+      };
+
+      router.replace(`/Prescreen?${params.toString()}`);
     };
 
     (async () => {

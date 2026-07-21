@@ -244,8 +244,8 @@ export async function GET(
 
         if (!found) {
           try {
-            const data = await prisma.respondent.create({
-              data: { projectId: projectIdReal, externalId, supplierId, ...(recid?.trim() ? { recid } : {}) },
+            await prisma.respondent.create({
+              data: { projectId: projectIdReal, externalId, supplierId, ...(effectiveRecid?.trim() ? { recid: effectiveRecid } : {}) },
               
             });
           } catch (e) {
@@ -260,8 +260,8 @@ export async function GET(
 
         if (!found) {
           try {
-            const data = await prisma.respondent.create({
-              data: { projectId: projectIdReal, externalId, supplierId: null, ...(recid?.trim() ? { recid } : {}) },
+            await prisma.respondent.create({
+              data: { projectId: projectIdReal, externalId, supplierId: null, ...(effectiveRecid?.trim() ? { recid: effectiveRecid } : {}) },
             });
           } catch (e) {
             if (!isUniqueViolation(e)) throw e;
@@ -324,21 +324,15 @@ export async function GET(
           },
         });
       } else {
-        const data = await prisma.surveyRedirect.create({
+        await prisma.surveyRedirect.create({
           data: {
             id: pid,
             projectId: projectIdReal,
             supplierId: supplierId || null,
             externalId: externalId || null,
             destination: absolute.toString(),
-            ...(recid?.trim() ? { recid } : {})
+            ...(effectiveRecid?.trim() ? { recid : effectiveRecid } : {})
           },
-          select:{
-            recid : true,
-            projectId : true,
-            externalId  :true,
-            supplierId : true
-          }
         });
       }
     } catch (e) {
