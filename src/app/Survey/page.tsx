@@ -18,7 +18,6 @@ function SurveyLandingInner() {
 
     // CAPTURE FIXED RECONTACT PANELIST ID FROM SUPPLIER URL 
     const recid = sp.get("recid") || "";
-    console.log("Recid from from line number 21@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@:", recid)
 
     if (!projectId || !id) return;
 

@@ -44,6 +44,16 @@ export async function POST(
       );
     }
 
+    const existing = await prisma.supplierEntry.findUnique({
+      where: {
+        projectId_supplierCode_externalId: {
+          projectId: project.id,
+          supplierCode,
+          externalId,
+        },
+      },
+    });
+
     const entry = await prisma.supplierEntry.upsert({
       where: {
         projectId_supplierCode_externalId: {
@@ -69,7 +79,7 @@ export async function POST(
         entryCount: {
           increment: 1,
         },
-        recid
+        ...(recid?.trim() ? { recid } : {})
       },
 
       select: {
@@ -81,6 +91,7 @@ export async function POST(
         lastEnteredAt: true,
         entryCount: true,
         currentStage: true,
+        recid : true
       },
     });
 

@@ -243,7 +243,7 @@ export async function GET(
           supplierId: supplierId || null,
           externalId,
           destination,
-          recid
+          ...(recid?.trim() ? { recid } : {})
         },
         select: { id: true },
       });

@@ -248,7 +248,7 @@ export async function GET(req: Request) {
     const projectId = redirect.projectId ?? null;
     const supplierId = redirect.supplierId ?? null;
     const externalId = redirect.externalId ?? null;
-    const recid = redirect.recid || null;
+    const recid = redirect.recid ?? null;
 
     let supplierRecord:
       | {
@@ -315,7 +315,7 @@ export async function GET(req: Request) {
               projectId,
               externalId,
               supplierId,
-              recid
+              ...(recid?.trim() ? { recid } : {})
             },
             select: {
               id: true,
@@ -352,9 +352,9 @@ export async function GET(req: Request) {
           },
           select: {
             id: true,
+            recid : true
           },
         });
-
         if (found) {
           respondentId = found.id;
         } else {
@@ -364,13 +364,13 @@ export async function GET(req: Request) {
                 projectId,
                 externalId,
                 supplierId: null,
-                recid
+                ...(recid?.trim() ? { recid } : {})
               },
               select: {
                 id: true,
+                recid : true
               },
             });
-
             respondentId = created.id;
           } catch (e) {
             if (isP2002(e)) {
@@ -382,9 +382,9 @@ export async function GET(req: Request) {
                 },
                 select: {
                   id: true,
+                  recid  :true
                 },
               });
-
               respondentId = again?.id ?? null;
             } else {
               throw e;

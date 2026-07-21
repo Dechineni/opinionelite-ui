@@ -136,7 +136,7 @@ async function ensureTestSupplierMapping(args: {
     supplierCode: String(testSupplier.code || ""),
   });
 
-  await prisma.projectSupplierMap.create({
+  const data = await prisma.projectSupplierMap.create({
     data: {
       projectId: args.projectId,
       supplierId: testSupplier.id,
@@ -154,7 +154,6 @@ async function ensureTestSupplierMapping(args: {
       surveyCloseUrl: buildInternalThanksUrl({ uiBase, auth: "70" }),
     },
   });
-
   return {
     ok: true as const,
     created: true as const,
