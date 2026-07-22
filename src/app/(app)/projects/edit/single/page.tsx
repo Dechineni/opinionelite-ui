@@ -72,7 +72,7 @@ export default function EditSingleProject() {
     category: "",
     description: "",
 
-    projectType: "", //1
+    projectType: "Adhocs",
 
     country: "",
     language: "",
@@ -142,7 +142,7 @@ export default function EditSingleProject() {
           category: p.category ?? "",
           description: p.description ?? "",
 
-          projectType: p.projectType ?? "", //2
+          projectType: p.projectType ?? "Adhocs", 
 
           country: p.countryCode ?? "",
           language: p.languageCode ?? "",
@@ -274,11 +274,6 @@ export default function EditSingleProject() {
       });
       if (!res.ok) {
         const errorData = await res.json();
-
-        const message =
-        errorData.message ||
-        errorData.error ||
-        "Update failed";
 
         setErr(
           errorData.message ||

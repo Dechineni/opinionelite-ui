@@ -136,7 +136,7 @@ async function ensureTestSupplierMapping(args: {
     supplierCode: String(testSupplier.code || ""),
   });
 
-  const data = await prisma.projectSupplierMap.create({
+  await prisma.projectSupplierMap.create({
     data: {
       projectId: args.projectId,
       supplierId: testSupplier.id,
