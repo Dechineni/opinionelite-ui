@@ -15,6 +15,7 @@ export default function RespondentProfilePage() {
   const projectId = searchParams.get("projectId") || "";
   const supplierId = searchParams.get("supplierId") || "";
   const externalId = searchParams.get("id") || "";
+  const recid = searchParams.get("recid") || "";
   const next = searchParams.get("next") || "";
 
   const [birthDate, setBirthDate] = useState("");
@@ -24,7 +25,7 @@ export default function RespondentProfilePage() {
 
   const canSubmit = useMemo(() => {
     return !!projectId && !!externalId && !!birthDate && !!gender && !submitting;
-  }, [projectId, externalId, birthDate, gender, submitting]);
+  }, [projectId, externalId, birthDate, gender,recid, submitting]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -55,6 +56,7 @@ export default function RespondentProfilePage() {
           birthDate,
           gender,
           next,
+          recid
         }),
       });
 

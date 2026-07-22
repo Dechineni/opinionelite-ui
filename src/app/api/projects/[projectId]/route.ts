@@ -65,6 +65,17 @@ export async function PATCH(
   const { projectId } = await ctx.params;
   const where = whereFrom(req, projectId);
   const b = await req.json();
+  
+  // Prevent Project Type updates
+  if ("projectType" in b) {
+    return NextResponse.json(
+      {
+        error: "Project Type cannot be changed after project creation",
+      },
+      { status: 400 }
+    );
+  }
+
 
   const sentryEnabledWasProvided = typeof b.sentryEnabled === "boolean";
   const sentryWillBeEnabled = b.sentryEnabled === true;

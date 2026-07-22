@@ -55,6 +55,7 @@ export async function GET(
     const url = new URL(req.url);
     const supplierId = (url.searchParams.get("supplierId") || "").trim();
     const externalId = (url.searchParams.get("id") || "").trim();
+    const recid = (url.searchParams.get("recid") || "").trim();
     const birthDateFromQuery = (url.searchParams.get("birthDate") || "").trim();
     const genderFromQuery = (url.searchParams.get("gender") || "").trim();
 
@@ -242,6 +243,7 @@ export async function GET(
           supplierId: supplierId || null,
           externalId,
           destination,
+          ...(recid?.trim() ? { recid } : {})
         },
         select: { id: true },
       });

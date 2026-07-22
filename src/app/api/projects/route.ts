@@ -27,11 +27,26 @@ function buildSupplierUrl(opts: {
   uiBase: string;
   projectCode: string;
   supplierCode: string;
+  projectType : string;
 }) {
   const ui = (opts.uiBase || "").replace(/\/+$/, "");
   const p = encodeURIComponent(opts.projectCode || "");
   const s = encodeURIComponent(opts.supplierCode || "");
-  return `${ui}/Survey?projectId=${p}&supplierId=${s}&id=[identifier]`;
+
+  // GET PROJECT TYPE AND REMOVE ANY LEADING/TRAILING SPACES
+  const projectType = (opts.projectType || "").trim();
+
+  // GENERATE THE BASE SUPPLIER MAPPING URL
+  let url = `${ui}/Survey?projectId=${p}&supplierId=${s}&id=[identifier]`;
+
+  // FOR RECONTACT PROJECTS, APPEND RECID PARAMETER TO THE URL
+  if(projectType === "Recontact")
+  {
+    url += "&recid=[recid]";
+  }
+
+  // RETURN THE GENERATED SUPPLIER URL
+  return url;
 }
 
 function buildInternalThanksUrl(opts: {
@@ -47,6 +62,7 @@ function buildInternalThanksUrl(opts: {
 async function ensureTestSupplierMapping(args: {
   projectId: string;
   projectCode: string;
+  projectType : string;
   supplierQuota: number;
   clickQuota: number;
   cpi: Prisma.Decimal;
@@ -116,6 +132,7 @@ async function ensureTestSupplierMapping(args: {
   const supplierUrl = buildSupplierUrl({
     uiBase,
     projectCode: args.projectCode,
+    projectType : args.projectType,
     supplierCode: String(testSupplier.code || ""),
   });
 
@@ -137,7 +154,6 @@ async function ensureTestSupplierMapping(args: {
       surveyCloseUrl: buildInternalThanksUrl({ uiBase, auth: "70" }),
     },
   });
-
   return {
     ok: true as const,
     created: true as const,
@@ -529,6 +545,7 @@ export async function POST(req: Request) {
         id: true,
         code: true,
         name: true,
+        projectType : true,
 
         sampleSize: true,
         clickQuota: true,
@@ -591,6 +608,7 @@ export async function POST(req: Request) {
       const ensured = await ensureTestSupplierMapping({
         projectId: created.id,
         projectCode: created.code,
+        projectType : created.projectType,
         supplierQuota: created.sampleSize,
         clickQuota: created.clickQuota,
         cpi: created.supplierCpi ?? created.projectCpi,

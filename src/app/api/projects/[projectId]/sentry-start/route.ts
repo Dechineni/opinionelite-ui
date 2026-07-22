@@ -15,6 +15,7 @@ export async function GET(
 
   const supplierId = (url.searchParams.get("supplierId") || "").trim();
   const externalId = (url.searchParams.get("id") || "").trim();
+  const recid = (url.searchParams.get("recid") || "").trim();
 
   const birthDate = (url.searchParams.get("birthDate") || "").trim();
   const gender = (url.searchParams.get("gender") || "").trim();
@@ -60,6 +61,8 @@ export async function GET(
 
     if (supplierId) launchUrl.searchParams.set("supplierId", supplierId);
     launchUrl.searchParams.set("id", externalId);
+
+    if (recid) launchUrl.searchParams.set("recid", recid);
 
     if (birthDate) launchUrl.searchParams.set("birthDate", birthDate);
     if (gender) launchUrl.searchParams.set("gender", gender);
@@ -113,6 +116,7 @@ export async function GET(
   if (supplierId) sentryUrl.searchParams.set("supplierId", supplierId);
   if (birthDate) sentryUrl.searchParams.set("birthDate", birthDate);
   if (gender) sentryUrl.searchParams.set("gender", gender);
+  if (recid) sentryUrl.searchParams.set("recid", recid);
 
   return NextResponse.redirect(sentryUrl.toString(), 302);
 }

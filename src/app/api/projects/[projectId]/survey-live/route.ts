@@ -101,6 +101,7 @@ export async function GET(
   const url = new URL(req.url);
   const supplierId = (url.searchParams.get("supplierId") || "").trim();
   const externalId = (url.searchParams.get("id") || "").trim();
+  const recid = (url.searchParams.get("recid") || "").trim();
 
   const cached = memGet(`live:${projectId}`);
 
@@ -108,6 +109,7 @@ export async function GET(
   let haveRealId = false;
   let projectCodeReal = projectId;
   let template = cached?.template ?? "";
+  let effectiveRecid = recid;
 
   if (cached) {
     projectIdReal = cached.id;
@@ -145,6 +147,48 @@ export async function GET(
     }
   }
 
+   // IF RECID IS NOT COMING FROM URL, TRY TO FIND AN EXISTING RECID
+  if(!effectiveRecid)
+  {
+    // CHECK THE LATEST SURVEYREDIRECT RECORD FOR RECID
+    const surveyRedirectRecid = await prisma.surveyRedirect.findFirst({
+      where: {
+        projectId: projectIdReal,
+        supplierId,
+        externalId,
+      },
+      select: {
+        recid : true
+      },
+    });
+    
+    // IF RECID EXISTS IN SURVEYREDIRECT, USE IT
+    if(surveyRedirectRecid?.recid)
+    {
+      effectiveRecid = surveyRedirectRecid.recid;
+    }
+    else{
+      // IF SURVEYREDIRECT DOES NOT HAVE RECID, CHECK RESPONDENT
+      const respondentRecid = await prisma.respondent.findFirst({
+        where: {
+          projectId: projectIdReal,
+          supplierId,
+          externalId,
+        },
+        select: {
+          recid : true
+        },
+      });
+
+      // IF RECID EXISTS IN RESPONDENT, USE IT
+      if(respondentRecid?.recid)
+      {
+        effectiveRecid = respondentRecid.recid;
+      };
+    };
+  };
+  
+
   // Look for existing SurveyRedirect by natural key
   let reusableRedirect: { id: string; result: string | null } | null = null;
 
@@ -181,6 +225,7 @@ export async function GET(
       reusableRedirect = existingRedirect;
     }
   }
+  
 
   // best-effort respondent ensure
   if (haveRealId && externalId) {
@@ -200,7 +245,8 @@ export async function GET(
         if (!found) {
           try {
             await prisma.respondent.create({
-              data: { projectId: projectIdReal, externalId, supplierId },
+              data: { projectId: projectIdReal, externalId, supplierId, ...(effectiveRecid?.trim() ? { recid: effectiveRecid } : {}) },
+              
             });
           } catch (e) {
             if (!isUniqueViolation(e)) throw e;
@@ -215,7 +261,7 @@ export async function GET(
         if (!found) {
           try {
             await prisma.respondent.create({
-              data: { projectId: projectIdReal, externalId, supplierId: null },
+              data: { projectId: projectIdReal, externalId, supplierId: null, ...(effectiveRecid?.trim() ? { recid: effectiveRecid } : {}) },
             });
           } catch (e) {
             if (!isUniqueViolation(e)) throw e;
@@ -238,6 +284,7 @@ export async function GET(
     supplierId,
     identifier: pid,
     externalId,
+    recid : effectiveRecid
   });
 
   let absolute: URL;
@@ -284,6 +331,7 @@ export async function GET(
             supplierId: supplierId || null,
             externalId: externalId || null,
             destination: absolute.toString(),
+            ...(effectiveRecid?.trim() ? { recid : effectiveRecid } : {})
           },
         });
       }
@@ -329,6 +377,5 @@ export async function GET(
       throw e;
     }
   }
-
   return NextResponse.redirect(absolute.toString(), { status: 302 });
 }

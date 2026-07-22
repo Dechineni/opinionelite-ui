@@ -250,6 +250,7 @@ export async function POST(
 
   try {
     const body = await req.json();
+    const recid = (body.recid || "").trim();
 
     const supplierId: string | null =
       typeof body?.supplierId === "string" &&
@@ -311,9 +312,11 @@ export async function POST(
                 projectId: projId,
                 externalId: identifier,
                 supplierId: null,
+                ...(recid?.trim() ? { recid } : {})
               },
               select: {
                 id: true,
+                recid : true
               },
             });
 
@@ -362,9 +365,11 @@ export async function POST(
                 projectId: projId,
                 externalId: identifier,
                 supplierId,
+                ...(recid?.trim() ? { recid } : {})
               },
               select: {
                 id: true,
+                recid : true
               },
             });
 
