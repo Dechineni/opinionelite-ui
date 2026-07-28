@@ -157,6 +157,7 @@ export async function PATCH(
     mobile: typeof b.mobile === "boolean" ? b.mobile : undefined,
     tablet: typeof b.tablet === "boolean" ? b.tablet : undefined,
     desktop: typeof b.desktop === "boolean" ? b.desktop : undefined,
+    //quotasEnabled: typeof b.quotasEnabled === "boolean" ? b.quotasEnabled : undefined, //Change 1 First add quotasEnabled in prisma.
 
     // Sentry enabled flag
     sentryEnabled: sentryEnabledWasProvided ? sentryWillBeEnabled : undefined,
