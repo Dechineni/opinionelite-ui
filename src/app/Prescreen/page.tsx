@@ -28,6 +28,7 @@ function PrescreenInner() {
   const rid = params.get("identifier") || params.get("id") || "";
   const supplierId = params.get("supplierId") || "";
   const nextUrl = params.get("next") || "";
+  const recid = params.get("recid") || "";
 
   const [loading, setLoading] = useState(true);
   const [questions, setQuestions] = useState<PrescreenQuestion[]>([]);
@@ -132,6 +133,9 @@ if (nextUrl && nextUrl.startsWith("/api/projects/") && !nextUrl.includes("://"))
   if (supplierId) u.searchParams.set("supplierId", supplierId);
   u.searchParams.set("id", rid);
 
+  // IF RECID
+  if(recid) u.searchParams.set("recid", recid);
+
   // IMPORTANT FLOW FLAGS (must match launch logic)
   u.searchParams.set("stage", "prescreen");
   u.searchParams.set("fromPrescreen", "1");
@@ -152,6 +156,10 @@ if (nextUrl && nextUrl.startsWith("/api/projects/") && !nextUrl.includes("://"))
     u.searchParams.set("supplierId", supplierId);
   }
 
+  if (recid) {
+    u.searchParams.set("recid", recid);
+  }
+
   return u.toString();
 }
 
@@ -167,7 +175,7 @@ if (nextUrl && nextUrl.startsWith("/api/projects/") && !nextUrl.includes("://"))
       url: `/api/projects/${encodeURIComponent(
         projectId
       )}/prescreen/${encodeURIComponent(rid)}/answers`,
-      body: { supplierId: supplierId || null, answers: flat },
+      body: { supplierId: supplierId || null, answers: flat, recid : recid },
     };
   }
 
@@ -208,6 +216,8 @@ const launchUrl = new URL(
 
 if (supplierId) launchUrl.searchParams.set("supplierId", supplierId);
 launchUrl.searchParams.set("id", rid);
+
+if (recid) launchUrl.searchParams.set("recid", recid);
 
 // IMPORTANT FLOW FLAGS
 launchUrl.searchParams.set("stage", "prescreen");

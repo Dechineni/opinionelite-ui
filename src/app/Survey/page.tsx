@@ -16,19 +16,42 @@ function SurveyLandingInner() {
     const supplierId = sp.get("supplierId") || "";
     const id = sp.get("id") || "";
 
+    // CAPTURE FIXED RECONTACT PANELIST ID FROM SUPPLIER URL 
+    const recid = sp.get("recid") || "";
+
     if (!projectId || !id) return;
 
-    const toLive = () => {
-      window.location.href = `/api/projects/${encodeURIComponent(
-        projectId
-      )}/launch?supplierId=${encodeURIComponent(supplierId)}&id=${encodeURIComponent(id)}`;
+    const buildParams = () =>{
+      const params = new URLSearchParams({
+        supplierId,
+        id
+      });
+
+      if(recid.trim())
+      {
+        params.set("recid", recid.trim());
+      };
+
+      return params.toString();
     };
-    const toPrescreen = () => {
-      router.replace(
-        `/Prescreen?projectId=${encodeURIComponent(projectId)}&supplierId=${encodeURIComponent(
-          supplierId
-        )}&id=${encodeURIComponent(id)}`
-      );
+
+    const toLive = () =>{
+      window.location.href = `/api/projects/${encodeURIComponent(projectId)}/launch?${buildParams()}`
+    };
+
+    const toPrescreen = () =>{
+      const params = new URLSearchParams({
+        projectId,
+        supplierId,
+        id
+      });
+
+      if(recid.trim())
+      {
+        params.set("recid" , recid.trim());
+      };
+
+      router.replace(`/Prescreen?${params.toString()}`);
     };
 
     (async () => {
@@ -46,6 +69,7 @@ function SurveyLandingInner() {
               body: JSON.stringify({
                 supplierId,
                 externalId: id,
+                recid : recid
               }),
               cache: "no-store",
             }

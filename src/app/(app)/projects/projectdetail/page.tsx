@@ -54,6 +54,7 @@ export default async function ProjectDetail({
     currency,
     description,
     client,
+    projectType,
     countryCode,
     languageCode,
     sampleSize,
@@ -208,6 +209,7 @@ export default async function ProjectDetail({
             <Row l="Client Code" r={client?.code || "—"} />
             <Row l="Project Name" r={name} />
             <Row l="Client Name" r={client?.name || "—"} />
+            <Row l="Project Type" r={projectType || "Adhocs"} />
             <Row l="Project Category" r={category} />
             <Row l="Country" r={countryCode} />
             <Row l="LOI (Min)" r={String(loi)} />

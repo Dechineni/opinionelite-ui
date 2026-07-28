@@ -30,6 +30,7 @@ export async function POST(req: Request) {
     const birthDateRaw = String(body?.birthDate || "").trim();
     const genderRaw = String(body?.gender || "").trim();
     const next = String(body?.next || "").trim();
+    const recid = String(body?.recid || "").trim();
 
     if (!projectId) {
       return NextResponse.json({ error: "projectId is required." }, { status: 400 });
@@ -114,7 +115,8 @@ export async function POST(req: Request) {
     const qs = new URLSearchParams();
     if (supplierId) qs.set("supplierId", supplierId);
     qs.set("id", externalId);
-
+    
+    if (recid) qs.set("recid", recid);
     const projectKey = project.code || project.id;
     const fallbackPath = `/api/projects/${encodeURIComponent(projectKey)}/launch`;
     const redirectPath = next || `${fallbackPath}?${qs.toString()}`;

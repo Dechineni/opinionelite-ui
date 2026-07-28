@@ -88,6 +88,10 @@ export async function GET(
     url.searchParams.get("id") ||
     ""
   ).trim();
+  const recid = (
+    url.searchParams.get("recid") ||
+    ""
+  ).trim();
 
   const birthDate = (url.searchParams.get("birthDate") || "").trim();
   const gender = (url.searchParams.get("gender") || "").trim();
@@ -178,6 +182,7 @@ export async function GET(
             supplierCode,
             externalId,
             sentryStatus: status || "UNKNOWN",
+            recid
           }
         );
 
@@ -193,6 +198,7 @@ export async function GET(
             supplierCode,
             externalId,
             existingFinalOutcome: entry.finalOutcome,
+            recid
           }
         );
 
@@ -219,6 +225,7 @@ export async function GET(
           supplierCode,
           externalId,
           finalOutcome: "TERMINATE",
+          recid
         }
       );
     } catch (entryError) {
@@ -303,6 +310,10 @@ export async function GET(
       terminateUrl.searchParams.set("supplierId", supplierId);
     }
 
+    if (recid) {
+      terminateUrl.searchParams.set("recid", recid);
+    }
+
     terminateUrl.searchParams.set("fromSentry", "1");
     terminateUrl.searchParams.set("sentry_status", status);
 
@@ -319,6 +330,10 @@ export async function GET(
 
     if (supplierId) {
       launchUrl.searchParams.set("supplierId", supplierId);
+    }
+
+    if (recid) {
+      launchUrl.searchParams.set("recid", recid);
     }
 
     if (birthDate) {
@@ -358,6 +373,10 @@ export async function GET(
 
   if (supplierId) {
     fallbackUrl.searchParams.set("supplierId", supplierId);
+  }
+
+  if (recid) {
+    fallbackUrl.searchParams.set("recid", recid);
   }
 
   if (status) {

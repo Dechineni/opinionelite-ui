@@ -33,6 +33,9 @@ export async function GET(
   const supplierId = (url.searchParams.get("supplierId") || "").trim();
   const externalId = (url.searchParams.get("id") || "").trim();
 
+  // GET THE RECID VALUE FROM THE URL QUERY PARAMETERS
+  const recid = (url.searchParams.get("recid") || "").trim();
+
   const birthDateFromQuery = (url.searchParams.get("birthDate") || "").trim();
   const genderFromQuery = (url.searchParams.get("gender") || "").trim();
 
@@ -73,6 +76,8 @@ export async function GET(
 
   if (supplierId) qs.set("supplierId", supplierId);
   if (externalId) qs.set("id", externalId);
+  // SET RECID
+  if (recid) qs.set("recid", recid);
   if (birthDateFromQuery) qs.set("birthDate", birthDateFromQuery);
   if (genderFromQuery) qs.set("gender", genderFromQuery);
 
@@ -98,6 +103,11 @@ export async function GET(
     if (supplierId) prescreenUrl.searchParams.set("supplierId", supplierId);
     if (externalId) prescreenUrl.searchParams.set("id", externalId);
 
+    // PASS RECID THROUGH PRESCREEN REDIRECT
+    if (recid) {
+      prescreenUrl.searchParams.set("recid", recid);
+    }
+
     return NextResponse.redirect(prescreenUrl.toString(), 302);
   }
 
@@ -118,6 +128,9 @@ export async function GET(
 
     if (supplierId) sentryStartUrl.searchParams.set("supplierId", supplierId);
     if (externalId) sentryStartUrl.searchParams.set("id", externalId);
+    if (recid) {
+      sentryStartUrl.searchParams.set("recid", recid);
+    }
     if (birthDateFromQuery) {
       sentryStartUrl.searchParams.set("birthDate", birthDateFromQuery);
     }
@@ -190,6 +203,9 @@ export async function GET(
 
     if (supplierId) profileUrl.searchParams.set("supplierId", supplierId);
     if (externalId) profileUrl.searchParams.set("id", externalId);
+    if (recid) {
+      profileUrl.searchParams.set("recid", recid);
+    }
 
     profileUrl.searchParams.set("next", next);
 

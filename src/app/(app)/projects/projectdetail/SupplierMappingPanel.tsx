@@ -65,6 +65,9 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
   const [suppliers, setSuppliers] = useState<SupplierLite[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // STORES THE CURRENT PROJECT'S TYPE (Recontact, Adhocs)
+  const [projectType, setProjectType] = useState<string | null>(null);
+
   // project code for SupplierUrl
   const [projectCode, setProjectCode] = useState<string>(projectId);
 
@@ -132,7 +135,17 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
     const s = encodeURIComponent(supplierCodeVal || "");
     if (!p || !s) return "—";
     const uiOrigin = getUiOrigin();
-    return `${uiOrigin}/Survey?projectId=${p}&supplierId=${s}&id=[identifier]`;
+
+    // GENERATE BASE SUPPLIER URL
+    let url = `${uiOrigin}/Survey?projectId=${p}&supplierId=${s}&id=[identifier]`;
+
+    // FOR RECONTACT PROJECTS, APPEND RECID PARAMETER
+    if(projectType === "Recontact")
+    {
+      url += "&recid=[recid]";
+    }
+    // RETURN THE GENERATED SUPPLIER URL
+    return url;
   }
 
   async function reloadMaps() {
@@ -209,6 +222,8 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
         let projCode = projectId;
         if (pRes && pRes.ok) {
           const pj = await pRes.json();
+          const projectType = pj?.projectType
+          setProjectType(projectType)
           const c = (pj?.code ?? pj?.data?.code ?? pj?.project?.code) as string | undefined;
           if (c) projCode = c;
         }

@@ -99,6 +99,7 @@ function buildSupplierUrl(opts: {
   uiBase: string;
   projectCode: string;
   supplierCode: string;
+  projectType : string;
 }) {
   const ui = (opts.uiBase || "").replace(/\/+$/, "");
 
@@ -110,7 +111,20 @@ function buildSupplierUrl(opts: {
     opts.supplierCode || ""
   );
 
-  return `${ui}/Survey?projectId=${projectCode}&supplierId=${supplierCode}&id=[identifier]`;
+  // GET PROJECT TYPE AND REMOVE ANY LEADING/TRAILING SPACES
+  const projectType = (opts.projectType || "").trim();
+
+  // GENERATE THE BASE SUPPLIER MAPPING URL
+  let url = `${ui}/Survey?projectId=${projectCode}&supplierId=${supplierCode}&id=[identifier]`;
+
+  // FOR RECONTACT PROJECTS, APPEND RECID PARAMETER TO THE URL
+  if(projectType === "Recontact")
+  {
+    url += "&recid=[recid]";
+  }
+
+  // RETURN THE GENERATED SUPPLIER URL
+  return url;
 }
 
 /* ---------------------------------- GET ---------------------------------- */
@@ -655,6 +669,7 @@ export async function POST(
         },
         select: {
           code: true,
+          projectType : true
         },
       });
 
@@ -687,6 +702,7 @@ export async function POST(
         supplierCode: String(
           supplier.code ?? ""
         ),
+        projectType: project?.projectType ?? "",
       });
 
     const createData: any = {
