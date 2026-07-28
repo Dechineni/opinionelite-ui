@@ -44,7 +44,7 @@ export default async function ProjectDetail({
   });
   if (!project) return notFound();
 
-  let quotasEnabled  = false;
+  let quotasEnabled  = true;
 
   const {
     code,
