@@ -9,6 +9,7 @@ import PrescreenPanel from "./PrescreenPanel";
 import SupplierMappedSummary from "./SupplierMappedSummary";
 import ProjectStatusControl from "./ProjectStatusControl";
 import ProjectReportPanel from "./ProjectReportPanel";
+import QuotasPanel from "./QuotasPanel";
 
 function fmt(n: number | null | undefined, d = 2) {
   if (n === null || n === undefined) return "—";
@@ -43,6 +44,8 @@ export default async function ProjectDetail({
   });
   if (!project) return notFound();
 
+  let quotasEnabled  = false;
+
   const {
     code,
     name,
@@ -61,6 +64,7 @@ export default async function ProjectDetail({
     projectCpi,
     supplierCpi,
     preScreen,
+    // quotasEnabled,
     exclude,
     geoLocation,
     dynamicThanksUrl,
@@ -162,6 +166,14 @@ export default async function ProjectDetail({
                 Prescreen
               </Tab> 
             )}
+            {quotasEnabled  && (
+              <Tab
+                href={`/projects/projectdetail?id=${qid}&tab=quotas&from=${fromQs}`}
+                active={tab === "quotas"}
+              >
+                Quotas
+              </Tab> 
+            )}
              <Tab
                 href={`/projects/projectdetail?id=${qid}&tab=report&from=${fromQs}`}
                 active={tab === "report"}
@@ -193,7 +205,10 @@ export default async function ProjectDetail({
           />
       ) : tab === "prescreen" ? (
         <PrescreenPanel projectId={projectId} initialStatus={preScreenstatus} />
-      ) : (
+      ) : tab === "quotas" ? (
+        <QuotasPanel/>
+      ):
+       (
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-4 flex justify-end">
             <Link
