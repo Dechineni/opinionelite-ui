@@ -101,6 +101,7 @@ model Project {
   supplierCpi           Decimal?                @db.Decimal(10, 2)
   startDate             DateTime
   endDate               DateTime
+  quotasEnabled         Boolean                 @default(false)
   preScreen             Boolean                 @default(false)
   exclude               Boolean                 @default(false)
   geoLocation           Boolean                 @default(false)
