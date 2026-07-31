@@ -1,107 +1,109 @@
 "use client"
 
 import React, {useState} from "react";
-import { RefreshCw, Plus, Info, Search, SquareCheck, Trash2, ExternalLink, Grip, MoreVertical, GripVertical } from "lucide-react";
+import { RefreshCw, Plus, Info, Search, SquareCheck, Trash2, ExternalLink, Grip, MoreVertical, GripVertical, Copy, Network } from "lucide-react";
 
 export default function QuotasPanel(){
     const [activeTab, setActiveTab] = useState("quotas");
-
+    
+    // Mock data for quotas UI
     const quotaData = [
-    {
-        id: 1,
-        name: "Male 18-34",
-        status: "Open",
-        targetCompletes: 100,
-        quotaCount: 100,
-        quotaPercent: "10.00%",
-        totalAccesses: 1250,
-        prescClicks: 845,
-        completes: 92,
-        terminates: 210,
-        overQuotas: 0,
-    },
-    {
-        id: 2,
-        name: "Female 18-34",
-        status: "Open",
-        targetCompletes: 150,
-        quotaCount: 150,
-        quotaPercent: "15.00%",
-        totalAccesses: 1620,
-        prescClicks: 1050,
-        completes: 148,
-        terminates: 260,
-        overQuotas: 0,
-    },
-    {
-        id: 3,
-        name: "Male 35-54",
-        status: "Open",
-        targetCompletes: 200,
-        quotaCount: 200,
-        quotaPercent: "20.00%",
-        totalAccesses: 2100,
-        prescClicks: 1320,
-        completes: 198,
-        terminates: 420,
-        overQuotas: 1,
-    },
-    {
-        id: 4,
-        name: "Female 35-54",
-        status: "Open",
-        targetCompletes: 200,
-        quotaCount: 200,
-        quotaPercent: "20.00%",
-        totalAccesses: 2050,
-        prescClicks: 1280,
-        completes: 187,
-        terminates: 390,
-        overQuotas: 0,
-    },
-    {
-        id: 5,
-        name: "Male 55+",
-        status: "Closed",
-        targetCompletes: 100,
-        quotaCount: 100,
-        quotaPercent: "10.00%",
-        totalAccesses: 980,
-        prescClicks: 610,
-        completes: 100,
-        terminates: 180,
-        overQuotas: 0,
-    },
-    {
-        id: 6,
-        name: "Female 55+",
-        status: "Closed",
-        targetCompletes: 100,
-        quotaCount: 100,
-        quotaPercent: "10.00%",
-        totalAccesses: 870,
-        prescClicks: 520,
-        completes: 96,
-        terminates: 150,
-        overQuotas: 0,
-    },
-    {
-        id: 7,
-        name: "Other",
-        status: "Open",
-        targetCompletes: 50,
-        quotaCount: 50,
-        quotaPercent: "5.00%",
-        totalAccesses: 420,
-        prescClicks: 280,
-        completes: 50,
-        terminates: 60,
-        overQuotas: 0,
-    },
-];
+        {
+            id: 1,
+            name: "Male 18-34",
+            status: "Open",
+            targetCompletes: 100,
+            quotaCount: 100,
+            quotaPercent: "10.00%",
+            totalAccesses: 1250,
+            prescClicks: 845,
+            completes: 92,
+            terminates: 210,
+            overQuotas: 0,
+        },
+        {
+            id: 2,
+            name: "Female 18-34",
+            status: "Open",
+            targetCompletes: 150,
+            quotaCount: 150,
+            quotaPercent: "15.00%",
+            totalAccesses: 1620,
+            prescClicks: 1050,
+            completes: 148,
+            terminates: 260,
+            overQuotas: 0,
+        },
+        {
+            id: 3,
+            name: "Male 35-54",
+            status: "Open",
+            targetCompletes: 200,
+            quotaCount: 200,
+            quotaPercent: "20.00%",
+            totalAccesses: 2100,
+            prescClicks: 1320,
+            completes: 198,
+            terminates: 420,
+            overQuotas: 1,
+        },
+        {
+            id: 4,
+            name: "Female 35-54",
+            status: "Open",
+            targetCompletes: 200,
+            quotaCount: 200,
+            quotaPercent: "20.00%",
+            totalAccesses: 2050,
+            prescClicks: 1280,
+            completes: 187,
+            terminates: 390,
+            overQuotas: 0,
+        },
+        {
+            id: 5,
+            name: "Male 55+",
+            status: "Closed",
+            targetCompletes: 100,
+            quotaCount: 100,
+            quotaPercent: "10.00%",
+            totalAccesses: 980,
+            prescClicks: 610,
+            completes: 100,
+            terminates: 180,
+            overQuotas: 0,
+        },
+        {
+            id: 6,
+            name: "Female 55+",
+            status: "Closed",
+            targetCompletes: 100,
+            quotaCount: 100,
+            quotaPercent: "10.00%",
+            totalAccesses: 870,
+            prescClicks: 520,
+            completes: 96,
+            terminates: 150,
+            overQuotas: 0,
+        },
+        {
+            id: 7,
+            name: "Other",
+            status: "Open",
+            targetCompletes: 50,
+            quotaCount: 50,
+            quotaPercent: "5.00%",
+            totalAccesses: 420,
+            prescClicks: 280,
+            completes: 50,
+            terminates: 60,
+            overQuotas: 0,
+        },
+    ];
     return(
         <div className="quotas-main-container rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-
+           
+           {/* Quotas Heading Section */}
             <div className="quotas-heading-container flex items-center justify-between">
                 <div>
                     <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -130,21 +132,24 @@ export default function QuotasPanel(){
                     </button>
                 </div>
             </div>
+           
+            {/* Quotas Count Section */}
+            <div className="quotas-count-container flex rounded-xl border border-slate-200 bg-white p-3 shadow-sm mt-3 w-full">
 
-            <div className="quotas-count-container flex rounded-xl border border-slate-200 bg-white p-4 shadow-sm mt-3">
-
-                <div className="border-r-2 w-90 text-gray-300">
+                <div className="flex-1 border-r border-slate-300 mr-3">
                     <h1 className="font-medium text-gray-500 text-sm">Total Quota Count</h1>
                     <h1 className="font-bold text-black mt-1.5 text-xl">1,000</h1>
                     <h1 className="font-medium text-gray-500 text-sm mt-1.5">100.00%</h1>
                 </div>
-                <div className="px-7">
+                <div className="flex-1">
                     <h1 className="font-medium text-gray-500 text-sm">Total Completes</h1>
                     <h1 className="font-bold text-black mt-1.5 text-xl">623</h1>
                     <h1 className="font-medium text-gray-500 text-sm mt-1.5">62.30%</h1>
                 </div>
+                
             </div>
-
+            
+            {/* Quotas Button Section */}
             <div className="quotas-buttons-container w-full mt-5">
                 <div className="flex gap-2">
                     <button
@@ -160,7 +165,8 @@ export default function QuotasPanel(){
                 </div>
                 <hr className="border border-gray-200 mt-[-1]"/>
             </div>
-
+            
+            {/* Quotas Filters Section */}
             <div className="quotas-filters-container mt-2 p-3 flex w-full">
                 <div className="flex items-center gap-3 w-full">
                     <div className="flex items-center h-[35px] w-[220px] rounded-md border border-gray-300 px-3 gap-2">
@@ -202,7 +208,7 @@ export default function QuotasPanel(){
                             type="button"
                             className="flex items-center gap-1 h-[35px] px-3 rounded-md bg-white text-blue-500 border text-sm font-medium cursor-pointer"
                             >
-                            <Plus size={16} />
+                            <Copy size={14} />
                             Clone
                         </button>
 
@@ -210,7 +216,7 @@ export default function QuotasPanel(){
                             type="button"
                             className="flex items-center gap-1 h-[35px] px-3 rounded-md bg-white text-blue-500 border text-sm font-medium cursor-pointer"
                         >
-                            <Plus size={16} />
+                            <Network size={14} />
                             Demographics
                         </button>
 
@@ -233,7 +239,7 @@ export default function QuotasPanel(){
                 </div>
             </div>
 
-           {/* ...........Quotas Table Section........... */}
+            {/* Quotas Table Section */}
             <div className="quotas-filters-container">
                 <div className="mt-4 overflow-x-auto rounded-lg border border-slate-100">
                     <table className="w-full text-sm border-collapse">
@@ -348,7 +354,7 @@ export default function QuotasPanel(){
                 </div>
             </div>
 
-            {/* .........Pagination Section........... */}
+            {/* Pagination Section */}
             <div className="flex items-center justify-between border border-t-0 border-slate-200 rounded-b-lg px-4 py-3 text-sm bg-white">
                 <div className="text-gray-500">
                     Showing 1 to 7 of 7 quotas
@@ -372,6 +378,7 @@ export default function QuotasPanel(){
                     </select>
                 </div>
             </div>  
+
         </div>
     )
 };

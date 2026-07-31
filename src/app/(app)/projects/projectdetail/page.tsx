@@ -43,7 +43,7 @@ export default async function ProjectDetail({
     include: { client: true, group: true },
   });
   if (!project) return notFound();
-  let quotasEnabled = true;
+  
   const {
     code,
     name,
@@ -62,7 +62,7 @@ export default async function ProjectDetail({
     projectCpi,
     supplierCpi,
     preScreen,
-    // quotasEnabled,
+    quotasEnabled,
     exclude,
     geoLocation,
     dynamicThanksUrl,
@@ -234,7 +234,6 @@ export default async function ProjectDetail({
             <Row l="Project CPI" r={fmt(Number(projectCpi))} />
             <Row l="Currency" r={currency} />
             <Row l="Supplier CPI" r={fmt(Number(supplierCpi))} />
-            <Row l="Quotas" r={quotasEnabled ? "Enabled" : "Disabled"} />
           </div>
 
           <div className="mt-6">
@@ -249,7 +248,7 @@ export default async function ProjectDetail({
                 items={[
                   ["Prescreen", preScreen],
                   ["Sentry", project.sentryEnabled],
-                  ["Quotas", quotasEnabled], //Change 3 First add quotasEnabled in prisma
+                  ["Quotas", quotasEnabled],
                   ["Geo Location", geoLocation],
                   ["Unique IP", uniqueIp ? `Yes${uniqueIpDepth ? `: ${uniqueIpDepth}` : ""}` : "No"],
                   ["Exclude", exclude],
