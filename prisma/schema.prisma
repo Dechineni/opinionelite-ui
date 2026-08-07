@@ -129,6 +129,7 @@ model Project {
   SupplierRedirectEvent SupplierRedirectEvent[]
   SurveyRedirect        SurveyRedirect[]
   reconciliations       Reconciliation[]
+  quotas                ProjectQuota[]
 
   apiSurveySelection       ApiSurveySelection?
   respondentLaunchProfiles RespondentLaunchProfile[]
@@ -149,6 +150,38 @@ model Project {
   sentryRespondentResults      SentryRespondentResult[]
 
   supplierEntries SupplierEntry[]
+}
+
+model ProjectQuota {
+  id String @id @default(cuid())
+
+  projectId              String
+  prescreenQuestionId    String?
+  prescreenQuestionTitle String?
+  quotaName              String
+
+  status String @default("Open")
+
+  targetCompletes Int   @default(0)
+  quotaCount      Int   @default(0)
+  quotaPercent    Float @default(0)
+
+  totalAccesses   Int @default(0)
+  prescreenClicks Int @default(0)
+  completes       Int @default(0)
+  terminates      Int @default(0)
+  overQuotas      Int @default(0)
+
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, prescreenQuestionId, quotaName], name: "ProjectQuota_project_question_quotaName_unique")
+  @@index([projectId])
+  @@index([projectId, status])
 }
 
 model SupplierEntry {
