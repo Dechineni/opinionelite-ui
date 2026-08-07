@@ -522,6 +522,7 @@ export async function POST(req: Request) {
         mobile: !!b.mobile,
         tablet: !!b.tablet,
         desktop: !!b.desktop,
+        quotasEnabled: !!b.quotasEnabled,
 
         sentryEnabled: !!sentryEnabled,
         sentryTemplateId: sentryTemplateId ?? null,
