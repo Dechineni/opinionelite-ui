@@ -94,6 +94,11 @@ function buildMenu(role: Role): RootItem[] {
   icon: LifeBuoy,
   children: [ 
     {
+      key: "iptracker",
+      label: "IP Tracker",
+      href: "/support/iptracker"
+    },
+    {
       key: "support-reconciliation",
       label: "Reconciliation",
       href: "/support/reconciliation",
