@@ -176,6 +176,7 @@ export async function GET(req: Request) {
                     },
                 });
 
+                // GET SURVEYREDIRECT DATA
                 const surveyRedirect =
                     await prisma.surveyRedirect.findFirst({
                         where: {
@@ -185,16 +186,19 @@ export async function GET(req: Request) {
                         },
                     });
 
+                // SURVEY NAME
                 const surveyName =
                     entry.project.apiSurveySelection?.surveyName ||
                     entry.project.surveyName ||
                     entry.project.name;
 
+                // STATUS DESCRIPTION
                 const statusDescription = getStatusDescription(
                     entry.finalOutcome,
                     entry.finalSource
                 );
 
+                // LOI
                 let loi: number | string = "";
 
                 if (
