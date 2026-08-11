@@ -308,7 +308,7 @@ export default function ClientReportForm() {
                   ) : clientReportData?.length > 0 ? (
                     clientReportData.map((item: any, index: number) => (
                       <tr
-                        key={item.hashIdentifier ?? index}
+                        key={`${item.hashIdentifier || "no-hash"}-${index}`}
                         className="border-b border-slate-200 hover:bg-slate-50"
                       >
                         <td className="px-2 py-3 whitespace-nowrap">{item.sNo}</td>

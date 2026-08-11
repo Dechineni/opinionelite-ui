@@ -77,6 +77,20 @@ export async function GET(req: Request) {
         const to = searchParams.get("to");
         const format = searchParams.get("format") ?? "json";
 
+        // VALIDATE FORMAT
+        const allowedFormats = ["json", "xlsx"];
+
+        if (!allowedFormats.includes(format)) {
+            return NextResponse.json(
+                {
+                    error: "Invalid format. Supported formats are json and xlsx",
+                },
+                {
+                    status: 400,
+                }
+            );
+        };
+
         // VALIDATE CLIENTID IF NO CLIENTID RETURN CLIENTID IS REQUIRED
         if (!clientId) {
             return NextResponse.json(
@@ -167,85 +181,149 @@ export async function GET(req: Request) {
             }
         });
 
-        // FORMATING THE REPORTROWS DATA
-        const reportRows = await Promise.all(
-            supplierEntries.map(async (entry, index) => {
-                const supplier = await prisma.supplier.findFirst({
-                    where: {
-                        code: entry.supplierCode,
+        // GET UNIQUE SUPPLIER CODES FROM SUPPLIER ENTRIES 
+        const supplierCodes = [
+            ...new Set(
+                supplierEntries.map(
+                    (entry) => entry.supplierCode
+                )
+            ),
+        ];
+
+        // GET UNIQUE PROJECT IDS FROM SUPPLIER ENTRIES
+        const projectIds = [
+            ...new Set(
+                supplierEntries.map(
+                    (entry) => entry.projectId
+                )
+            ),
+        ];
+
+        // GET UNIQUE EXTERNAL IDS FROM SUPPLIER ENTRIES
+        const externalIds = [
+            ...new Set(
+                supplierEntries
+                    .map((entry) => entry.externalId)
+                    .filter(
+                        (externalId): externalId is string =>
+                            Boolean(externalId)
+                    )
+            ),
+        ];
+
+        // FETCH ALL REQUIRED SUPPLIERS IN ONE QUERY
+        const suppliers = await prisma.supplier.findMany({
+            where: {
+                code: {
+                    in: supplierCodes,
+                },
+            },
+        });
+
+        // CREATE A LOOKUP MAP FOR FAST SUPPLIER ACCESS
+        const supplierMap = new Map(
+            suppliers.map((supplier) => [
+                supplier.code,
+                supplier,
+            ])
+        );
+
+        // FETCH ALL REQUIRED SURVEY REDIRECTS IN ONE QUERY 
+        const surveyRedirects =
+            await prisma.surveyRedirect.findMany({
+                where: {
+                    projectId: {
+                        in: projectIds,
                     },
-                });
+                    supplierId: {
+                        in: supplierCodes,
+                    },
+                    externalId: {
+                        in: externalIds,
+                    },
+                },
+        });
 
-                // GET SURVEYREDIRECT DATA
-                const surveyRedirect =
-                    await prisma.surveyRedirect.findFirst({
-                        where: {
-                            projectId: entry.projectId,
-                            supplierId: entry.supplierCode,
-                            externalId: entry.externalId,
-                        },
-                    });
+        // CREATE A LOOKUP MAP FOR FAST SURVEY REDIRECT ACCESS
+        const surveyRedirectMap = new Map(
+            surveyRedirects.map((redirect) => [
+                `${redirect.projectId}_${redirect.supplierId}_${redirect.externalId}`,
+                redirect,
+            ])
+        );
 
-                // SURVEY NAME
-                const surveyName =
-                    entry.project.apiSurveySelection?.surveyName ||
-                    entry.project.surveyName ||
-                    entry.project.name;
+        // CREATE REPORTROWS
+        const reportRows = supplierEntries.map(
+        (entry, index) => {
 
-                // STATUS DESCRIPTION
-                const statusDescription = getStatusDescription(
+            const supplier = supplierMap.get(
+                entry.supplierCode
+            );
+
+            const surveyRedirect =
+                surveyRedirectMap.get(
+                    `${entry.projectId}_${entry.supplierCode}_${entry.externalId}`
+                );
+
+            const surveyName =
+                entry.project.apiSurveySelection
+                    ?.surveyName ||
+                entry.project.surveyName ||
+                entry.project.name;
+
+            const statusDescription =
+                getStatusDescription(
                     entry.finalOutcome,
                     entry.finalSource
                 );
 
-                // LOI
-                let loi: number | string = "";
+            let loi: number | string = "";
 
-                if (
-                    entry.firstEnteredAt &&
-                    entry.finalOutcomeAt
-                ) {
-                    loi = Math.round(
-                        (entry.finalOutcomeAt.getTime() -
-                            entry.firstEnteredAt.getTime()) /
+            if (
+                entry.firstEnteredAt &&
+                entry.finalOutcomeAt
+            ) {
+                loi = Math.round(
+                    (entry.finalOutcomeAt.getTime() -
+                        entry.firstEnteredAt.getTime()) /
                         60000
-                    );
-                }
+                );
+            }
 
-                // RETURN REPORT ROWS DATA
-                return {
-                    sNo: index + 1,
+            return {
+                sNo: index + 1,
 
-                    clientName: client.name,
-                    clientCode: client.code,
+                clientName: client.name,
+                clientCode: client.code,
 
-                    projectCode: entry.project.code,
+                projectCode: entry.project.code,
 
-                    surveyName,
+                surveyName,
 
-                    hashIdentifier:
-                        surveyRedirect?.id ?? "",
+                hashIdentifier:
+                    surveyRedirect?.id ?? "",
 
-                    supplierId: entry.supplierCode,
+                supplierId: entry.supplierCode,
 
-                    supplierName:
-                        supplier?.name ?? "",
+                supplierName:
+                    supplier?.name ?? "",
 
-                    supplierIdentifier:
-                        entry.externalId,
+                supplierIdentifier:
+                    entry.externalId,
 
-                    statusDescription,
+                statusDescription,
 
-                    startDateTime:
-                        entry.firstEnteredAt,
+                startDateTime:
+                    entry.firstEnteredAt,
 
-                    endDateTime:
-                        entry.finalOutcomeAt,
+                endDateTime:
+                    entry.finalOutcomeAt,
 
-                    loi,
-                };
-            })
+                loi,
+            };
+        }
         );
+
 
         if (format === "json") {
             return NextResponse.json({
@@ -467,10 +545,6 @@ export async function GET(req: Request) {
             });
         };
 
-        return NextResponse.json(
-            { error: "Invalid format" },
-            { status: 400 }
-        );
 
     } catch (err: any) {
         console.error(err);
