@@ -167,7 +167,11 @@ export async function GET(req: Request) {
                 },
                 project: {
                     clientId
-                }
+                },
+                AND: [
+                    { externalId: { not: "" } },
+                    { externalId: { not: "[identifier]" } },
+                ]
             },
             include: {
                 project: {
