@@ -1,105 +1,37 @@
 "use client"
 
-import React, {useState} from "react";
+import React, {useState, useEffect } from "react";
 import { RefreshCw, Plus, Info, Search, SquareCheck, Trash2, ExternalLink, Grip, MoreVertical, GripVertical, Copy, Network } from "lucide-react";
 
-export default function QuotasPanel(){
+export default function QuotasPanel({ projectId }: { projectId: string }) {
     const [activeTab, setActiveTab] = useState("quotas");
-    
-    // Mock data for quotas UI
-    const quotaData = [
-        {
-            id: 1,
-            name: "Male 18-34",
-            status: "Open",
-            targetCompletes: 100,
-            quotaCount: 100,
-            quotaPercent: "10.00%",
-            totalAccesses: 1250,
-            prescClicks: 845,
-            completes: 92,
-            terminates: 210,
-            overQuotas: 0,
-        },
-        {
-            id: 2,
-            name: "Female 18-34",
-            status: "Open",
-            targetCompletes: 150,
-            quotaCount: 150,
-            quotaPercent: "15.00%",
-            totalAccesses: 1620,
-            prescClicks: 1050,
-            completes: 148,
-            terminates: 260,
-            overQuotas: 0,
-        },
-        {
-            id: 3,
-            name: "Male 35-54",
-            status: "Open",
-            targetCompletes: 200,
-            quotaCount: 200,
-            quotaPercent: "20.00%",
-            totalAccesses: 2100,
-            prescClicks: 1320,
-            completes: 198,
-            terminates: 420,
-            overQuotas: 1,
-        },
-        {
-            id: 4,
-            name: "Female 35-54",
-            status: "Open",
-            targetCompletes: 200,
-            quotaCount: 200,
-            quotaPercent: "20.00%",
-            totalAccesses: 2050,
-            prescClicks: 1280,
-            completes: 187,
-            terminates: 390,
-            overQuotas: 0,
-        },
-        {
-            id: 5,
-            name: "Male 55+",
-            status: "Closed",
-            targetCompletes: 100,
-            quotaCount: 100,
-            quotaPercent: "10.00%",
-            totalAccesses: 980,
-            prescClicks: 610,
-            completes: 100,
-            terminates: 180,
-            overQuotas: 0,
-        },
-        {
-            id: 6,
-            name: "Female 55+",
-            status: "Closed",
-            targetCompletes: 100,
-            quotaCount: 100,
-            quotaPercent: "10.00%",
-            totalAccesses: 870,
-            prescClicks: 520,
-            completes: 96,
-            terminates: 150,
-            overQuotas: 0,
-        },
-        {
-            id: 7,
-            name: "Other",
-            status: "Open",
-            targetCompletes: 50,
-            quotaCount: 50,
-            quotaPercent: "5.00%",
-            totalAccesses: 420,
-            prescClicks: 280,
-            completes: 50,
-            terminates: 60,
-            overQuotas: 0,
-        },
-    ];
+
+    const [quotas, setQuotas] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const loadQuotas = async () => {
+        try {
+            setLoading(true);
+            const response = await fetch(`/api/projects/${projectId}/quotas`,
+                {
+                    cache: "no-store",
+                }
+            );
+            const data = await response.json();
+            setQuotas(
+                Array.isArray(data?.items) ? data.items : []
+            );
+        } catch (error) {
+            console.error("Error loading quotas:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadQuotas();
+    }, [projectId]);
+
     return(
         <div className="quotas-main-container rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
            
@@ -117,6 +49,7 @@ export default function QuotasPanel(){
                 <div className="flex items-center gap-3">
                     <button
                         type="button"
+                        onClick={loadQuotas}
                         className="flex items-center justify-center gap-1.5 w-[100px] h-[35px] rounded-md border border-gray-300 bg-white text-sm font-medium cursor-pointer"
                     >
                         <RefreshCw size={15} />
@@ -265,11 +198,26 @@ export default function QuotasPanel(){
                         </thead>
 
                         <tbody>
-                            {quotaData.map((quota) => (
-                                <tr
-                                    key={quota.id}
-                                    className="border-b border-gray-200"
-                                >
+                            {loading ? (
+                                <tr>
+                                    <td colSpan={14} className="text-center py-4">
+                                        Loading quotas...
+                                    </td>
+                                </tr>
+                            ) : quotas.length === 0 ? (
+                                <tr>
+                                    <td colSpan={14} className="text-center py-4">
+                                        No quotas synced yet. Use the Sync action from
+                                        the Prescreen tab to create quotas from mapped
+                                        options.
+                                    </td>
+                                </tr>
+                            ) : (
+                                 quotas.map((quota, index) => (
+                                    <tr
+                                        key={quota.id}
+                                        className="border-b border-gray-200"
+                                    >
                                     <td className="px-3 py-4">
                                         <input type="checkbox" />
                                     </td>
@@ -281,11 +229,11 @@ export default function QuotasPanel(){
                                         />
                                     </td>
 
-                                    <td className="px-3 py-4">{quota.id}</td>
+                                    <td className="px-3 py-4">{index + 1}</td>
 
                                     <td className="px-3 py-4">
                                         <span className="font-medium text-blue-600 cursor-pointer">
-                                            {quota.name}
+                                            {quota.quotaName}
                                         </span>
                                     </td>
 
@@ -309,7 +257,7 @@ export default function QuotasPanel(){
                                     </td>
 
                                     <td className="px-3 py-4">
-                                        {quota.quotaPercent}
+                                        {Number(quota.quotaPercent ?? 0).toFixed(2)}%
                                     </td>
 
                                     <td className="px-3 py-4">
@@ -317,7 +265,7 @@ export default function QuotasPanel(){
                                     </td>
 
                                     <td className="px-3 py-4">
-                                        {quota.prescClicks.toLocaleString()}
+                                        {quota.prescreenClicks?.toLocaleString()}
                                     </td>
 
                                     <td className="px-3 py-4">
@@ -348,7 +296,7 @@ export default function QuotasPanel(){
                                         </button>
                                     </td>
                                 </tr>
-                            ))}
+                            )))}
                         </tbody>
                     </table>
                 </div>

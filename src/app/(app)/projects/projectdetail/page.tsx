@@ -204,7 +204,7 @@ export default async function ProjectDetail({
       ) : tab === "prescreen" ? (
         <PrescreenPanel projectId={projectId} initialStatus={preScreenstatus} />
       ) : tab === "quotas" ? (
-        <QuotasPanel/>
+        <QuotasPanel projectId={projectId} />
       ):
        (
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
