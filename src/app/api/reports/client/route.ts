@@ -8,8 +8,8 @@ import { cookies } from "next/headers";
 import { getPrisma } from "@/lib/prisma";
 import XLSX from "xlsx-js-style";
 
-const PREVIEW_ROW_LIMIT = 5000;
-const DOWNLOAD_ROW_LIMIT = 5000;
+const PREVIEW_ROW_LIMIT = 1000;
+const DOWNLOAD_ROW_LIMIT = 1000;
 
 // FOR STATUS DESCRIPTION
 function getStatusDescription(
