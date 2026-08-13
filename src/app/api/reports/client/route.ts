@@ -9,7 +9,7 @@ import { getPrisma } from "@/lib/prisma";
 import XLSX from "xlsx-js-style";
 
 const PREVIEW_ROW_LIMIT = 5000;
-const DOWNLOAD_ROW_LIMIT = 15000;
+const DOWNLOAD_ROW_LIMIT = 5000;
 
 // FOR STATUS DESCRIPTION
 function getStatusDescription(
@@ -183,6 +183,11 @@ export async function GET(req: Request) {
       where: supplierEntryWhere,
     });
 
+    const previewMessage =
+      totalRows > DOWNLOAD_ROW_LIMIT
+        ? `This report has ${totalRows.toLocaleString()} rows and is too large to preview or download online. Please select a smaller date range.`
+        : `This report has ${totalRows.toLocaleString()} rows and is too large to preview. Please use Download or select a smaller date range.`;
+
     if (format === "json" && totalRows > PREVIEW_ROW_LIMIT) {
       return NextResponse.json({
         success: true,
@@ -191,7 +196,8 @@ export async function GET(req: Request) {
         rows: [],
         totalRows,
         tooLargeForPreview: true,
-        message: `This report has ${totalRows.toLocaleString()} rows and is too large to preview. Please use Download or select a smaller date range.`,
+        tooLargeForDownload: totalRows > DOWNLOAD_ROW_LIMIT,
+        message: previewMessage,
       });
     }
 
