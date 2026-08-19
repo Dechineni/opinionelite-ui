@@ -55,6 +55,11 @@ export default function ClientReportForm() {
   const [errorMessage, setErrorMessage] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
+  const [totalRows, setTotalRows] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+
   // FETCH CLIENTS DATA
   useEffect(() => {
     const fetchClients = async () => {
@@ -87,9 +92,8 @@ export default function ClientReportForm() {
     return true;
   };
 
-  // View
-  const handleView = async () => {
-    if (!validateFields()) return;
+  // FETCHREPORTPAGE FUNCTION
+  const fetchReportPage = async(pageNumber : number, selectedPageSize = pageSize) =>{
 
     setLoading(true);
     setErrorMessage("");
@@ -102,6 +106,8 @@ export default function ClientReportForm() {
         from: fromDate,
         to: toDate,
         format: "json",
+        page : String(pageNumber),
+        pageSize : String(selectedPageSize)
       });
 
       const response = await fetch(`/api/reports/client?${params}`);
@@ -115,21 +121,24 @@ export default function ClientReportForm() {
         );
       }
 
-      if (data?.tooLargeForPreview) {
-        setClientReportData([]);
-        setErrorMessage(
-          data?.message ||
-            "This report is too large to preview. Please use Download or select a smaller date range."
-        );
-        return;
-      }
-
       setClientReportData(data?.data || data?.rows || []);
+      setTotalRows(data.totalRows || 0);
+      setTotalPages(data.totalPages || 0);
+      setPage(data.page || pageNumber);
+      setPageSize(data.pageSize || selectedPageSize);
     } catch (error: any) {
       setErrorMessage(error.message || "Something went wrong.");
     } finally {
       setLoading(false);
     }
+  }
+
+  // View
+  const handleView = async () => {
+    if (!validateFields()) return;
+
+    setPage(1);
+    await fetchReportPage(1, pageSize);
   };
 
   // Download
@@ -224,6 +233,10 @@ export default function ClientReportForm() {
 
     // clear preview report rows
     setClientReportData([]);
+    setPage(1);
+    setPageSize(100);
+    setTotalRows(0);
+    setTotalPages(0);
 
     // clear messages
     setErrorMessage("");
@@ -231,6 +244,34 @@ export default function ClientReportForm() {
 
     // close validation popup
     setShowPopup(false);
+  };
+
+  // HANDLEPREVIOUSPAGE FUNCTION
+  const handlePreviousPage = async () => {
+  if (page <= 1) return;
+
+  await fetchReportPage(page - 1, pageSize);
+  };
+
+  // HANDLENEXTPAGE FUNCTION
+  const handleNextPage = async () => {
+    if (page >= totalPages) return;
+
+    await fetchReportPage(page + 1, pageSize);
+  };
+
+  // HANDLEPAGESIZECHANGE FUNCTION
+  const handlePageSizeChange = async (
+    e: React.ChangeEvent<HTMLSelectElement>
+  ) => {
+    const newPageSize = Number(e.target.value);
+
+    setPageSize(newPageSize);
+    setPage(1);
+
+    if (hasSearched) {
+      await fetchReportPage(1, newPageSize);
+    }
   };
 
   return (
@@ -312,6 +353,7 @@ export default function ClientReportForm() {
               </button>
             </div>
           </div>
+          
         </div>
 
         {errorMessage && (
@@ -408,6 +450,62 @@ export default function ClientReportForm() {
             </div>
           </div>
         </div>
+
+        {/* Pagination */}
+        {hasSearched && (
+          <div className="w-full mt-4 border-t border-slate-200 pt-3">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+
+              {/* TOTAL ROWS SECTION */}
+              <div className="text-sm font-medium text-slate-700">
+                Total Rows: {totalRows.toLocaleString()}
+              </div>
+
+              {/* PAGINATION CONTROLS PREVIOUS AND NEXT BUTTONS AND PAGES ALSO */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePreviousPage}
+                  disabled={page <= 1 || loading}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Previous
+                </button>
+
+                <span className="text-sm font-medium text-slate-700">
+                  Page {page} of {totalPages}
+                </span>
+
+                <button
+                  onClick={handleNextPage}
+                  disabled={page >= totalPages || loading}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+
+              {/* PAGE SIZE SECTION */}
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-slate-700">
+                  Page Size
+                </label>
+
+                <select
+                  value={pageSize}
+                  onChange={handlePageSizeChange}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+                >
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={250}>250</option>
+                  <option value={500}>500</option>
+                </select>
+              </div>
+
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* Popup Modal */}

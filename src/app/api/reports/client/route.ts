@@ -8,7 +8,6 @@ import { cookies } from "next/headers";
 import { getPrisma } from "@/lib/prisma";
 import XLSX from "xlsx-js-style";
 
-const PREVIEW_ROW_LIMIT = 1000;
 const DOWNLOAD_ROW_LIMIT = 1000;
 
 // FOR STATUS DESCRIPTION
@@ -79,6 +78,12 @@ export async function GET(req: Request) {
     const to = searchParams.get("to");
     const format = searchParams.get("format") ?? "json";
 
+    const pageParam = searchParams.get("page") ?? "1";
+    const pageSizeParam = searchParams.get("pageSize") ?? "100";
+
+    const page = Number(pageParam);
+    const pageSize = Number(pageSizeParam);
+
     // VALIDATE FORMAT EARLY
     const allowedFormats = ["json", "xlsx"];
 
@@ -116,6 +121,16 @@ export async function GET(req: Request) {
         { status: 400 }
       );
     }
+
+    // VALIDATE PAGESIZES
+    const allowedPageSizes = [50, 100, 250, 500];
+
+    if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || !allowedPageSizes.includes(pageSize)) {
+      return NextResponse.json(
+        { error: "Invalid pagination parameters" },
+        { status: 400 }
+      );
+    };
 
     // FORMATING AND VALIDATING DATE
     const fromDateStart = new Date(from);
@@ -164,6 +179,7 @@ export async function GET(req: Request) {
       );
     }
 
+    // WHERE CONDITION FOR SUPPLIERENTRY
     const supplierEntryWhere = {
       firstEnteredAt: {
         gte: fromDateStart,
@@ -183,23 +199,11 @@ export async function GET(req: Request) {
       where: supplierEntryWhere,
     });
 
-    const previewMessage =
-      totalRows > DOWNLOAD_ROW_LIMIT
-        ? `This report has ${totalRows.toLocaleString()} rows and is too large to preview or download online. Please select a smaller date range.`
-        : `This report has ${totalRows.toLocaleString()} rows and is too large to preview. Please use Download or select a smaller date range.`;
+    // CALCULATE TOTAL PAGES
+    const totalPages = Math.max(1,Math.ceil(totalRows / pageSize));
 
-    if (format === "json" && totalRows > PREVIEW_ROW_LIMIT) {
-      return NextResponse.json({
-        success: true,
-        status: 200,
-        data: [],
-        rows: [],
-        totalRows,
-        tooLargeForPreview: true,
-        tooLargeForDownload: totalRows > DOWNLOAD_ROW_LIMIT,
-        message: previewMessage,
-      });
-    }
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
 
     if (format === "xlsx" && totalRows > DOWNLOAD_ROW_LIMIT) {
       return NextResponse.json(
@@ -215,19 +219,38 @@ export async function GET(req: Request) {
     }
 
     // GET SUPPLIERENTRIES DATA BELONGS TO PROJECT CLIENTID AND INCLUDE PROJECT AND APISURVEYSELECTION
-    const supplierEntries = await prisma.supplierEntry.findMany({
-      where: supplierEntryWhere,
-      include: {
-        project: {
+    const supplierEntries =
+      format === "json" ? 
+        await prisma.supplierEntry.findMany({
+          where: supplierEntryWhere,
           include: {
-            apiSurveySelection: true,
+            project: {
+              include: {
+                apiSurveySelection: true,
+              },
+            },
           },
-        },
-      },
-      orderBy: {
-        firstEnteredAt: "asc",
-      },
-    });
+          orderBy: [
+            {firstEnteredAt: "asc"},
+            {id: "asc"} ,
+          ],
+          skip,
+          take
+      }) 
+      : await prisma.supplierEntry.findMany({
+          where: supplierEntryWhere,
+          include: {
+            project: {
+              include: {
+                apiSurveySelection: true,
+              },
+            },
+          },
+          orderBy: [
+            {firstEnteredAt: "asc"},
+            {id: "asc"} ,
+          ]
+      });
 
     // GET UNIQUE SUPPLIER CODES FROM SUPPLIER ENTRIES
     const supplierCodes = [
@@ -342,7 +365,7 @@ export async function GET(req: Request) {
         }
 
         return {
-          sNo: index + 1,
+          sNo: skip + index + 1,
 
           clientName: client.name,
           clientCode: client.code,
@@ -381,7 +404,10 @@ export async function GET(req: Request) {
         status: 200,
         data: reportRows,
         rows: reportRows,
+        page : page,
+        pageSize : pageSize,
         totalRows,
+        totalPages : totalPages
       });
     }
 
