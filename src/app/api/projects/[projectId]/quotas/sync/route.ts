@@ -62,9 +62,10 @@ export async function POST(
         }
 
         const question =
-            await prisma.prescreenQuestion.findUnique({
+            await prisma.prescreenQuestion.findFirst({
                 where: {
                     id: prescreenQuestionId,
+                    projectId: projId,
                 },
                 include: {
                     options: {
@@ -78,7 +79,7 @@ export async function POST(
         if (!question) {
             return NextResponse.json(
                 {
-                    error: "Question not found",
+                    error: "Question not found for this project",
                 },
                 {
                     status: 404,
@@ -90,7 +91,7 @@ export async function POST(
         // Sync quotas based on the question and its options
         const mappedOptions =
             question.options.filter(
-                (option) => option.enabled
+                (option) => option.enabled && option.label?.trim()
             );
 
         if (mappedOptions.length === 0) {
@@ -144,7 +145,7 @@ export async function POST(
                     prescreenQuestionTitle:
                         question.title,
 
-                    quotaName: option.label,
+                    quotaName: option.label.trim(),
 
                     status: "Open",
 

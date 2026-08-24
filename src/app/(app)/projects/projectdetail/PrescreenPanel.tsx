@@ -1,8 +1,6 @@
 // FILE: src/app/(app)/projects/projectdetail/PrescreenPanel.tsx
 "use client";
-import { Span } from "next/dist/trace";
 import React, { useMemo, useState, useEffect } from "react";
-import { set } from "zod";
 
 /* ----------------------------- tiny UI helpers ----------------------------- */
 const Label = ({
@@ -440,6 +438,7 @@ function AddQuestionModal({
             type="button"
             onClick={onClose}
             className="rounded-md border border-slate-300 bg-white px-5 py-2 text-sm hover:bg-slate-50"
+
           >
             Cancel
           </button>
