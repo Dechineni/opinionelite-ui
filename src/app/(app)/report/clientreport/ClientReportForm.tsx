@@ -137,6 +137,7 @@ export default function ClientReportForm() {
   const handleView = async () => {
     if (!validateFields()) return;
 
+    setHasSearched(true);
     setPage(1);
     await fetchReportPage(1, pageSize);
   };
