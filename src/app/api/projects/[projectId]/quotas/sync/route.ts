@@ -121,13 +121,15 @@ export async function POST(
             (agg._max.sortOrder ?? 0) + 1;
 
         for (const option of mappedOptions) {
+            const quotaName = option.label.trim();
+
             const existing =
                 await prisma.projectQuota.findFirst({
                     where: {
                         projectId: projId,
                         prescreenQuestionId:
                             question.id,
-                        quotaName: option.label,
+                        quotaName,
                     },
                 });
 
@@ -145,7 +147,7 @@ export async function POST(
                     prescreenQuestionTitle:
                         question.title,
 
-                    quotaName: option.label.trim(),
+                    quotaName,
 
                     status: "Open",
 
