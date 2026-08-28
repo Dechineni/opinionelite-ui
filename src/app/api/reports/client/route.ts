@@ -205,6 +205,15 @@ export async function GET(req: Request) {
     const skip = (page - 1) * pageSize;
     const take = pageSize;
 
+    // FOR DOWNLOADS, FETCH UP TO THE DOWNLOAD LIMIT.
+    // FOR REPORT PREVIEW, FETCH ONLY THE CURRENT PAGE.
+    const queryLimit = format === "xlsx" ? DOWNLOAD_ROW_LIMIT : take;
+
+    // DOWNLOADS ALWAYS START FROM THE FIRST ROW.
+    // REPORT PREVIEW USES PAGINATION OFFSET.
+    const queryOffset = format === "xlsx" ? 0 : skip;
+
+    // DON'T ALLOW EXCEL DOWNLOAD IF THERE ARE MORE THAN 1000 ROWS.
     if (format === "xlsx" && totalRows > DOWNLOAD_ROW_LIMIT) {
       return NextResponse.json(
         {
@@ -219,184 +228,109 @@ export async function GET(req: Request) {
     }
 
     // GET SUPPLIERENTRIES DATA BELONGS TO PROJECT CLIENTID AND INCLUDE PROJECT AND APISURVEYSELECTION
-    const supplierEntries =
-      format === "json" ? 
-        await prisma.supplierEntry.findMany({
-          where: supplierEntryWhere,
-          include: {
-            project: {
-              include: {
-                apiSurveySelection: true,
-              },
-            },
-          },
-          orderBy: [
-            {firstEnteredAt: "asc"},
-            {id: "asc"} ,
-          ],
-          skip,
-          take
-      }) 
-      : await prisma.supplierEntry.findMany({
-          where: supplierEntryWhere,
-          include: {
-            project: {
-              include: {
-                apiSurveySelection: true,
-              },
-            },
-          },
-          orderBy: [
-            {firstEnteredAt: "asc"},
-            {id: "asc"} ,
-          ]
-      });
+    const rawRows = await prisma.$queryRaw<any[]>`
+    SELECT
+        ROW_NUMBER() OVER (
+            ORDER BY se."firstEnteredAt" ASC, se.id ASC
+        )::int AS "sNo",
 
-    // GET UNIQUE SUPPLIER CODES FROM SUPPLIER ENTRIES
-    const supplierCodes = [
-      ...new Set(
-        supplierEntries.map(
-          (entry) => entry.supplierCode
-        )
-      ),
-    ];
+        c.name AS "clientName",
+        c.code AS "clientCode",
 
-    // GET UNIQUE PROJECT IDS FROM SUPPLIER ENTRIES
-    const projectIds = [
-      ...new Set(
-        supplierEntries.map(
-          (entry) => entry.projectId
-        )
-      ),
-    ];
+        p.code AS "projectCode",
 
-    // GET UNIQUE EXTERNAL IDS FROM SUPPLIER ENTRIES
-    const externalIds = [
-      ...new Set(
-        supplierEntries
-          .map((entry) => entry.externalId)
-          .filter(
-            (externalId): externalId is string =>
-              Boolean(externalId)
-          )
-      ),
-    ];
+        COALESCE(
+            api."surveyName",
+            p."surveyName",
+            p.name
+        ) AS "surveyName",
 
-    // FETCH ALL REQUIRED SUPPLIERS IN ONE QUERY
-    const suppliers = supplierCodes.length
-      ? await prisma.supplier.findMany({
-          where: {
-            code: {
-              in: supplierCodes,
-            },
-          },
-        })
-      : [];
+        sr.id AS "hashIdentifier",
 
-    // CREATE A LOOKUP MAP FOR FAST SUPPLIER ACCESS
-    const supplierMap = new Map(
-      suppliers.map((supplier) => [
-        supplier.code,
-        supplier,
-      ])
-    );
+        se."supplierCode" AS "supplierId",
 
-    // FETCH ALL REQUIRED SURVEY REDIRECTS IN ONE QUERY
-    const surveyRedirects =
-      projectIds.length && supplierCodes.length && externalIds.length
-        ? await prisma.surveyRedirect.findMany({
-            where: {
-              projectId: {
-                in: projectIds,
-              },
-              supplierId: {
-                in: supplierCodes,
-              },
-              externalId: {
-                in: externalIds,
-              },
-            },
-          })
-        : [];
+        COALESCE(s.name, '') AS "supplierName",
 
-    // CREATE A LOOKUP MAP FOR FAST SURVEY REDIRECT ACCESS
-    const surveyRedirectMap = new Map(
-      surveyRedirects.map((redirect) => [
-        `${redirect.projectId}_${redirect.supplierId}_${redirect.externalId}`,
-        redirect,
-      ])
-    );
+        se."externalId" AS "supplierIdentifier",
+
+        se."finalOutcome",
+        se."finalSource",
+
+        se."firstEnteredAt" AS "startDateTime",
+        se."finalOutcomeAt" AS "endDateTime",
+
+        CASE
+            WHEN se."firstEnteredAt" IS NOT NULL
+            AND se."finalOutcomeAt" IS NOT NULL
+            THEN ROUND(
+                EXTRACT(
+                    EPOCH FROM (
+                        se."finalOutcomeAt" - se."firstEnteredAt"
+                    )
+                ) / 60
+            )::int
+            ELSE NULL
+        END AS "loi"
+
+    FROM "SupplierEntry" se
+
+    JOIN "Project" p
+      ON p.id = se."projectId"
+
+    JOIN "Client" c
+      ON c.id = p."clientId"
+
+    LEFT JOIN "Supplier" s
+      ON s.code = se."supplierCode"
+
+    LEFT JOIN "ApiSurveySelection" api
+      ON api."projectId" = p.id
+
+   LEFT JOIN LATERAL (
+      SELECT sr.id
+      FROM "SurveyRedirect" sr
+      WHERE sr."projectId" = se."projectId"
+        AND sr."supplierId" = se."supplierCode"
+        AND sr."externalId" = se."externalId"
+      ORDER BY sr."createdAt" DESC
+      LIMIT 1
+    ) sr ON true
+
+    WHERE
+        p."clientId" = ${clientId}
+        AND se."firstEnteredAt" >= ${fromDateStart}
+        AND se."firstEnteredAt" < ${toDateExclusive}
+        AND se."externalId" NOT IN ('', '[identifier]')
+
+    ORDER BY
+        se."firstEnteredAt" ASC,
+        se.id ASC
+
+    LIMIT ${queryLimit}
+    OFFSET ${queryOffset}
+    `;
 
     // CREATE REPORTROWS
-    const reportRows = supplierEntries.map(
-      (entry, index) => {
-        const supplier = supplierMap.get(
-          entry.supplierCode
-        );
+    const reportRows = rawRows.map((row) => ({
+      ...row,
 
-        const surveyRedirect =
-          surveyRedirectMap.get(
-            `${entry.projectId}_${entry.supplierCode}_${entry.externalId}`
-          );
+      sNo:
+        typeof row.sNo === "bigint"
+          ? Number(row.sNo)
+          : row.sNo,
 
-        const surveyName =
-          entry.project.apiSurveySelection
-            ?.surveyName ||
-          entry.project.surveyName ||
-          entry.project.name;
+      loi:
+        row.loi == null
+          ? ""
+          : typeof row.loi === "bigint"
+            ? Number(row.loi)
+            : row.loi,
 
-        const statusDescription =
-          getStatusDescription(
-            entry.finalOutcome,
-            entry.finalSource
-          );
-
-        let loi: number | string = "";
-
-        if (
-          entry.firstEnteredAt &&
-          entry.finalOutcomeAt
-        ) {
-          loi = Math.round(
-            (entry.finalOutcomeAt.getTime() -
-              entry.firstEnteredAt.getTime()) /
-              60000
-          );
-        }
-
-        return {
-          sNo: skip + index + 1,
-
-          clientName: client.name,
-          clientCode: client.code,
-
-          projectCode: entry.project.code,
-
-          surveyName,
-
-          hashIdentifier:
-            surveyRedirect?.id ?? "",
-
-          supplierId: entry.supplierCode,
-
-          supplierName:
-            supplier?.name ?? "",
-
-          supplierIdentifier:
-            entry.externalId,
-
-          statusDescription,
-
-          startDateTime:
-            entry.firstEnteredAt,
-
-          endDateTime:
-            entry.finalOutcomeAt,
-
-          loi,
-        };
-      }
-    );
+      statusDescription: getStatusDescription(
+        row.finalOutcome,
+        row.finalSource
+      ),
+    }));
 
     if (format === "json") {
       return NextResponse.json({
@@ -404,10 +338,10 @@ export async function GET(req: Request) {
         status: 200,
         data: reportRows,
         rows: reportRows,
-        page : page,
-        pageSize : pageSize,
+        page,
+        pageSize,
         totalRows,
-        totalPages : totalPages
+        totalPages
       });
     }
 
