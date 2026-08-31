@@ -1,13 +1,99 @@
 "use client"
 
 import React, {useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { RefreshCw, Plus, Info, Search, SquareCheck, Trash2, ExternalLink, Grip, MoreVertical, GripVertical, Copy, Network } from "lucide-react";
+
+/* ------------------------------ confirm dialog ----------------------------- */
+function ConfirmDialog({
+  open,
+  message = "Do you want to Delete?",
+  yesText = "Yes",
+  noText = "No",
+  onYes,
+  onNo,
+}: {
+  open: boolean;
+  message?: string;
+  yesText?: string;
+  noText?: string;
+  onYes: () => void | Promise<void>;
+  onNo: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/30 p-4">
+      <div className="w-[min(420px,92vw)] rounded-xl bg-white p-6 text-center shadow-2xl">
+        <div className="mb-6 text-xl font-semibold text-slate-900">
+          {message}
+        </div>
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={onYes}
+            className="min-w-[88px] rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
+          >
+            {yesText}
+          </button>
+          <button
+            onClick={onNo}
+            className="min-w-[88px] rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50"
+          >
+            {noText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------ success dialog ----------------------------- */
+function SuccessDialog({
+  open,
+  onClose,
+  message = "Created Successfully!",
+}: {
+  open: boolean;
+  onClose: () => void;
+  message?: string;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30 p-4">
+      <div className="w-[min(360px,92vw)] rounded-xl bg-white p-6 text-center shadow-2xl">
+        <div className="mb-5 text-lg font-semibold text-slate-900">
+          {message}
+        </div>
+        <button
+          onClick={onClose}
+          className="rounded-md bg-teal-600 px-6 py-2 text-sm font-medium text-white hover:bg-teal-700"
+        >
+          OK
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function QuotasPanel({ projectId }: { projectId: string }) {
     const [activeTab, setActiveTab] = useState("quotas");
 
     const [quotas, setQuotas] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+
+    const router = useRouter();
+
+    const [ selectedQuotaIds, setSelectedQuotaIds ] = useState<string[]>([]);
+    const [ confirmDeleteOpen, setConfirmDeleteOpen ] = useState(false);
+    const [ successMessage, setSuccessMessage] = useState("");
+    const [ successOpen, setSuccessOpen] = useState(false);
+
+    const toggleQuotaSelection = (quotaId: string) => {
+        setSelectedQuotaIds((prev) =>
+            prev.includes(quotaId)
+                ? prev.filter((id) => id !== quotaId)
+                : [...prev, quotaId]
+        );
+    };
 
     const loadQuotas = async () => {
         try {
@@ -25,6 +111,35 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
             console.error("Error loading quotas:", error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const deleteSelectedQuotas = async () => {
+        try {
+            const response = await fetch(`/api/projects/${projectId}/quotas`, {
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ quotaIds: selectedQuotaIds })
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(
+                    data?.message ||
+                    data?.error ||
+                    "Failed to delete selected quotas");
+            }
+
+            setSelectedQuotaIds([]);
+            setConfirmDeleteOpen(false);
+            setSuccessMessage("Selected quotas deleted successfully.");
+            setSuccessOpen(true);
+            await loadQuotas();
+        } catch (e: any) {
+            window.alert(e?.message || "Failed to delete selected quotas");
+            setConfirmDeleteOpen(false);
         }
     };
 
@@ -58,6 +173,7 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
 
                     <button
                         type="button"
+                        onClick={() => router.push(`/projects/projectdetail?id=${projectId}&tab=prescreen`)}
                         className="flex items-center gap-1.5 h-[35px] px-4 rounded-md bg-blue-600 text-white text-sm font-medium cursor-pointer"
                     >
                         <Plus size={16} />
@@ -155,7 +271,18 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
 
                         <button
                             type="button"
-                            className="flex items-center gap-1 h-[35px] px-3 rounded-md bg-white text-red-500 border text-sm font-medium cursor-pointer"
+                            disabled={selectedQuotaIds.length === 0}
+                            onClick={() => {
+                                if (selectedQuotaIds.length > 0) {
+                                    setConfirmDeleteOpen(true);
+                                }
+                            }}
+                            className={`flex items-center gap-1 h-[35px] px-3 rounded-md border text-sm font-medium
+                                ${
+                                    selectedQuotaIds.length === 0
+                                        ? "cursor-not-allowed opacity-50 text-gray-400"
+                                        : "cursor-pointer text-red-500 border-red-300 bg-red-50"  
+                                }`}
                         >
                             <Trash2 size={14} />
                             Delete
@@ -179,7 +306,16 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
                         <thead className="bg-gray-50 border-b border-gray-200">
                             <tr className="text-left text-gray-700">
                                 <th className="px-3 py-3">
-                                    <input type="checkbox" />
+                                    <input type="checkbox"
+                                        checked={quotas.length > 0 && selectedQuotaIds.length === quotas.length}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                setSelectedQuotaIds(quotas.map((quota) => quota.id));
+                                            } else {
+                                                setSelectedQuotaIds([]);
+                                            }
+                                        }}
+                                    />
                                 </th>
                                 <th className="px-2 py-3"></th>
                                 <th className="px-3 py-3">#</th>
@@ -218,10 +354,13 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
                                         key={quota.id}
                                         className="border-b border-gray-200"
                                     >
-                                    <td className="px-3 py-4">
-                                        <input type="checkbox" />
-                                    </td>
-
+                                         <td className="px-3 py-4">
+                                             <input type="checkbox"
+                                                 checked={selectedQuotaIds.includes(quota.id)}
+                                                 onChange={() =>
+                                                     toggleQuotaSelection(quota.id)
+                                                 } />
+                                         </td>
                                     <td className="px-2 py-4">
                                         <GripVertical
                                             size={16}
@@ -326,7 +465,19 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
                     </select>
                 </div>
             </div>  
-
+            <ConfirmDialog
+                open={confirmDeleteOpen}
+                message="Do you want to Delete?"
+                yesText="Yes"
+                noText="No"
+                onYes={deleteSelectedQuotas}
+                onNo={() => setConfirmDeleteOpen(false)}
+            />
+            <SuccessDialog
+                open={successOpen}
+                onClose={() => setSuccessOpen(false)}
+                message={successMessage}
+            />
         </div>
     )
 };
