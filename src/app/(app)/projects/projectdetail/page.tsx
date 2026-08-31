@@ -263,49 +263,6 @@ export default async function ProjectDetail({
                 ]}
               />
             </div>
-
-            <div className="grid grid-cols-2 gap-y-3 gap-x-10">
-              <Row l="Project Code" r={code} />
-              <Row l="Client Code" r={client?.code || "—"} />
-              <Row l="Project Name" r={name} />
-              <Row l="Client Name" r={client?.name || "—"} />
-              <Row l="Project Type" r={projectType || "Adhocs"} />
-              <Row l="Project Category" r={category} />
-              <Row l="Country" r={countryCode} />
-              <Row l="LOI (Min)" r={String(loi)} />
-              <Row l="Language" r={languageCode} />
-              <Row l="IR (%)" r={fmt(ir)} />
-              <Row l="Sample Size" r={String(sampleSize)} />
-              <Row l="Start Date" r={dateStr(startDate)} />
-              <Row l="End Date" r={dateStr(endDate)} />
-              <Row l="Project CPI" r={fmt(Number(projectCpi))} />
-              <Row l="Currency" r={currency} />
-              <Row l="Supplier CPI" r={fmt(Number(supplierCpi))} />
-            </div>
-
-            <div className="mt-6">
-              <div className="mb-1 font-medium">Description</div>
-              <div className="rounded-md border border-slate-200 p-3 text-sm">{description || "—"}</div>
-            </div>
-
-            <div className="mt-6 grid gap-6">
-              <div>
-                <div className="mb-2 text-base font-semibold">Project Filter</div>
-                <Toggles
-                  items={[
-                    ["Prescreen", preScreen],
-                    ["Sentry", project.sentryEnabled],
-                    ["Quotas", quotasEnabled],
-                    ["Geo Location", geoLocation],
-                    ["Unique IP", uniqueIp ? `Yes${uniqueIpDepth ? `: ${uniqueIpDepth}` : ""}` : "No"],
-                    ["Exclude", exclude],
-                    ["Dynamic Thanks Url", dynamicThanksUrl],
-                    ["TSign", tSign],
-                    ["Speeder", speeder ? `Yes${speederDepth ? `: ${speederDepth}` : ""}` : "No"],
-                  ]}
-                />
-              </div>
-
               <div>
                 <div className="mb-2 text-base font-semibold">Device Filter</div>
                 <Toggles items={[["Mobile Study", mobile], ["Tablet Study", tablet], ["Desktop Study", desktop]]} />
