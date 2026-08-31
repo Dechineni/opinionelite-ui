@@ -10,6 +10,7 @@ import SupplierMappedSummary from "./SupplierMappedSummary";
 import ProjectStatusControl from "./ProjectStatusControl";
 import ProjectReportPanel from "./ProjectReportPanel";
 import QuotasPanel from "./QuotasPanel";
+import { getProjectTabs } from "@/lib/project-tabs";
 
 function fmt(n: number | null | undefined, d = 2) {
   if (n === null || n === undefined) return "—";
@@ -43,7 +44,7 @@ export default async function ProjectDetail({
     include: { client: true, group: true },
   });
   if (!project) return notFound();
-  
+
   const {
     code,
     name,
@@ -76,6 +77,11 @@ export default async function ProjectDetail({
     desktop,
     status,
   } = project;
+
+  const tabs = getProjectTabs({
+    preScreen,
+    quotasEnabled,
+  });
 
   const backHref =
     from === "apiprojectlist"
@@ -125,9 +131,8 @@ export default async function ProjectDetail({
 
           <div className="flex items-center gap-2">
             <span
-              className={`h-3 w-3 rounded-full ${
-                status === "CLOSED" ? "bg-red-500" : "bg-emerald-500"
-              }`}
+              className={`h-3 w-3 rounded-full ${status === "CLOSED" ? "bg-red-500" : "bg-emerald-500"
+                }`}
             />
             <span className="text-sm font-semibold text-slate-800">
               {code} : {name}
@@ -156,28 +161,28 @@ export default async function ProjectDetail({
             >
               Supplier Mapping
             </Tab>
-            {preScreen && (
+            {tabs.showPreScreen && (
               <Tab
                 href={`/projects/projectdetail?id=${qid}&tab=prescreen&from=${fromQs}`}
                 active={tab === "prescreen"}
               >
                 Prescreen
-              </Tab> 
+              </Tab>
             )}
-            {quotasEnabled  && (
+            {tabs.showQuotas && (
               <Tab
                 href={`/projects/projectdetail?id=${qid}&tab=quotas&from=${fromQs}`}
                 active={tab === "quotas"}
               >
                 Quotas
-              </Tab> 
+              </Tab>
             )}
-             <Tab
-                href={`/projects/projectdetail?id=${qid}&tab=report&from=${fromQs}`}
-                active={tab === "report"}
-              >
-                Project Report
-              </Tab> 
+            <Tab
+              href={`/projects/projectdetail?id=${qid}&tab=report&from=${fromQs}`}
+              active={tab === "report"}
+            >
+              Project Report
+            </Tab>
           </div>
 
           {tab !== "prescreen" && (
@@ -194,91 +199,91 @@ export default async function ProjectDetail({
       ) : tab === "supplier" ? (
         <SupplierMappingPanel projectId={projectId} />
       ) : tab === "report" ? (
-        <ProjectReportPanel projectId={projectId} 
+        <ProjectReportPanel projectId={projectId}
           project={{
-              id: project.id,
-              code: project.code,
-              name: project.name,
-            }}
-          />
+            id: project.id,
+            code: project.code,
+            name: project.name,
+          }}
+        />
       ) : tab === "prescreen" ? (
         <PrescreenPanel projectId={projectId} initialStatus={preScreenstatus} />
       ) : tab === "quotas" ? (
-        <QuotasPanel/>
-      ):
-       (
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex justify-end">
-            <Link
-              href={`/projects/edit/single?id=${qid}`}
-              className="rounded-md border border-emerald-600 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
-            >
-              Edit
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-2 gap-y-3 gap-x-10">
-            <Row l="Project Code" r={code} />
-            <Row l="Client Code" r={client?.code || "—"} />
-            <Row l="Project Name" r={name} />
-            <Row l="Client Name" r={client?.name || "—"} />
-            <Row l="Project Type" r={projectType || "Adhocs"} />
-            <Row l="Project Category" r={category} />
-            <Row l="Country" r={countryCode} />
-            <Row l="LOI (Min)" r={String(loi)} />
-            <Row l="Language" r={languageCode} />
-            <Row l="IR (%)" r={fmt(ir)} />
-            <Row l="Sample Size" r={String(sampleSize)} />
-            <Row l="Start Date" r={dateStr(startDate)} />
-            <Row l="End Date" r={dateStr(endDate)} />
-            <Row l="Project CPI" r={fmt(Number(projectCpi))} />
-            <Row l="Currency" r={currency} />
-            <Row l="Supplier CPI" r={fmt(Number(supplierCpi))} />
-          </div>
-
-          <div className="mt-6">
-            <div className="mb-1 font-medium">Description</div>
-            <div className="rounded-md border border-slate-200 p-3 text-sm">{description || "—"}</div>
-          </div>
-
-          <div className="mt-6 grid gap-6">
-            <div>
-              <div className="mb-2 text-base font-semibold">Project Filter</div>
-              <Toggles
-                items={[
-                  ["Prescreen", preScreen],
-                  ["Sentry", project.sentryEnabled],
-                  ["Quotas", quotasEnabled],
-                  ["Geo Location", geoLocation],
-                  ["Unique IP", uniqueIp ? `Yes${uniqueIpDepth ? `: ${uniqueIpDepth}` : ""}` : "No"],
-                  ["Exclude", exclude],
-                  ["Dynamic Thanks Url", dynamicThanksUrl],
-                  ["TSign", tSign],
-                  ["Speeder", speeder ? `Yes${speederDepth ? `: ${speederDepth}` : ""}` : "No"],
-                ]}
-              />
+        <QuotasPanel />
+      ) :
+        (
+          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex justify-end">
+              <Link
+                href={`/projects/edit/single?id=${qid}`}
+                className="rounded-md border border-emerald-600 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+              >
+                Edit
+              </Link>
             </div>
 
-            <div>
-              <div className="mb-2 text-base font-semibold">Device Filter</div>
-              <Toggles items={[["Mobile Study", mobile], ["Tablet Study", tablet], ["Desktop Study", desktop]]} />
+            <div className="grid grid-cols-2 gap-y-3 gap-x-10">
+              <Row l="Project Code" r={code} />
+              <Row l="Client Code" r={client?.code || "—"} />
+              <Row l="Project Name" r={name} />
+              <Row l="Client Name" r={client?.name || "—"} />
+              <Row l="Project Type" r={projectType || "Adhocs"} />
+              <Row l="Project Category" r={category} />
+              <Row l="Country" r={countryCode} />
+              <Row l="LOI (Min)" r={String(loi)} />
+              <Row l="Language" r={languageCode} />
+              <Row l="IR (%)" r={fmt(ir)} />
+              <Row l="Sample Size" r={String(sampleSize)} />
+              <Row l="Start Date" r={dateStr(startDate)} />
+              <Row l="End Date" r={dateStr(endDate)} />
+              <Row l="Project CPI" r={fmt(Number(projectCpi))} />
+              <Row l="Currency" r={currency} />
+              <Row l="Supplier CPI" r={fmt(Number(supplierCpi))} />
+            </div>
+
+            <div className="mt-6">
+              <div className="mb-1 font-medium">Description</div>
+              <div className="rounded-md border border-slate-200 p-3 text-sm">{description || "—"}</div>
+            </div>
+
+            <div className="mt-6 grid gap-6">
+              <div>
+                <div className="mb-2 text-base font-semibold">Project Filter</div>
+                <Toggles
+                  items={[
+                    ["Prescreen", preScreen],
+                    ["Sentry", project.sentryEnabled],
+                    ["Quotas", quotasEnabled],
+                    ["Geo Location", geoLocation],
+                    ["Unique IP", uniqueIp ? `Yes${uniqueIpDepth ? `: ${uniqueIpDepth}` : ""}` : "No"],
+                    ["Exclude", exclude],
+                    ["Dynamic Thanks Url", dynamicThanksUrl],
+                    ["TSign", tSign],
+                    ["Speeder", speeder ? `Yes${speederDepth ? `: ${speederDepth}` : ""}` : "No"],
+                  ]}
+                />
+              </div>
+
+              <div>
+                <div className="mb-2 text-base font-semibold">Device Filter</div>
+                <Toggles items={[["Mobile Study", mobile], ["Tablet Study", tablet], ["Desktop Study", desktop]]} />
+              </div>
+            </div>
+
+            <SupplierMappedSummary projectId={projectId} />
+
+            <div className="mt-8">
+              <div className="mb-2 text-base font-semibold">Redirect Links</div>
+              <div className="grid gap-3 text-sm">
+                <RedirectRow label="Complete Status" href={buildThanksUrl(10)} />
+                <RedirectRow label="Terminate Status" href={buildThanksUrl(20)} />
+                <RedirectRow label="Over Quota Status" href={buildThanksUrl(40)} />
+                <RedirectRow label="Quality Term Status" href={buildThanksUrl(30)} />
+                <RedirectRow label="Survey Close Status" href={buildThanksUrl(70)} />
+              </div>
             </div>
           </div>
-
-          <SupplierMappedSummary projectId={projectId} />
-
-          <div className="mt-8">
-            <div className="mb-2 text-base font-semibold">Redirect Links</div>
-            <div className="grid gap-3 text-sm">
-              <RedirectRow label="Complete Status" href={buildThanksUrl(10)} />
-              <RedirectRow label="Terminate Status" href={buildThanksUrl(20)} />
-              <RedirectRow label="Over Quota Status" href={buildThanksUrl(40)} />
-              <RedirectRow label="Quality Term Status" href={buildThanksUrl(30)} />
-              <RedirectRow label="Survey Close Status" href={buildThanksUrl(70)} />
-            </div>
-          </div>
-        </div>
-      )}
+        )}
     </div>
   );
 }

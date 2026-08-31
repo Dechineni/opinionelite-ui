@@ -5,6 +5,7 @@ export const preferredRegion = "auto";
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { z } from "zod";
+import { buildSupplierUrl } from "@/lib/supplier-url";
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -95,37 +96,6 @@ function buildEntryKey(
  * Build the Supplier Mapping URL that OP Panel will show
  * and persist in the database.
  */
-function buildSupplierUrl(opts: {
-  uiBase: string;
-  projectCode: string;
-  supplierCode: string;
-  projectType : string;
-}) {
-  const ui = (opts.uiBase || "").replace(/\/+$/, "");
-
-  const projectCode = encodeURIComponent(
-    opts.projectCode || ""
-  );
-
-  const supplierCode = encodeURIComponent(
-    opts.supplierCode || ""
-  );
-
-  // GET PROJECT TYPE AND REMOVE ANY LEADING/TRAILING SPACES
-  const projectType = (opts.projectType || "").trim();
-
-  // GENERATE THE BASE SUPPLIER MAPPING URL
-  let url = `${ui}/Survey?projectId=${projectCode}&supplierId=${supplierCode}&id=[identifier]`;
-
-  // FOR RECONTACT PROJECTS, APPEND RECID PARAMETER TO THE URL
-  if(projectType === "Recontact")
-  {
-    url += "&recid=[recid]";
-  }
-
-  // RETURN THE GENERATED SUPPLIER URL
-  return url;
-}
 
 /* ---------------------------------- GET ---------------------------------- */
 

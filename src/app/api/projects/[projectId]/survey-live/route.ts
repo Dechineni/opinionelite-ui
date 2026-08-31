@@ -1,8 +1,11 @@
+// File: src/app/api/projects/%5BprojectId%5D/survey-live/route.ts
 export const runtime = "edge";
 export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { resolveEffectiveRecid } from "@/lib/recontact";
+import { replaceTokens } from "@/lib/survey-live-url";
 
 const isUniqueViolation = (e: any) => {
   const msg = String(e?.message || "");
@@ -34,13 +37,6 @@ function id20(): string {
   let s = "";
   for (let i = 0; i < bytes.length; i++) s += abc[bytes[i] % abc.length];
   return s;
-}
-
-/** Replace tokens like [identifier], {identifier}, [projectId], [supplierId], [externalId] */
-function replaceTokens(template: string, map: Record<string, string>) {
-  return template
-    .replace(/\[([^\]]+)\]/g, (_, k) => map[k] ?? "")
-    .replace(/\{([^}]+)\}/g, (_, k) => map[k] ?? "");
 }
 
 /** Simple scheme whitelist */
@@ -165,7 +161,11 @@ export async function GET(
     // IF RECID EXISTS IN SURVEYREDIRECT, USE IT
     if(surveyRedirectRecid?.recid)
     {
-      effectiveRecid = surveyRedirectRecid.recid;
+      effectiveRecid = resolveEffectiveRecid(
+        effectiveRecid,
+        surveyRedirectRecid.recid
+    );
+
     }
     else{
       // IF SURVEYREDIRECT DOES NOT HAVE RECID, CHECK RESPONDENT
@@ -183,7 +183,10 @@ export async function GET(
       // IF RECID EXISTS IN RESPONDENT, USE IT
       if(respondentRecid?.recid)
       {
-        effectiveRecid = respondentRecid.recid;
+        effectiveRecid = resolveEffectiveRecid(
+          effectiveRecid,
+          respondentRecid.recid
+      );
       };
     };
   };

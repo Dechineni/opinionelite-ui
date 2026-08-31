@@ -12,3 +12,13 @@ export function resolveEffectiveRecid(
 
   return "";
 }
+/**
+ * Build a unique tracking key based on external id.
+ * Same recid is allowed as long as external ids differ.
+ */
+export function buildExternalIdRecidKey(
+  externalId: string,
+  recid: string
+) {
+  return `${externalId}:${recid}`;
+}

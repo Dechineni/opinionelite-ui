@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { canChangeProjectType } from "./redirect-status";
+import { isProjectTypeImmutable } from "./redirect-status";
 
-describe("canChangeProjectType", () => {
+describe("isProjectTypeImmutable", () => {
   it("rejects Adhocs -> Recontact", () => {
     expect(
-      canChangeProjectType(
+      isProjectTypeImmutable(
         "Adhocs",
         "Recontact"
       )
@@ -13,7 +13,7 @@ describe("canChangeProjectType", () => {
 
   it("rejects Recontact -> Adhocs", () => {
     expect(
-      canChangeProjectType(
+      isProjectTypeImmutable(
         "Recontact",
         "Adhocs"
       )
@@ -22,7 +22,7 @@ describe("canChangeProjectType", () => {
 
   it("allows Adhocs -> Adhocs", () => {
     expect(
-      canChangeProjectType(
+      isProjectTypeImmutable(
         "Adhocs",
         "Adhocs"
       )
@@ -31,7 +31,7 @@ describe("canChangeProjectType", () => {
 
   it("allows Recontact -> Recontact", () => {
     expect(
-      canChangeProjectType(
+      isProjectTypeImmutable(
         "Recontact",
         "Recontact"
       )

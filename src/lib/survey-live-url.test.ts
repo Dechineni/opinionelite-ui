@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { replaceTokens } from "./survey-live-url";
+import { resolveEffectiveRecid } from "./recontact";
 
 describe("replaceTokens", () => {
   it("replaces identifier token", () => {
@@ -58,5 +59,24 @@ describe("replaceTokens", () => {
         id: "123",
       })
     ).toBe("123");
+  });
+
+  it("uses stored recid in final survey live URL when incoming recid is blank", () => {
+    const effectiveRecid = resolveEffectiveRecid(
+      "",
+      "STORED-RECID-001"
+    );
+
+    const destination = replaceTokens(
+      "https://survey.com/?rid=[identifier]&recid=[recid]",
+      {
+        identifier: "PID123",
+        recid: effectiveRecid,
+      }
+    );
+
+    expect(destination).toBe(
+      "https://survey.com/?rid=PID123&recid=STORED-RECID-001"
+    );
   });
 });

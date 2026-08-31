@@ -1,4 +1,4 @@
-export function canChangeProjectType(
+export function isProjectTypeImmutable(
   currentType: string,
   requestedType: string
 ) {

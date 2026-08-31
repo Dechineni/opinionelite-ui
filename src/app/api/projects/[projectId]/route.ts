@@ -11,6 +11,7 @@ import {
   buildSentryPayload,
   buildSentryUpdatePayload,
 } from "@/lib/integrations/sentry";
+import { isProjectTypeImmutable } from "@/lib/redirect-status";
 
 function whereFrom(req: Request, id: string) {
   const by = new URL(req.url).searchParams.get("by");
@@ -66,8 +67,26 @@ export async function PATCH(
   const where = whereFrom(req, projectId);
   const b = await req.json();
   
-  // Prevent Project Type updates
-  if ("projectType" in b) {
+  const existing = await prisma.project.findUnique({
+    where,
+    select: {
+      projectType: true,
+    },
+  });
+
+  if (!existing) {
+    return NextResponse.json(
+      { error: "Not found" },
+      { status: 404 }
+    );
+  }
+  if (
+    typeof b.projectType === "string" &&
+    !isProjectTypeImmutable(
+      existing.projectType,
+      b.projectType
+    )
+  ) {
     return NextResponse.json(
       {
         error: "Project Type cannot be changed after project creation",

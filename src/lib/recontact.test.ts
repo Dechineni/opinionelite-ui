@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveEffectiveRecid } from "./recontact";
+import { resolveEffectiveRecid, buildExternalIdRecidKey,} from "./recontact";
 
 describe("resolveEffectiveRecid", () => {
   it("uses incoming recid when provided", () => {
@@ -26,12 +26,17 @@ describe("resolveEffectiveRecid", () => {
     ).toBe("");
   });
 
-  it("allows same recid for separate external ids", () => {
-    expect(
-      resolveEffectiveRecid(
-        "PANELIST-777",
-        "PANELIST-777"
-      )
-    ).toBe("PANELIST-777");
+  it("allows same recid for different external ids", () => {
+    const first = buildExternalIdRecidKey(
+      "TEST-ID-001",
+      "PANELIST-777"
+    );
+
+    const second = buildExternalIdRecidKey(
+      "TEST-ID-002",
+      "PANELIST-777"
+    );
+
+    expect(first).not.toBe(second);
   });
 });

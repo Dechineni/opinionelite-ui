@@ -9,6 +9,7 @@ import {
   createSentryProject,
   buildSentryPayload,
 } from "@/lib/integrations/sentry";
+import { buildSupplierUrl } from "@/lib/supplier-url";
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -22,32 +23,6 @@ const normalizeStatus = (s: string | null): ProjectStatus | undefined => {
     ? up
     : undefined;
 };
-
-function buildSupplierUrl(opts: {
-  uiBase: string;
-  projectCode: string;
-  supplierCode: string;
-  projectType : string;
-}) {
-  const ui = (opts.uiBase || "").replace(/\/+$/, "");
-  const p = encodeURIComponent(opts.projectCode || "");
-  const s = encodeURIComponent(opts.supplierCode || "");
-
-  // GET PROJECT TYPE AND REMOVE ANY LEADING/TRAILING SPACES
-  const projectType = (opts.projectType || "").trim();
-
-  // GENERATE THE BASE SUPPLIER MAPPING URL
-  let url = `${ui}/Survey?projectId=${p}&supplierId=${s}&id=[identifier]`;
-
-  // FOR RECONTACT PROJECTS, APPEND RECID PARAMETER TO THE URL
-  if(projectType === "Recontact")
-  {
-    url += "&recid=[recid]";
-  }
-
-  // RETURN THE GENERATED SUPPLIER URL
-  return url;
-}
 
 function buildInternalThanksUrl(opts: {
   uiBase: string;
