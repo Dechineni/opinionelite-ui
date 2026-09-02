@@ -125,6 +125,32 @@ export async function GET(req: Request) {
 
     const auth = url.searchParams.get("auth");
 
+    const callbackProjectRef = (
+      url.searchParams.get("projectId") ||
+      url.searchParams.get("projectCode") ||
+      url.searchParams.get("project") ||
+      ""
+    ).trim();
+
+    const callbackSupplierRef = (
+      url.searchParams.get("supplierId") ||
+      url.searchParams.get("supplierCode") ||
+      url.searchParams.get("supplier") ||
+      ""
+    ).trim();
+
+    const explicitCallbackRecid = (
+      url.searchParams.get("recid") ||
+      url.searchParams.get("Recid") ||
+      url.searchParams.get("RECID") ||
+      url.searchParams.get("APID") ||
+      url.searchParams.get("apid") ||
+      url.searchParams.get("PanelID") ||
+      url.searchParams.get("panelId") ||
+      url.searchParams.get("panelid") ||
+      ""
+    ).trim();
+
     const rawRid = (
       url.searchParams.get("pid") ||
       url.searchParams.get("rid") ||
@@ -140,8 +166,26 @@ export async function GET(req: Request) {
         ? rawRid
         : "";
 
+    /*
+     * Existing flow:
+     * - 20-char rid/pid identifies SurveyRedirect directly.
+     * - Non-20 rid/pid or MemberCode can be treated as vendor externalId.
+     *
+     * Single-parameter Recontact flow:
+     * - Client may return recid instead of the OpinionElite generated rid/pid.
+     * - Manager-approved callback format uses projectId/projectCode as a
+     *   static value in the client tool and recid/APID as the only dynamic value.
+     * - supplierId is optional. If present, we use it for a stronger match.
+     */
+    const callbackRecid =
+      explicitCallbackRecid ||
+      (callbackProjectRef && ridIn && !looksLikePid(ridIn)
+        ? ridIn
+        : "");
+
     const callbackExternalId =
-      memberCode || (!looksLikePid(ridIn) ? ridIn : "");
+      memberCode ||
+      (!callbackRecid && !looksLikePid(ridIn) ? ridIn : "");
 
     const mapped = mapAuth(auth);
 
@@ -157,11 +201,11 @@ export async function GET(req: Request) {
       );
     }
 
-    if (!ridIn && !callbackExternalId) {
+    if (!ridIn && !callbackExternalId && !callbackRecid) {
       return NextResponse.json(
         {
           ok: false,
-          error: "Missing pid/rid and MemberCode",
+          error: "Missing pid/rid, MemberCode, or recid",
         },
         {
           status: 400,
@@ -183,7 +227,7 @@ export async function GET(req: Request) {
               externalId: true,
               destination: true,
               result: true,
-              recid : true
+              recid: true,
             },
           })
         : null;
@@ -205,7 +249,7 @@ export async function GET(req: Request) {
           externalId: true,
           destination: true,
           result: true,
-          recid : true
+          recid: true,
         },
       });
 
@@ -225,9 +269,208 @@ export async function GET(req: Request) {
             externalId: true,
             destination: true,
             result: true,
-            recid : true
+            recid: true,
           },
         });
+      }
+    }
+
+    /*
+     * Recontact single-parameter callback support.
+     *
+     * This is used when the client supports only one dynamic respondent value.
+     * OpinionElite sends recid to the client in that single parameter, and the
+     * client returns the same value back as recid/APID.
+     *
+     * Required callback context:
+     * - projectId/projectCode: static project reference configured in client redirect URL
+     * - recid/APID/PanelID: dynamic value returned by client
+     *
+     * Optional callback context:
+     * - supplierId/supplierCode. If present, we use it for a stronger match.
+     *
+     * Safe matching rule:
+     * - Match by projectId + recid.
+     * - If supplierId is present, match by projectId + supplierId + recid.
+     * - Process only when exactly one pending SurveyRedirect matches.
+     * - If multiple pending rows match, stop instead of guessing the wrong
+     *   project attempt/vendor externalId.
+     */
+    if (!redirect && callbackRecid) {
+      if (!callbackProjectRef) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "projectId is required for recid callback.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      const callbackProject = await prisma.project.findFirst({
+        where: {
+          OR: [
+            { id: callbackProjectRef },
+            { code: callbackProjectRef },
+          ],
+        },
+        select: {
+          id: true,
+          code: true,
+          projectType: true,
+        },
+      });
+
+      if (!callbackProject) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "Project not found for recid callback.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      if (callbackProject.projectType !== "Recontact") {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "recid callback is only supported for Recontact projects.",
+            projectId: callbackProjectRef,
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      let possibleCallbackSupplierRefs: string[] = [];
+
+      if (callbackSupplierRef) {
+        const callbackSupplier = await prisma.supplier.findFirst({
+          where: {
+            OR: [
+              { id: callbackSupplierRef },
+              { code: callbackSupplierRef },
+            ],
+          },
+          select: {
+            id: true,
+            code: true,
+          },
+        });
+
+        possibleCallbackSupplierRefs = Array.from(
+          new Set(
+            [
+              callbackSupplierRef,
+              callbackSupplier?.id || "",
+              callbackSupplier?.code || "",
+            ]
+              .map((value) => value.trim())
+              .filter(Boolean)
+          )
+        );
+      }
+
+      const pendingMatches =
+        await prisma.surveyRedirect.findMany({
+          where: {
+            projectId: callbackProject.id,
+            recid: callbackRecid,
+            result: null,
+            ...(possibleCallbackSupplierRefs.length > 0
+              ? { supplierId: { in: possibleCallbackSupplierRefs } }
+              : {}),
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 2,
+          select: {
+            id: true,
+            projectId: true,
+            supplierId: true,
+            respondentId: true,
+            externalId: true,
+            destination: true,
+            result: true,
+            recid: true,
+          },
+        });
+
+      if (pendingMatches.length > 1) {
+        console.warn(
+          "Ambiguous recid callback. Multiple pending redirects matched:",
+          {
+            projectId: callbackProjectRef,
+            supplierId: callbackSupplierRef || null,
+            recid: callbackRecid,
+            matchedPids: pendingMatches.map((match) => match.id),
+          }
+        );
+
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              "Ambiguous recid callback. Multiple pending redirects matched.",
+            projectId: callbackProjectRef,
+            supplierId: callbackSupplierRef || null,
+            recid: callbackRecid,
+          },
+          {
+            status: 409,
+          }
+        );
+      }
+
+      if (pendingMatches.length === 1) {
+        redirect = pendingMatches[0];
+      }
+
+      if (!redirect) {
+        const finalizedMatch =
+          await prisma.surveyRedirect.findFirst({
+            where: {
+              projectId: callbackProject.id,
+              recid: callbackRecid,
+              result: {
+                not: null,
+              },
+              ...(possibleCallbackSupplierRefs.length > 0
+                ? { supplierId: { in: possibleCallbackSupplierRefs } }
+                : {}),
+            },
+            orderBy: {
+              createdAt: "desc",
+            },
+            select: {
+              id: true,
+              result: true,
+            },
+          });
+
+        if (finalizedMatch) {
+          return NextResponse.json(
+            {
+              ok: false,
+              error: "Survey already attempted.",
+              projectId: callbackProjectRef,
+              supplierId: callbackSupplierRef || null,
+              recid: callbackRecid,
+              priorPid: finalizedMatch.id,
+              priorResult: finalizedMatch.result,
+            },
+            {
+              status: 409,
+            }
+          );
+        }
       }
     }
 
@@ -236,7 +479,7 @@ export async function GET(req: Request) {
         {
           ok: false,
           error:
-            "Redirect context not found. (pid/externalId mismatch)",
+            "Redirect context not found. (pid/externalId/recid mismatch)",
         },
         {
           status: 400,
@@ -315,7 +558,7 @@ export async function GET(req: Request) {
               projectId,
               externalId,
               supplierId,
-              ...(recid?.trim() ? { recid } : {})
+              ...(recid?.trim() ? { recid } : {}),
             },
             select: {
               id: true,
@@ -352,9 +595,10 @@ export async function GET(req: Request) {
           },
           select: {
             id: true,
-            recid : true
+            recid: true,
           },
         });
+
         if (found) {
           respondentId = found.id;
         } else {
@@ -364,13 +608,14 @@ export async function GET(req: Request) {
                 projectId,
                 externalId,
                 supplierId: null,
-                ...(recid?.trim() ? { recid } : {})
+                ...(recid?.trim() ? { recid } : {}),
               },
               select: {
                 id: true,
-                recid : true
+                recid: true,
               },
             });
+
             respondentId = created.id;
           } catch (e) {
             if (isP2002(e)) {
@@ -382,9 +627,10 @@ export async function GET(req: Request) {
                 },
                 select: {
                   id: true,
-                  recid  :true
+                  recid: true,
                 },
               });
+
               respondentId = again?.id ?? null;
             } else {
               throw e;
@@ -558,7 +804,7 @@ export async function GET(req: Request) {
               currentStage: "FINALIZED",
               finalOutcome: mapped.eventOutcome,
               finalOutcomeAt: new Date(),
-               finalSource: "SURVEY_CALLBACK",
+              finalSource: "SURVEY_CALLBACK",
             },
           });
 
@@ -616,8 +862,8 @@ export async function GET(req: Request) {
     let nextUrl: string | null = null;
 
     /*
- * Supplier callback URLs require the external respondent identifier.
- */
+     * Supplier callback URLs require the external respondent identifier.
+     */
     const supplierIdent =
       externalId || pid || "";
 
