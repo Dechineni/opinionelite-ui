@@ -245,7 +245,7 @@ export async function GET(req: Request) {
             p.name
         ) AS "surveyName",
 
-        sr.id AS "hashIdentifier",
+        COALESCE(sr.id, '') AS "hashIdentifier",
 
         se."supplierCode" AS "supplierId",
 
@@ -311,26 +311,30 @@ export async function GET(req: Request) {
     `;
 
     // CREATE REPORTROWS
-    const reportRows = rawRows.map((row) => ({
-      ...row,
+    const reportRows = rawRows.map((row) => {
+      const { finalOutcome, finalSource, ...reportRow } = row;
 
-      sNo:
-        typeof row.sNo === "bigint"
-          ? Number(row.sNo)
-          : row.sNo,
+      return {
+        ...reportRow,
 
-      loi:
-        row.loi == null
-          ? ""
-          : typeof row.loi === "bigint"
-            ? Number(row.loi)
-            : row.loi,
+        sNo:
+          typeof row.sNo === "bigint"
+            ? Number(row.sNo)
+            : row.sNo,
 
-      statusDescription: getStatusDescription(
-        row.finalOutcome,
-        row.finalSource
-      ),
-    }));
+        loi:
+          row.loi == null
+            ? ""
+            : typeof row.loi === "bigint"
+              ? Number(row.loi)
+              : row.loi,
+
+        statusDescription: getStatusDescription(
+          finalOutcome,
+          finalSource
+        ),
+      }
+    });
 
     if (format === "json") {
       return NextResponse.json({
