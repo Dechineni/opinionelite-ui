@@ -45,14 +45,21 @@ function isAllowedScheme(u: URL) {
 }
 
 /* ----------------------- ultra-light memory cache ----------------------- */
-type CacheEntry = { v: { id: string; template: string }; exp: number };
+type CacheValue = {
+  id: string;
+  code: string;
+  template: string;
+  projectType: string;
+};
+
+type CacheEntry = { v: CacheValue; exp: number };
 type MemCache = Map<string, CacheEntry>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const G: any = globalThis as any;
 const MEM_TTL_MS = 5 * 60 * 1000;
 const mem: MemCache = (G.__surveyLiveCache ??= new Map<string, CacheEntry>());
 
-function memGet(k: string): { id: string; template: string } | null {
+function memGet(k: string): CacheValue | null {
   const e = mem.get(k);
   if (!e) return null;
   if (Date.now() > e.exp) {
@@ -62,7 +69,7 @@ function memGet(k: string): { id: string; template: string } | null {
   return e.v;
 }
 
-function memPut(k: string, v: { id: string; template: string }) {
+function memPut(k: string, v: CacheValue) {
   mem.set(k, { v, exp: Date.now() + MEM_TTL_MS });
 }
 
@@ -75,12 +82,22 @@ async function loadProjectBasicsWithTimeout(
   return Promise.race([
     prisma.project.findFirst({
       where: { OR: [{ id: key }, { code: key }] },
-      select: { id: true, code: true, surveyLiveUrl: true },
+      select: {
+        id: true,
+        code: true,
+        surveyLiveUrl: true,
+        projectType: true,
+      },
     }),
     new Promise<null>((_, rej) =>
       setTimeout(() => rej(new Error("db-timeout")), ms)
     ),
-  ]) as Promise<{ id: string; code: string; surveyLiveUrl: string | null }>;
+  ]) as Promise<{
+    id: string;
+    code: string;
+    surveyLiveUrl: string | null;
+    projectType: string | null;
+  } | null>;
 }
 
 /** Env flag: set REDIRECT_LOG="off" to skip DB log writes */
@@ -104,11 +121,14 @@ export async function GET(
   let projectIdReal = projectId;
   let haveRealId = false;
   let projectCodeReal = projectId;
+  let projectTypeReal = "Adhocs";
   let template = cached?.template ?? "";
   let effectiveRecid = recid;
 
   if (cached) {
     projectIdReal = cached.id;
+    projectCodeReal = cached.code || projectId;
+    projectTypeReal = cached.projectType || "Adhocs";
     haveRealId = true;
   } else {
     try {
@@ -119,6 +139,7 @@ export async function GET(
 
       projectIdReal = project.id;
       projectCodeReal = project.code;
+      projectTypeReal = project.projectType || "Adhocs";
       haveRealId = true;
       template = (project.surveyLiveUrl || "").trim();
 
@@ -129,9 +150,16 @@ export async function GET(
         );
       }
 
-      memPut(`live:${projectId}`, { id: project.id, template });
-      memPut(`live:${project.id}`, { id: project.id, template });
-      memPut(`live:${project.code}`, { id: project.id, template });
+      const cacheValue: CacheValue = {
+        id: project.id,
+        code: project.code,
+        template,
+        projectType: projectTypeReal,
+      };
+
+      memPut(`live:${projectId}`, cacheValue);
+      memPut(`live:${project.id}`, cacheValue);
+      memPut(`live:${project.code}`, cacheValue);
     } catch (e: any) {
       if (!cached) {
         const msg =
@@ -143,10 +171,9 @@ export async function GET(
     }
   }
 
-   // IF RECID IS NOT COMING FROM URL, TRY TO FIND AN EXISTING RECID
-  if(!effectiveRecid)
-  {
-    // CHECK THE LATEST SURVEYREDIRECT RECORD FOR RECID
+  // If recid is not coming from URL, try to find an existing stored recid.
+  // Priority: SurveyRedirect -> Respondent -> SupplierEntry.
+  if (!effectiveRecid && haveRealId && externalId) {
     const surveyRedirectRecid = await prisma.surveyRedirect.findFirst({
       where: {
         projectId: projectIdReal,
@@ -154,7 +181,10 @@ export async function GET(
         externalId,
       },
       select: {
-        recid : true
+        recid: true,
+      },
+      orderBy: {
+        createdAt: "desc",
       },
     });
     
@@ -169,6 +199,10 @@ export async function GET(
     }
     else{
       // IF SURVEYREDIRECT DOES NOT HAVE RECID, CHECK RESPONDENT
+
+    // if (surveyRedirectRecid?.recid) {
+    //   effectiveRecid = surveyRedirectRecid.recid;
+    // } else {
       const respondentRecid = await prisma.respondent.findFirst({
         where: {
           projectId: projectIdReal,
@@ -176,23 +210,73 @@ export async function GET(
           externalId,
         },
         select: {
-          recid : true
+          recid: true,
+        },
+        orderBy: {
+          createdAt: "desc",
         },
       });
 
-      // IF RECID EXISTS IN RESPONDENT, USE IT
-      if(respondentRecid?.recid)
-      {
+      if (respondentRecid?.recid) {
         effectiveRecid = resolveEffectiveRecid(
           effectiveRecid,
           respondentRecid.recid
-      );
-      };
-    };
-  };
-  
+        );
+      } else if (supplierId) {
+        const supplierEntryRecid = await prisma.supplierEntry.findFirst({
+          where: {
+            projectId: projectIdReal,
+            supplierCode: supplierId,
+            externalId,
+          },
+          select: {
+            recid: true,
+          },
+          orderBy: {
+            firstEnteredAt: "desc",
+          },
+        });
 
-  // Look for existing SurveyRedirect by natural key
+        if (supplierEntryRecid?.recid) {
+          effectiveRecid = resolveEffectiveRecid(
+            effectiveRecid,
+            supplierEntryRecid.recid
+          );
+        }
+      }
+    }
+  }
+
+  const hasIdentifierToken =
+    /\[identifier\]/i.test(template) || /\{identifier\}/i.test(template);
+
+  const hasRecidToken = /\[recid\]/i.test(template) || /\{recid\}/i.test(template);
+
+  const isRecontactProject = projectTypeReal === "Recontact";
+
+  /**
+   * Single-parameter Recontact client flow:
+   * - Project type is Recontact
+   * - Client Survey Live URL contains [identifier]
+   * - Client Survey Live URL does not contain [recid]
+   *
+   * In this mode, [identifier] is replaced with recid instead of OE generated pid/rid.
+   */
+  const isSingleParameterRecontactFlow =
+    isRecontactProject && hasIdentifierToken && !hasRecidToken;
+
+  if (isSingleParameterRecontactFlow && !effectiveRecid) {
+    return NextResponse.json(
+      {
+        error: "Recontact recid is required for single-parameter client flow.",
+        projectId: projectCodeReal || projectIdReal,
+        supplierId,
+      },
+      { status: 400 }
+    );
+  }
+
+  // Look for existing SurveyRedirect by natural key.
   let reusableRedirect: { id: string; result: string | null } | null = null;
 
   if (haveRealId && externalId && supplierId) {
@@ -224,11 +308,126 @@ export async function GET(
         );
       }
 
-      // null result means stale/in-progress row → reuse it
+      // null result means stale/in-progress row -> reuse it
       reusableRedirect = existingRedirect;
     }
   }
-  
+
+  /**
+   * Additional protection for single-parameter Recontact clients.
+   *
+   * Current existing flow already protects same externalId reattempts.
+   * This block protects same recid reattempts for this project/supplier when
+   * recid is being sent as the client's only dynamic identifier.
+   */
+  if (
+    isSingleParameterRecontactFlow &&
+    haveRealId &&
+    supplierId &&
+    effectiveRecid
+  ) {
+    const finalizedRedirectByRecid = await prisma.surveyRedirect.findFirst({
+      where: {
+        projectId: projectIdReal,
+        supplierId,
+        recid: effectiveRecid,
+        result: {
+          not: null,
+        },
+      },
+      select: {
+        id: true,
+        externalId: true,
+        result: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    if (finalizedRedirectByRecid) {
+      return NextResponse.json(
+        {
+          error: "Survey already attempted.",
+          projectId: projectCodeReal || projectIdReal,
+          supplierId,
+          recid: effectiveRecid,
+          priorPid: finalizedRedirectByRecid.id,
+          priorExternalId: finalizedRedirectByRecid.externalId,
+          priorResult: finalizedRedirectByRecid.result,
+        },
+        { status: 409 }
+      );
+    }
+
+    const finalizedSupplierEntryByRecid = await prisma.supplierEntry.findFirst({
+      where: {
+        projectId: projectIdReal,
+        supplierCode: supplierId,
+        recid: effectiveRecid,
+        finalOutcome: {
+          not: null,
+        },
+      },
+      select: {
+        id: true,
+        externalId: true,
+        finalOutcome: true,
+      },
+      orderBy: {
+        finalOutcomeAt: "desc",
+      },
+    });
+
+    if (finalizedSupplierEntryByRecid) {
+      return NextResponse.json(
+        {
+          error: "Survey already attempted.",
+          projectId: projectCodeReal || projectIdReal,
+          supplierId,
+          recid: effectiveRecid,
+          priorExternalId: finalizedSupplierEntryByRecid.externalId,
+          priorResult: finalizedSupplierEntryByRecid.finalOutcome,
+        },
+        { status: 409 }
+      );
+    }
+
+    const pendingRedirectsByRecid = await prisma.surveyRedirect.findMany({
+      where: {
+        projectId: projectIdReal,
+        supplierId,
+        recid: effectiveRecid,
+        result: null,
+      },
+      select: {
+        id: true,
+        externalId: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      take: 5,
+    });
+
+    const pendingOtherExternalId = pendingRedirectsByRecid.find(
+      (row) => row.externalId !== externalId
+    );
+
+    if (pendingOtherExternalId) {
+      return NextResponse.json(
+        {
+          error: "Survey already in progress for this recid.",
+          projectId: projectCodeReal || projectIdReal,
+          supplierId,
+          recid: effectiveRecid,
+          priorPid: pendingOtherExternalId.id,
+          priorExternalId: pendingOtherExternalId.externalId,
+        },
+        { status: 409 }
+      );
+    }
+  }
 
   // best-effort respondent ensure
   if (haveRealId && externalId) {
@@ -248,8 +447,12 @@ export async function GET(
         if (!found) {
           try {
             await prisma.respondent.create({
-              data: { projectId: projectIdReal, externalId, supplierId, ...(effectiveRecid?.trim() ? { recid: effectiveRecid } : {}) },
-              
+              data: {
+                projectId: projectIdReal,
+                externalId,
+                supplierId,
+                ...(effectiveRecid?.trim() ? { recid: effectiveRecid } : {}),
+              },
             });
           } catch (e) {
             if (!isUniqueViolation(e)) throw e;
@@ -264,7 +467,12 @@ export async function GET(
         if (!found) {
           try {
             await prisma.respondent.create({
-              data: { projectId: projectIdReal, externalId, supplierId: null, ...(effectiveRecid?.trim() ? { recid: effectiveRecid } : {}) },
+              data: {
+                projectId: projectIdReal,
+                externalId,
+                supplierId: null,
+                ...(effectiveRecid?.trim() ? { recid: effectiveRecid } : {}),
+              },
             });
           } catch (e) {
             if (!isUniqueViolation(e)) throw e;
@@ -276,18 +484,22 @@ export async function GET(
     }
   }
 
-  // Reuse old pid if null-result row exists
+  // Reuse old pid if null-result row exists.
   const pid = reusableRedirect?.id || id20();
 
-  const hasIdentifierToken =
-    /\[identifier\]/i.test(template) || /\{identifier\}/i.test(template);
+  const identifierForClient = isSingleParameterRecontactFlow
+    ? effectiveRecid
+    : pid;
 
   const replaced = replaceTokens(template, {
-    projectId: projectIdReal,
+    // projectId is external-facing here, so use the project code such as SR0649.
+    projectId: projectCodeReal || projectIdReal,
+    projectCode: projectCodeReal || projectIdReal,
+    projectDbId: projectIdReal,
     supplierId,
-    identifier: pid,
+    identifier: identifierForClient,
     externalId,
-    recid : effectiveRecid
+    recid: effectiveRecid,
   });
 
   let absolute: URL;
@@ -324,6 +536,7 @@ export async function GET(
           where: { id: reusableRedirect.id },
           data: {
             destination: absolute.toString(),
+            ...(effectiveRecid?.trim() ? { recid: effectiveRecid } : {}),
           },
         });
       } else {
@@ -334,13 +547,13 @@ export async function GET(
             supplierId: supplierId || null,
             externalId: externalId || null,
             destination: absolute.toString(),
-            ...(effectiveRecid?.trim() ? { recid : effectiveRecid } : {})
+            ...(effectiveRecid?.trim() ? { recid: effectiveRecid } : {}),
           },
         });
       }
     } catch (e) {
       if (isUniqueViolation(e)) {
-        // In case of race condition, reuse existing null-result row
+        // In case of race condition, reuse existing null-result row.
         const existingRedirect = await prisma.surveyRedirect.findFirst({
           where: {
             projectId: projectIdReal,
@@ -365,20 +578,64 @@ export async function GET(
         }
 
         if (existingRedirect) {
+          const identifierForExistingClient = isSingleParameterRecontactFlow
+            ? effectiveRecid
+            : existingRedirect.id;
+
+          const existingReplaced = replaceTokens(template, {
+            // projectId is external-facing here, so use the project code such as SR0649.
+            projectId: projectCodeReal || projectIdReal,
+            projectCode: projectCodeReal || projectIdReal,
+            projectDbId: projectIdReal,
+            supplierId,
+            identifier: identifierForExistingClient,
+            externalId,
+            recid: effectiveRecid,
+          });
+
+          let existingAbsolute: URL;
+          try {
+            existingAbsolute = new URL(existingReplaced);
+          } catch {
+            const base = (process.env.SURVEY_PROVIDER_BASE_URL || "").trim();
+            if (!base) {
+              return NextResponse.json(
+                {
+                  error:
+                    "SURVEY_PROVIDER_BASE_URL is not set and live URL is relative.",
+                },
+                { status: 500 }
+              );
+            }
+            existingAbsolute = new URL(existingReplaced, base);
+          }
+
+          if (!isAllowedScheme(existingAbsolute)) {
+            return NextResponse.json(
+              { error: "Live URL must use http(s) scheme." },
+              { status: 400 }
+            );
+          }
+
+          if (!hasIdentifierToken && !existingAbsolute.searchParams.has("rid")) {
+            existingAbsolute.searchParams.set("rid", existingRedirect.id);
+          }
+
           await prisma.surveyRedirect.update({
             where: { id: existingRedirect.id },
             data: {
-              destination: absolute.toString(),
+              destination: existingAbsolute.toString(),
+              ...(effectiveRecid?.trim() ? { recid: effectiveRecid } : {}),
             },
           });
 
-          absolute.searchParams.set("rid", existingRedirect.id);
-          return NextResponse.redirect(absolute.toString(), { status: 302 });
+          return NextResponse.redirect(existingAbsolute.toString(), { status: 302 });
         }
       }
 
       throw e;
     }
   }
+
   return NextResponse.redirect(absolute.toString(), { status: 302 });
 }
