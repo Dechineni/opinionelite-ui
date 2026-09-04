@@ -2,6 +2,7 @@
 export const runtime = "edge";
 export const preferredRegion = "auto";
 
+import { buildSupplierUrl } from "@/lib/supplier-url";
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { z } from "zod";
@@ -49,12 +50,6 @@ async function resolveProjectId(projectKey: string) {
   return p?.id ?? null;
 }
 
-function buildSupplierUrl(opts: { uiBase: string; projectCode: string; supplierCode: string }) {
-  const ui = (opts.uiBase || "").replace(/\/+$/, "");
-  const p = encodeURIComponent(opts.projectCode || "");
-  const s = encodeURIComponent(opts.supplierCode || "");
-  return `${ui}/Survey?projectId=${p}&supplierId=${s}&id=[identifier]`;
-}
 
 /* ---------------------------------- PUT ---------------------------------- */
 export async function PUT(
@@ -99,7 +94,7 @@ export async function PUT(
     }),
     prisma.project.findUnique({
       where: { id: existing.projectId },
-      select: { code: true },
+      select: { code: true, projectType: true },
     }),
   ]);
 
@@ -114,6 +109,7 @@ export async function PUT(
           uiBase,
           projectCode: String(project.code),
           supplierCode: String(supplier.code),
+          projectType: project.projectType ?? "",
         })
       : null;
 

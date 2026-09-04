@@ -1,8 +1,11 @@
+// File: src/app/api/projects/%5BprojectId%5D/survey-live/route.ts
 export const runtime = "edge";
 export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { resolveEffectiveRecid } from "@/lib/recontact";
+import { replaceTokens } from "@/lib/survey-live-url";
 
 const isUniqueViolation = (e: any) => {
   const msg = String(e?.message || "");
@@ -34,13 +37,6 @@ function id20(): string {
   let s = "";
   for (let i = 0; i < bytes.length; i++) s += abc[bytes[i] % abc.length];
   return s;
-}
-
-/** Replace tokens like [identifier], {identifier}, [projectId], [supplierId], [externalId], [recid] */
-function replaceTokens(template: string, map: Record<string, string>) {
-  return template
-    .replace(/\[([^\]]+)\]/g, (_, k) => map[k] ?? "")
-    .replace(/\{([^}]+)\}/g, (_, k) => map[k] ?? "");
 }
 
 /** Simple scheme whitelist */
@@ -191,10 +187,22 @@ export async function GET(
         createdAt: "desc",
       },
     });
+    
+    // IF RECID EXISTS IN SURVEYREDIRECT, USE IT
+    if(surveyRedirectRecid?.recid)
+    {
+      effectiveRecid = resolveEffectiveRecid(
+        effectiveRecid,
+        surveyRedirectRecid.recid
+    );
 
-    if (surveyRedirectRecid?.recid) {
-      effectiveRecid = surveyRedirectRecid.recid;
-    } else {
+    }
+    else{
+      // IF SURVEYREDIRECT DOES NOT HAVE RECID, CHECK RESPONDENT
+
+    // if (surveyRedirectRecid?.recid) {
+    //   effectiveRecid = surveyRedirectRecid.recid;
+    // } else {
       const respondentRecid = await prisma.respondent.findFirst({
         where: {
           projectId: projectIdReal,
@@ -210,7 +218,10 @@ export async function GET(
       });
 
       if (respondentRecid?.recid) {
-        effectiveRecid = respondentRecid.recid;
+        effectiveRecid = resolveEffectiveRecid(
+          effectiveRecid,
+          respondentRecid.recid
+        );
       } else if (supplierId) {
         const supplierEntryRecid = await prisma.supplierEntry.findFirst({
           where: {
@@ -227,7 +238,10 @@ export async function GET(
         });
 
         if (supplierEntryRecid?.recid) {
-          effectiveRecid = supplierEntryRecid.recid;
+          effectiveRecid = resolveEffectiveRecid(
+            effectiveRecid,
+            supplierEntryRecid.recid
+          );
         }
       }
     }
