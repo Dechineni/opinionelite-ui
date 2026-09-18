@@ -700,6 +700,10 @@ describe("Query Behavior", () => {
     );
 
     expect(mockPrisma.$queryRaw).toHaveBeenCalledTimes(1);
+    const queryArgs = JSON.stringify(mockPrisma.$queryRaw.mock.calls[0]);
+    expect(queryArgs).toContain("100");
+    expect(queryArgs).toContain("OFFSET");
+
   });
 
   // XLSX DOWNLOAD SHOULD USE LIMIT 1000 AND OFFSET 0
@@ -714,6 +718,11 @@ describe("Query Behavior", () => {
     );
 
     expect(mockPrisma.$queryRaw).toHaveBeenCalledTimes(1);
+
+    const queryArgs = JSON.stringify(mockPrisma.$queryRaw.mock.calls[0]);
+    expect(queryArgs).toContain("1000");
+    expect(queryArgs).toContain("OFFSET");
+    expect(queryArgs).toContain("0");
   });
 
   // PLACEHOLDER EXTERNALID VALUES "" SHOULD BE EXCLUDED
