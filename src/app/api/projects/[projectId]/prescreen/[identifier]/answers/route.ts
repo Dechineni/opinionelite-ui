@@ -4,6 +4,7 @@ export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { isUsableExternalId } from "@/lib/identifiers";
 
 /** A tiny type so we don't import Prisma at runtime */
 type PrismaClientLike = ReturnType<typeof getPrisma>;
@@ -103,6 +104,18 @@ async function finalizePrescreenFailure(
   }
 ): Promise<void> {
   const { projectId, supplierCode, externalId } = params;
+  if (!isUsableExternalId(externalId)) {
+    console.warn(
+      "Prescreen failure SupplierEntry finalization skipped because externalId is a placeholder:",
+      {
+        projectId,
+        supplierCode,
+        externalId,
+      }
+    );
+
+    return;
+  }
 
   try {
     let matchedEntry:
