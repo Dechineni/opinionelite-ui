@@ -116,4 +116,32 @@ describe("sentry start route", () => {
         expect(location).toContain("id=EXT1");
         expect(location).toContain("recid=REC1");
     });
+
+    it("skips SupplierEntry finalization for placeholder externalId on sentry failure", async () => {
+        mockPrisma.project.findFirst.mockResolvedValue({
+            id: "PRJ1",
+            code: "PRJ1",
+        });
+
+        mockPrisma.sentryRespondentResult.upsert.mockResolvedValue({});
+
+        const req = new Request(
+            "https://test.com/api/projects/PRJ1/sentry-callback?sentry_status=2&supplierId=S1&aid=[identifier]&recid=REC1"
+        );
+
+        const res = await sentryCallbackGet(req, {
+            params: Promise.resolve({
+                projectId: "PRJ1",
+            }),
+        });
+
+        const location = res.headers.get("location") ?? "";
+
+        expect(location).toContain("/Thanks");
+        expect(location).toContain("status=TERMINATE");
+
+        expect(
+            mockPrisma.supplierEntry.update
+        ).not.toHaveBeenCalled();
+    });
 });

@@ -596,4 +596,58 @@ describe("prescreen route", () => {
 
         expect(json.pass).toBe(false);
     });
+
+    it("skips SupplierEntry finalization for placeholder identifier", async () => {
+        mockPrisma.project.findFirst.mockResolvedValue({
+            id: "PRJ1",
+        });
+
+        mockPrisma.respondent.findFirst.mockResolvedValue({
+            id: "RESP1",
+        });
+
+        mockPrisma.prescreenQuestion.findMany.mockResolvedValue([
+            {
+                id: "Q1",
+                controlType: "TEXT",
+                textMinLength: null,
+                textMaxLength: null,
+                options: [],
+            },
+        ]);
+
+        const req = new Request(
+            "https://test.com/api/projects/PRJ1/prescreen/[identifier]/answers",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    supplierId: null,
+                    answers: [
+                        {
+                            questionId: "Q1",
+                            value: "",
+                        },
+                    ],
+                }),
+            }
+        );
+
+        const res = await POST(req, {
+            params: Promise.resolve({
+                projectId: "PRJ1",
+                identifier: "[identifier]",
+            }),
+        });
+
+        const json = await res.json();
+
+        expect(json.pass).toBe(false);
+
+        expect(
+            mockPrisma.supplierEntry.update
+        ).not.toHaveBeenCalled();
+    });
 });

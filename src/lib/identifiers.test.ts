@@ -27,4 +27,22 @@ describe("isUsableExternalId", () => {
             isUsableExternalId("     ")
         ).toBe(false);
     });
+
+    it("rejects trimmed placeholder values", () => {
+        expect(
+            isUsableExternalId(" [identifier] ")
+        ).toBe(false);
+    });
+
+    it("rejects uppercase bracket placeholder", () => {
+        expect(
+            isUsableExternalId("[IDENTIFIER]")
+        ).toBe(false);
+    });
+
+    it("rejects uppercase brace placeholder", () => {
+        expect(
+            isUsableExternalId("{IDENTIFIER}")
+        ).toBe(false);
+    });
 });
