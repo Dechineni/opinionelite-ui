@@ -2,7 +2,7 @@
 
 import React, {useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw, Plus, Info, Search, SquareCheck, Trash2, ExternalLink, Grip, MoreVertical, GripVertical, Copy, Network } from "lucide-react";
+import { RefreshCw, Plus, Info, Search, Trash2, Grip, MoreVertical, GripVertical, Copy, Network } from "lucide-react";
 
 /* ------------------------------ confirm dialog ----------------------------- */
 function ConfirmDialog({
@@ -80,6 +80,12 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
     const [quotas, setQuotas] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
+    const [summary, setSummary] = useState({
+        totalTargetCompletes: 0,
+        totalCompletes: 0,
+        percentage: 0,
+    });
+
     const router = useRouter();
 
     const [ selectedQuotaIds, setSelectedQuotaIds ] = useState<string[]>([]);
@@ -107,6 +113,11 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
             setQuotas(
                 Array.isArray(data?.items) ? data.items : []
             );
+            setSummary({
+                totalTargetCompletes: data?.summary?.totalTargetCompletes ?? 0,
+                totalCompletes: data?.summary?.totalCompletes ?? 0,
+                percentage: data?.summary?.percentage ?? 0,
+            });
         } catch (error) {
             console.error("Error loading quotas:", error);
         } finally {
@@ -140,6 +151,31 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
         } catch (e: any) {
             window.alert(e?.message || "Failed to delete selected quotas");
             setConfirmDeleteOpen(false);
+        }
+    };
+
+    const updateTargetCompletes = async (quotaId: string, value: number) => {
+        try {
+            const response = await fetch(`/api/projects/${projectId}/quotas/${quotaId}`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ targetCompletes: value })
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(
+                    data?.message ||
+                    data?.error ||
+                    "Failed to update target completes"
+                );
+            }
+
+            await loadQuotas();
+        } catch (e: any) {
+            window.alert(e?.message || "Failed to update target completes");
         }
     };
 
@@ -187,13 +223,13 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
 
                 <div className="flex-1 border-r border-slate-300 mr-3">
                     <h1 className="font-medium text-gray-500 text-sm">Total Quota Count</h1>
-                    <h1 className="font-bold text-black mt-1.5 text-xl">1,000</h1>
-                    <h1 className="font-medium text-gray-500 text-sm mt-1.5">100.00%</h1>
+                    <h1 className="font-bold text-black mt-1.5 text-xl">{summary.totalTargetCompletes.toLocaleString()}</h1>
+                    <h1 className="font-medium text-gray-500 text-sm mt-1.5">{summary.totalTargetCompletes > 0 ? "100.00%" : "0.00%"}</h1>
                 </div>
                 <div className="flex-1">
                     <h1 className="font-medium text-gray-500 text-sm">Total Completes</h1>
-                    <h1 className="font-bold text-black mt-1.5 text-xl">623</h1>
-                    <h1 className="font-medium text-gray-500 text-sm mt-1.5">62.30%</h1>
+                    <h1 className="font-bold text-black mt-1.5 text-xl">{summary.totalCompletes.toLocaleString()}</h1>
+                    <h1 className="font-medium text-gray-500 text-sm mt-1.5">{Number(summary.percentage ?? 0).toFixed(2)}%</h1>
                 </div>
                 
             </div>
@@ -229,30 +265,12 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
 
                     <select className="flex items-center h-[35px] w-[120px] rounded-md border border-gray-300 px-3">
                         <option className="text-sm">All Status</option>
-                        <option className="text-sm">Open</option>
-                        <option className="text-sm">Close</option>
                         <option className="text-sm">Clone</option>
                         <option className="text-sm">Demographics</option>
                         <option className="text-sm">Delete</option>
                     </select>
 
                     <div className="ml-5 flex gap-1.5">
-                        <button
-                            type="button"
-                            className="flex items-center gap-1 h-[35px] px-3 rounded-md bg-white text-blue-500 border text-sm font-medium cursor-pointer"
-                        >
-                            <ExternalLink size={14} />
-                            Open
-                        </button>
-
-                        <button
-                            type="button"
-                            className="flex items-center gap-1 h-[35px] px-3 rounded-md bg-white text-blue-500 border text-sm font-medium cursor-pointer"
-                        >
-                            <SquareCheck size={14} />
-                            Close
-                        </button>
-
                         <button
                             type="button"
                             className="flex items-center gap-1 h-[35px] px-3 rounded-md bg-white text-blue-500 border text-sm font-medium cursor-pointer"
@@ -388,7 +406,17 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
                                     </td>
 
                                     <td className="px-3 py-4">
-                                        {quota.targetCompletes}
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            step={1}
+                                            defaultValue={quota.targetCompletes ?? 0}
+                                            onBlur={(e) => {
+                                                const value = Math.max(0, parseInt(e.target.value || "0", 10));
+                                                updateTargetCompletes(quota.id, value);
+                                            }}
+                                            className="w-24 rounded border border-slate-300 px-2 py-1 text-sm"
+                                        />
                                     </td>
 
                                     <td className="px-3 py-4">
