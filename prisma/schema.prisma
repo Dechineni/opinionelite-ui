@@ -171,6 +171,7 @@ model ProjectQuota {
   completes       Int @default(0)
   terminates      Int @default(0)
   overQuotas      Int @default(0)
+  oeOverQuotas    Int @default(0)
 
   sortOrder Int @default(0)
 
