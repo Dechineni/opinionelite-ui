@@ -61,6 +61,12 @@ export async function PATCH(
             }, { status: 404, headers: NO_STORE_HEADERS });
         }
 
+        if(targetCompletes < quota.completes) {
+            return NextResponse.json({
+                error: `targetCompletes cannot be less than the current completes (${quota.completes})`,
+            }, { status: 400, headers: NO_STORE_HEADERS });
+        }
+
         const quotaPercent = targetCompletes > 0 ? (quota.quotaCount / targetCompletes) * 100 : 0;
 
         await prisma.projectQuota.update({

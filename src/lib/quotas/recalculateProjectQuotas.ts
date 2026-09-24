@@ -125,6 +125,7 @@ export async function recalculateProjectQuotas(projectId: string) {
         const completeRespondents = new Set<string>();
         const terminateRespondents = new Set<string>();
         const overQuotaRespondents = new Set<string>();
+        const oeOverQuotaRespondents = new Set<string>();
 
         for (const entry of matchedEntries) {
 
@@ -136,16 +137,22 @@ export async function recalculateProjectQuotas(projectId: string) {
                 entry.finalOutcome === "QUALITY_TERM") {
                 terminateRespondents.add(key);
             }
-            if (entry.finalOutcome === "OVER_QUOTA") {
+            if (entry.finalOutcome === "OVER_QUOTA" &&
+                entry.finalSource === "SURVEY_CALLBACK") {
                 overQuotaRespondents.add(key);
+            }
+            if (entry.finalOutcome === "OVER_QUOTA" &&
+                entry.finalSource === "QUOTA_LIMIT") {
+                oeOverQuotaRespondents.add(key);
             }
         }
 
         const completes = completeRespondents.size;
         const terminates = terminateRespondents.size;
         const overQuotas = overQuotaRespondents.size;
+        const oeOverQuotas = oeOverQuotaRespondents.size;
 
-        const quotaPercent = quota.targetCompletes > 0 ? (quotaCount / quota.targetCompletes) * 100 : 0;
+        const quotaPercent = quota.targetCompletes > 0 ? (completes / quota.targetCompletes) * 100 : 0;
 
         const status = quota.targetCompletes > 0 &&
                        completes >= quota.targetCompletes
@@ -161,6 +168,7 @@ export async function recalculateProjectQuotas(projectId: string) {
                 completes,
                 terminates,
                 overQuotas,
+                oeOverQuotas,
                 quotaPercent: Number(quotaPercent.toFixed(2)), // Round to 2 decimal places
                 status,
             },
