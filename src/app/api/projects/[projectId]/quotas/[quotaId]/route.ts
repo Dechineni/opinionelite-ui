@@ -67,13 +67,10 @@ export async function PATCH(
             }, { status: 400, headers: NO_STORE_HEADERS });
         }
 
-        const quotaPercent = targetCompletes > 0 ? (quota.quotaCount / targetCompletes) * 100 : 0;
-
         await prisma.projectQuota.update({
             where: { id: quotaId },
             data: {
                 targetCompletes,
-                quotaPercent: Number(quotaPercent.toFixed(2)), // Round to 2 decimal places
             }
         });
 

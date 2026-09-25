@@ -4,6 +4,8 @@ export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { recalculateProjectQuotas } from "@/lib/quotas/recalculateProjectQuotas";
+import { isUsableExternalId } from "@/lib/utils/isUsableExternalId";
 
 /** A tiny type so we don't import Prisma at runtime */
 type PrismaClientLike = ReturnType<typeof getPrisma>;
@@ -260,6 +262,10 @@ async function finalizeOverQuota(
   }
 ): Promise<void> {
   const { projectId, supplierCode, externalId } = params;
+
+  if (!isUsableExternalId(externalId)) {
+    return;
+  }
 
   try {
     let matchedEntry:
@@ -781,11 +787,18 @@ export async function POST(
      * the respondent as OVER_QUOTA and stop the survey flow.
     */
     if (pass) {
-      const closedQuotas =
+
+      //Ensures quota metrics and status are up-to-date before checking for closed quotas
+      await recalculateProjectQuotas(projId);
+        
+      const closedQuotas = 
         await prisma.projectQuota.findMany({
           where: {
             projectId: projId,
             status: "Close",
+            prescreenQuestionId: {
+              not: null,
+            },
           },
           select: {
             quotaName: true,
@@ -793,12 +806,49 @@ export async function POST(
           },
         });
 
-      const closedQuotaSet = new Set(
-        closedQuotas.map((q) =>
-          `${q.prescreenQuestionId}|${q.quotaName.trim().toLowerCase()}`,
-        )
-      );
+      const closedQuotaOptions =
+        await prisma.prescreenOption.findMany({
+          where: {
+            questionId: {
+              in: closedQuotas
+                .map((quota) => quota.prescreenQuestionId)
+                .filter(Boolean) as string[],
+            },
+          },
+          select: {
+            questionId: true,
+            label: true,
+            value: true,
+          },
+        });        
 
+      const closedQuotaSet = new Set<string>();
+
+      for (const quota of closedQuotas) {
+
+        const option = closedQuotaOptions.find(
+          (opt) =>
+            opt.questionId === quota.prescreenQuestionId &&
+            opt.label.trim().toLowerCase() ===
+            quota.quotaName.trim().toLowerCase()
+        );
+
+        if (!option) {
+          continue;
+        }
+
+        closedQuotaSet.add(
+          `${quota.prescreenQuestionId}|${option.label
+            .trim()
+            .toLowerCase()}`
+        );
+
+        closedQuotaSet.add(
+          `${quota.prescreenQuestionId}|${option.value
+            .trim()
+            .toLowerCase()}`
+        );
+      }
       /*
        * Match the respondent's selected Prescreen option against
        * any quota that has already been closed for this project.
@@ -836,14 +886,16 @@ export async function POST(
 
       if (selectedClosedQuota) {
 
-        await finalizeOverQuota(
-          prisma,
-          {
-            projectId: projId,
-            supplierCode: supplierId,
-            externalId: identifier,
-          }
-        );
+        if (isUsableExternalId(identifier)) {
+          await finalizeOverQuota(
+            prisma,
+            {
+              projectId: projId,
+              supplierCode: supplierId,
+              externalId: identifier,
+            }
+          );
+        }
 
         return NextResponse.json({
           ok: true,

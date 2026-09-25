@@ -1,6 +1,7 @@
 // src/lib/quotas/recalculateProjectQuotas.ts
 
 import { getPrisma } from "@/lib/prisma";
+import { isUsableExternalId } from "@/lib/utils/isUsableExternalId";
 
 export async function recalculateProjectQuotas(projectId: string) {
     const prisma = getPrisma();
@@ -37,8 +38,8 @@ export async function recalculateProjectQuotas(projectId: string) {
 
         const respondentIds = new Set<string>();
         for (const answer of answers) {
-            if (answer.respondent?.externalId === "[identifier]") {
-                continue; // Skip if the respondent's externalId is "[identifier]"
+            if (!isUsableExternalId(answer.respondent?.externalId)) {
+                continue; // Skip if the respondent's externalId is not usable
             }
 
             const radioMatch = answer.answerValue === option.value
