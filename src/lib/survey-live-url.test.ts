@@ -79,4 +79,16 @@ describe("replaceTokens", () => {
       "https://survey.com/?rid=PID123&recid=STORED-RECID-001"
     );
   });
+
+  it("preserves identifier and recid together", () => {
+    const result = replaceTokens(
+      "[identifier]-[recid]",
+      {
+        identifier: "PID001",
+        recid: "REC001",
+      }
+    );
+
+    expect(result).toBe("PID001-REC001");
+  });
 });
