@@ -4,6 +4,8 @@ export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { recalculateProjectQuotas } from "@/lib/quotas/recalculateProjectQuotas";
+import { isUsableExternalId } from "@/lib/utils/isUsableExternalId";
 
 /** A tiny type so we don't import Prisma at runtime */
 type PrismaClientLike = ReturnType<typeof getPrisma>;
@@ -231,6 +233,120 @@ async function finalizePrescreenFailure(
   } catch (error) {
     console.error(
       "Failed to finalize SupplierEntry for Prescreen failure:",
+      error
+    );
+  }
+}
+/**
+ * Finalize an entrant when the matched quota has already closed.
+ *
+ * This is evaluated during Prescreen before the respondent
+ * is allowed to continue into the survey.
+ *
+ * When a respondent selects an option that maps to a quota
+ * whose status is already Close, the respondent is finalized
+ * as OVER_QUOTA and the survey flow is stopped immediately.
+ *
+ * Do not use updateMany here. Cloudflare Edge uses Neon HTTP mode,
+ * where Prisma updateMany may attempt a transaction.
+ *
+ * Tracking failure must not block the respondent from reaching
+ * the Over Quota handling flow.
+ */
+async function finalizeOverQuota(
+  prisma: PrismaClientLike,
+  params: {
+    projectId: string;
+    supplierCode: string | null;
+    externalId: string;
+  }
+): Promise<void> {
+  const { projectId, supplierCode, externalId } = params;
+
+  if (!isUsableExternalId(externalId)) {
+    return;
+  }
+
+  try {
+    let matchedEntry:
+      | {
+        id: string;
+        supplierCode: string;
+        finalOutcome: string | null;
+      }
+      | null = null;
+
+    if (supplierCode) {
+      matchedEntry = await prisma.supplierEntry.findUnique({
+        where: {
+          projectId_supplierCode_externalId: {
+            projectId,
+            supplierCode,
+            externalId,
+          },
+        },
+        select: {
+          id: true,
+          supplierCode: true,
+          finalOutcome: true,
+        },
+      });
+    }
+
+    if (!matchedEntry) {
+      const candidates =
+        await prisma.supplierEntry.findMany({
+          where: {
+            projectId,
+            externalId,
+          },
+          select: {
+            id: true,
+            supplierCode: true,
+            finalOutcome: true,
+          },
+          take: 2,
+        });
+
+      if (candidates.length === 1) {
+        matchedEntry = candidates[0];
+      }
+    }
+    
+    /*
+     * No SupplierEntry could be resolved for this respondent.
+     *
+     * Over Quota tracking is best-effort only and should not
+     * block the respondent flow when a matching entry cannot
+     * be identified safely.
+     */
+    if (!matchedEntry) {
+      return;
+    }
+    
+    /*
+     * Preserve the first final result if the respondent
+     * has already been finalized by another callback or
+     * prescreen outcome.
+    */
+    if (matchedEntry.finalOutcome !== null) {
+      return;
+    }
+
+    await prisma.supplierEntry.update({
+      where: {
+        id: matchedEntry.id,
+      },
+      data: {
+        currentStage: "FINALIZED",
+        finalOutcome: "OVER_QUOTA",
+        finalOutcomeAt: new Date(),
+        finalSource: "QUOTA_LIMIT",
+      },
+    });
+  } catch (error) {
+    console.error(
+      "Failed to finalize OVER_QUOTA:",
       error
     );
   }
@@ -662,6 +778,138 @@ export async function POST(
         externalId: identifier,
       });
     }
+
+    /*
+     * Quota fulfillment is evaluated after Prescreen passed.
+     *
+     * If the selected quota has already reached its target
+     * completed and its status is Close, immediately finalize
+     * the respondent as OVER_QUOTA and stop the survey flow.
+    */
+    if (pass) {
+
+      //Ensures quota metrics and status are up-to-date before checking for closed quotas
+      await recalculateProjectQuotas(projId);
+        
+      const closedQuotas = 
+        await prisma.projectQuota.findMany({
+          where: {
+            projectId: projId,
+            status: "Close",
+            prescreenQuestionId: {
+              not: null,
+            },
+          },
+          select: {
+            quotaName: true,
+            prescreenQuestionId: true,
+          },
+        });
+
+      const closedQuotaOptions =
+        await prisma.prescreenOption.findMany({
+          where: {
+            questionId: {
+              in: closedQuotas
+                .map((quota) => quota.prescreenQuestionId)
+                .filter(Boolean) as string[],
+            },
+          },
+          select: {
+            questionId: true,
+            label: true,
+            value: true,
+          },
+        });        
+
+      const closedQuotaSet = new Set<string>();
+
+      for (const quota of closedQuotas) {
+
+        const option = closedQuotaOptions.find(
+          (opt) =>
+            opt.questionId === quota.prescreenQuestionId &&
+            opt.label.trim().toLowerCase() ===
+            quota.quotaName.trim().toLowerCase()
+        );
+
+        if (!option) {
+          continue;
+        }
+
+        closedQuotaSet.add(
+          `${quota.prescreenQuestionId}|${option.label
+            .trim()
+            .toLowerCase()}`
+        );
+
+        closedQuotaSet.add(
+          `${quota.prescreenQuestionId}|${option.value
+            .trim()
+            .toLowerCase()}`
+        );
+      }
+      /*
+       * Match the respondent's selected Prescreen option against
+       * any quota that has already been closed for this project.
+      */
+      const selectedClosedQuota =
+        filtered.some((answer) => {
+
+          if (
+            typeof answer.value === "string"
+          ) {
+            return closedQuotaSet.has(
+              `${answer.questionId}|${answer.value
+                .trim()
+                .toLowerCase()}`
+            );
+          }
+
+          if (
+            Array.isArray(answer.value)
+          ) {
+            return answer.value.some(
+              (value) =>
+                closedQuotaSet.has(
+                  `${answer.questionId}|${String(
+                    value
+                  )
+                    .trim()
+                    .toLowerCase()}`
+                )
+            );
+          }
+
+          return false;
+        });
+
+      if (selectedClosedQuota) {
+
+        if (isUsableExternalId(identifier)) {
+          await finalizeOverQuota(
+            prisma,
+            {
+              projectId: projId,
+              supplierCode: supplierId,
+              externalId: identifier,
+            }
+          );
+        }
+
+        return NextResponse.json({
+          ok: true,
+          saved,
+          pass: false,
+          overQuota: true,
+          projectId: projId,
+          respondentId,
+          supplierId,
+          stage: "prescreen",
+        });
+      }
+    }
+
 
     return NextResponse.json({
       ok: true,

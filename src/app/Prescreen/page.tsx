@@ -163,6 +163,26 @@ if (nextUrl && nextUrl.startsWith("/api/projects/") && !nextUrl.includes("://"))
   return u.toString();
 }
 
+  function overQuotaDestination(): string {
+    const u = new URL("/Thanks", window.location.origin);
+
+    u.searchParams.set("status", "OVER_QUOTA");
+    u.searchParams.set("projectId", projectId);
+    u.searchParams.set("id", rid);
+    u.searchParams.set("stage", "prescreen");
+    u.searchParams.set("reason", "quota_closed");
+
+    if (supplierId) {
+      u.searchParams.set("supplierId", supplierId);
+    }
+
+    if (recid) {
+      u.searchParams.set("recid", recid);
+    }
+
+    return u.toString();
+  }
+
   function buildAnswersPayload() {
     const flat = questions.map((q) => {
       const v = answers[q.id];
@@ -224,6 +244,8 @@ launchUrl.searchParams.set("stage", "prescreen");
 launchUrl.searchParams.set("fromPrescreen", "1");
 
 window.location.assign(launchUrl.toString());
+} else if (json?.overQuota) {
+  window.location.assign(overQuotaDestination());
 } else {
   window.location.assign(terminateDestination());
 }

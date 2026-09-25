@@ -2,7 +2,7 @@
 
 import React, {useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw, Plus, Info, Search, SquareCheck, Trash2, ExternalLink, Grip, MoreVertical, GripVertical, Copy, Network } from "lucide-react";
+import { RefreshCw, Plus, Info, Search, Trash2, Grip, MoreVertical, GripVertical, Copy, Network } from "lucide-react";
 
 /* ------------------------------ confirm dialog ----------------------------- */
 function ConfirmDialog({
@@ -74,11 +74,47 @@ function SuccessDialog({
   );
 }
 
+/* ---------------------------- validation dialog --------------------------- */
+function ValidationDialog({
+    open,
+    message,
+    onClose,
+}: {
+    open: boolean;
+    message: string;
+    onClose: () => void;
+}) {
+    if (!open) return null;
+
+    return (
+        <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/30 p-4">
+            <div className="w-[min(420px,92vw)] rounded-xl bg-white p-6 text-center shadow-2xl">
+                <div className="mb-5 text-base font-medium text-slate-900">
+                    {message}
+                </div>
+
+                <button
+                    onClick={onClose}
+                    className="rounded-md bg-teal-600 px-6 py-2 text-sm font-medium text-white hover:bg-teal-700"
+                >
+                    OK
+                </button>
+            </div>
+        </div>
+    );
+}
+
 export default function QuotasPanel({ projectId }: { projectId: string }) {
     const [activeTab, setActiveTab] = useState("quotas");
 
     const [quotas, setQuotas] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+
+    const [summary, setSummary] = useState({
+        totalTargetCompletes: 0,
+        totalCompletes: 0,
+        percentage: 0,
+    });
 
     const router = useRouter();
 
@@ -86,6 +122,8 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
     const [ confirmDeleteOpen, setConfirmDeleteOpen ] = useState(false);
     const [ successMessage, setSuccessMessage] = useState("");
     const [ successOpen, setSuccessOpen] = useState(false);
+    const [ validationMessage, setValidationMessage] = useState("");
+    const [ validationOpen, setValidationOpen] = useState(false);
 
     const toggleQuotaSelection = (quotaId: string) => {
         setSelectedQuotaIds((prev) =>
@@ -107,6 +145,11 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
             setQuotas(
                 Array.isArray(data?.items) ? data.items : []
             );
+            setSummary({
+                totalTargetCompletes: data?.summary?.totalTargetCompletes ?? 0,
+                totalCompletes: data?.summary?.totalCompletes ?? 0,
+                percentage: data?.summary?.percentage ?? 0,
+            });
         } catch (error) {
             console.error("Error loading quotas:", error);
         } finally {
@@ -140,6 +183,31 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
         } catch (e: any) {
             window.alert(e?.message || "Failed to delete selected quotas");
             setConfirmDeleteOpen(false);
+        }
+    };
+
+    const updateTargetCompletes = async (quotaId: string, value: number) => {
+        try {
+            const response = await fetch(`/api/projects/${projectId}/quotas/${quotaId}`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ targetCompletes: value })
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(
+                    data?.message ||
+                    data?.error ||
+                    "Failed to update target completes"
+                );
+            }
+
+            await loadQuotas();
+        } catch (e: any) {
+            window.alert(e?.message || "Failed to update target completes");
         }
     };
 
@@ -187,13 +255,13 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
 
                 <div className="flex-1 border-r border-slate-300 mr-3">
                     <h1 className="font-medium text-gray-500 text-sm">Total Quota Count</h1>
-                    <h1 className="font-bold text-black mt-1.5 text-xl">1,000</h1>
-                    <h1 className="font-medium text-gray-500 text-sm mt-1.5">100.00%</h1>
+                    <h1 className="font-bold text-black mt-1.5 text-xl">{summary.totalTargetCompletes.toLocaleString()}</h1>
+                    <h1 className="font-medium text-gray-500 text-sm mt-1.5">{summary.totalTargetCompletes > 0 ? "100.00%" : "0.00%"}</h1>
                 </div>
                 <div className="flex-1">
                     <h1 className="font-medium text-gray-500 text-sm">Total Completes</h1>
-                    <h1 className="font-bold text-black mt-1.5 text-xl">623</h1>
-                    <h1 className="font-medium text-gray-500 text-sm mt-1.5">62.30%</h1>
+                    <h1 className="font-bold text-black mt-1.5 text-xl">{summary.totalCompletes.toLocaleString()}</h1>
+                    <h1 className="font-medium text-gray-500 text-sm mt-1.5">{Number(summary.percentage ?? 0).toFixed(2)}%</h1>
                 </div>
                 
             </div>
@@ -229,30 +297,12 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
 
                     <select className="flex items-center h-[35px] w-[120px] rounded-md border border-gray-300 px-3">
                         <option className="text-sm">All Status</option>
-                        <option className="text-sm">Open</option>
-                        <option className="text-sm">Close</option>
                         <option className="text-sm">Clone</option>
                         <option className="text-sm">Demographics</option>
                         <option className="text-sm">Delete</option>
                     </select>
 
                     <div className="ml-5 flex gap-1.5">
-                        <button
-                            type="button"
-                            className="flex items-center gap-1 h-[35px] px-3 rounded-md bg-white text-blue-500 border text-sm font-medium cursor-pointer"
-                        >
-                            <ExternalLink size={14} />
-                            Open
-                        </button>
-
-                        <button
-                            type="button"
-                            className="flex items-center gap-1 h-[35px] px-3 rounded-md bg-white text-blue-500 border text-sm font-medium cursor-pointer"
-                        >
-                            <SquareCheck size={14} />
-                            Close
-                        </button>
-
                         <button
                             type="button"
                             className="flex items-center gap-1 h-[35px] px-3 rounded-md bg-white text-blue-500 border text-sm font-medium cursor-pointer"
@@ -322,13 +372,13 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
                                 <th className="px-3 py-3">Quota Name</th>
                                 <th className="px-3 py-3">Status</th>
                                 <th className="px-3 py-3">Target Completes</th>
-                                <th className="px-3 py-3">Quota Count</th>
                                 <th className="px-3 py-3">Quota %</th>
                                 <th className="px-3 py-3">Total Accesses</th>
                                 <th className="px-3 py-3">Presc. Clicks</th>
                                 <th className="px-3 py-3">Completes</th>
                                 <th className="px-3 py-3">Terminates</th>
                                 <th className="px-3 py-3">Over Quotas</th>
+                                <th className="px-3 py-3">OE Over Quotas</th>
                                 <th className="px-3 py-3 text-center">Actions</th>
                             </tr>
                         </thead>
@@ -388,11 +438,23 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
                                     </td>
 
                                     <td className="px-3 py-4">
-                                        {quota.targetCompletes}
-                                    </td>
-
-                                    <td className="px-3 py-4">
-                                        {quota.quotaCount}
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            step={1}
+                                            defaultValue={quota.targetCompletes ?? 0}
+                                            onBlur={(e) => {
+                                                const value = Math.max(0, parseInt(e.target.value || "0", 10));
+                                                if (value < quota.completes) {
+                                                    setValidationMessage(`Target Completes cannot be less than the current Completes (${quota.completes})`);
+                                                    setValidationOpen(true);
+                                                    e.target.value = String(quota.targetCompletes ?? 0);
+                                                    return;
+                                                }
+                                                updateTargetCompletes(quota.id, value);
+                                            }}
+                                            className="w-24 rounded border border-slate-300 px-2 py-1 text-sm"
+                                        />
                                     </td>
 
                                     <td className="px-3 py-4">
@@ -424,6 +486,15 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
                                             }`}
                                     >
                                         {quota.overQuotas}
+                                    </td>
+
+                                    <td
+                                        className={`px-3 py-4 font-medium ${quota.oeOverQuotas > 0
+                                                ? "text-red-500"
+                                                : "text-gray-700"
+                                            }`}
+                                    >
+                                        {quota.oeOverQuotas}
                                     </td>
 
                                     <td className="px-3 py-4 text-center">
@@ -477,6 +548,11 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
                 open={successOpen}
                 onClose={() => setSuccessOpen(false)}
                 message={successMessage}
+            />
+            <ValidationDialog
+                open={validationOpen}
+                onClose={() => setValidationOpen(false)}
+                message={validationMessage}
             />
         </div>
     )
