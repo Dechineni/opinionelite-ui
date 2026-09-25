@@ -141,6 +141,10 @@ describe("sentry start route", () => {
         expect(location).toContain("status=TERMINATE");
 
         expect(
+            mockPrisma.supplierEntry.findUnique
+        ).not.toHaveBeenCalled();
+
+        expect(
             mockPrisma.supplierEntry.update
         ).not.toHaveBeenCalled();
     });

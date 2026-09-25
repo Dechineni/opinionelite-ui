@@ -647,6 +647,14 @@ describe("prescreen route", () => {
         expect(json.pass).toBe(false);
 
         expect(
+            mockPrisma.supplierEntry.findUnique
+        ).not.toHaveBeenCalled();
+
+        expect(
+            mockPrisma.supplierEntry.findMany
+        ).not.toHaveBeenCalled();
+
+        expect(
             mockPrisma.supplierEntry.update
         ).not.toHaveBeenCalled();
     });
