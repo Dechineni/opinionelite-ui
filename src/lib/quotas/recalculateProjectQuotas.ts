@@ -1,7 +1,7 @@
 // src/lib/quotas/recalculateProjectQuotas.ts
 
 import { getPrisma } from "@/lib/prisma";
-import { isUsableExternalId } from "@/lib/utils/isUsableExternalId";
+import { isUsableExternalId } from "@/lib/identifiers";
 
 export async function recalculateProjectQuotas(projectId: string) {
     const prisma = getPrisma();
