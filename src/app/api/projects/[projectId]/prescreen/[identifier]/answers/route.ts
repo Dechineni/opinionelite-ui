@@ -105,6 +105,18 @@ async function finalizePrescreenFailure(
   }
 ): Promise<void> {
   const { projectId, supplierCode, externalId } = params;
+  if (!isUsableExternalId(externalId)) {
+    console.warn(
+      "Prescreen failure SupplierEntry finalization skipped because externalId is a placeholder:",
+      {
+        projectId,
+        supplierCode,
+        externalId,
+      }
+    );
+
+    return;
+  }
 
   try {
     let matchedEntry:
