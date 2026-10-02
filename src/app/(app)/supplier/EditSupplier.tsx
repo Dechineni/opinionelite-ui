@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { COUNTRIES } from "@/data/countries";
 import { Plus, X } from "lucide-react";
 
+
+
 /* ----------------------------- tiny UI helpers ----------------------------- */
 const Label = ({ children, required = false }: { children: React.ReactNode; required?: boolean }) => (
   <label className="mb-1 block text-xs font-medium text-slate-700">
@@ -81,6 +83,14 @@ export default function EditSupplier({ supplierId }: { supplierId: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [successOpen, setSuccessOpen] = useState(false);
+
+  const closeSuccess = () => {
+  setSuccessOpen(false);
+  router.push("/supplier/new/supplierlist");
+  router.refresh();
+};
+
   const [form, setForm] = useState({
     supplierName: "",
     website: "",
@@ -202,9 +212,10 @@ export default function EditSupplier({ supplierId }: { supplierId: string }) {
         body: JSON.stringify(body),
       });
       if (!r.ok) throw new Error(await r.text());
-      alert("Supplier updated successfully!");
-      router.push("/supplier/new/supplierlist");
-      router.refresh();
+
+      setSuccessOpen(true);
+
+      
     } catch (e: any) {
       setErr(e?.message ?? "Update failed");
     } finally {
@@ -477,6 +488,31 @@ export default function EditSupplier({ supplierId }: { supplierId: string }) {
           </button>
         </div>
       </form>
+
+      {successOpen && (
+  <div className="fixed inset-0 z-[100] grid place-items-center bg-black/40 p-4">
+    <div className="w-full max-w-sm rounded-xl bg-white p-6 text-center shadow-xl">
+      <div className="mb-3 text-lg font-semibold text-slate-900">
+        Supplier updated successfully!
+      </div>
+
+      {form.code && (
+  <div className="mb-2 text-sm text-slate-700">
+    Edited-Supplier
+    <span className="text-slate-500"> ({form.code})</span>
+  </div>
+)}
+
+      <button
+        type="button"
+        onClick={closeSuccess}
+        className="mt-2 inline-flex justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+      >
+        OK
+      </button>
+    </div>
+  </div>
+)}
     </div>
   );
 }
