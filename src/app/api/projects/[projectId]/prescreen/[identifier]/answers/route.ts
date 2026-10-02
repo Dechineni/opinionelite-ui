@@ -838,11 +838,15 @@ export async function POST(
 
       for (const quota of closedQuotas) {
 
+        const normalizedQuotaName = quota.quotaName?.trim().toLowerCase() ?? "";
+
         const option = closedQuotaOptions.find(
           (opt) =>
             opt.questionId === quota.prescreenQuestionId &&
-            opt.label.trim().toLowerCase() ===
-            quota.quotaName.trim().toLowerCase()
+            (
+              opt.label?.trim().toLowerCase() === normalizedQuotaName ||
+              opt.value?.trim().toLowerCase() === normalizedQuotaName
+            )
         );
 
         if (!option) {
@@ -909,11 +913,33 @@ export async function POST(
           );
         }
 
+        let overQuotaRedirectUrl: string | null = null;
+
+        const supplierRedirect =
+          await prisma.surveyRedirect.findFirst({
+            where: {
+              projectId: projId,
+              externalId: identifier,
+            },
+            orderBy: {
+              createdAt: "desc",
+            },
+            select: {
+              id: true,
+            },
+          });
+
+        if (supplierRedirect) {
+          overQuotaRedirectUrl =
+            `/Thanks/Index?auth=40&pid=${supplierRedirect.id}`;
+        }
+
         return NextResponse.json({
           ok: true,
           saved,
           pass: false,
           overQuota: true,
+          redirectUrl: overQuotaRedirectUrl,
           projectId: projId,
           respondentId,
           supplierId,

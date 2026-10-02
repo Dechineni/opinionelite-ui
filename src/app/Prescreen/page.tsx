@@ -245,9 +245,11 @@ launchUrl.searchParams.set("fromPrescreen", "1");
 
 window.location.assign(launchUrl.toString());
 } else if (json?.overQuota) {
-  window.location.assign(overQuotaDestination());
-} else {
-  window.location.assign(terminateDestination());
+  if (json?.redirectUrl) {
+    window.location.assign(json.redirectUrl);
+  } else {
+    window.location.assign(overQuotaDestination());
+  }
 }
     } catch (e: any) {
       setError(e?.message || "Failed to submit prescreen.");

@@ -15,12 +15,20 @@ export async function recalculateProjectQuotas(projectId: string) {
             continue; // Skip if there's no associated prescreen questionId
         }
 
-        const option = await prisma.prescreenOption.findFirst({
+        const normalizedQuotaName = quota.quotaName?.trim().toLowerCase() ?? "";
+
+        const options = await prisma.prescreenOption.findMany({
             where: {
                 questionId: quota.prescreenQuestionId,
-                label: quota.quotaName,
             },
         });
+
+        const option = options.find(
+            (o) =>
+                o.label?.trim().toLowerCase() === normalizedQuotaName ||
+                o.value?.trim().toLowerCase() === normalizedQuotaName
+        );
+
 
         if (!option) {
             continue; // Skip if the option doesn't exist
@@ -42,12 +50,23 @@ export async function recalculateProjectQuotas(projectId: string) {
                 continue; // Skip if the respondent's externalId is not usable
             }
 
-            const radioMatch = answer.answerValue === option.value
-                || answer.answerValue === option.label;
+            const answerValue = answer.answerValue?.trim().toLowerCase();
 
-            const checkboxMatch = answer.selectedValues.includes(option.value)
-                || answer.selectedValues.includes(option.label);
+            const radioMatch =
+                answerValue === option.value?.trim().toLowerCase() ||
+                answerValue === option.label?.trim().toLowerCase();
 
+            const selectedValues = (answer.selectedValues ?? []).map(
+                (v) => String(v).trim().toLowerCase()
+            );
+
+            const checkboxMatch =
+                selectedValues.includes(
+                    option.value?.trim().toLowerCase() ?? ""
+                ) ||
+                selectedValues.includes(
+                    option.label?.trim().toLowerCase() ?? ""
+                );
 
             if (radioMatch || checkboxMatch) {
                 respondentIds.add(answer.respondentId);
@@ -156,9 +175,9 @@ export async function recalculateProjectQuotas(projectId: string) {
         const quotaPercent = quota.targetCompletes > 0 ? (completes / quota.targetCompletes) * 100 : 0;
 
         const status = quota.targetCompletes > 0 &&
-                       completes >= quota.targetCompletes
-                           ? "Close"
-                           : "Open";
+            completes >= quota.targetCompletes
+            ? "Close"
+            : "Open";
 
         await prisma.projectQuota.update({
             where: { id: quota.id },
