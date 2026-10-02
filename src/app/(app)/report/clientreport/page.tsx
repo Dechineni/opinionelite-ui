@@ -1,5 +1,5 @@
 // FILE: src/app/(app)/report/clientreport/page.tsx
-export const runtime = 'edge';
+export const runtime = "edge";
 
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";

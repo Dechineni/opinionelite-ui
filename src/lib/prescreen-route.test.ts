@@ -8,6 +8,7 @@ const mockPrisma = {
 
     respondent: {
         findFirst: vi.fn(),
+        findMany: vi.fn(),
         create: vi.fn(),
     },
 
@@ -18,12 +19,27 @@ const mockPrisma = {
     prescreenAnswer: {
         deleteMany: vi.fn(),
         create: vi.fn(),
+        findMany: vi.fn(),
     },
 
     supplierEntry: {
         findUnique: vi.fn(),
         findMany: vi.fn(),
         update: vi.fn(),
+    },
+
+    projectQuota: {
+        findMany: vi.fn(),
+        update: vi.fn(),
+    },
+
+    prescreenOption: {
+        findFirst: vi.fn(),
+        findMany: vi.fn(),
+    },
+
+    supplier: {
+        findUnique: vi.fn(),
     },
 };
 
@@ -36,7 +52,14 @@ describe("prescreen route", () => {
         vi.clearAllMocks();
         mockPrisma.supplierEntry.findMany.mockResolvedValue([]);
         mockPrisma.supplierEntry.findUnique.mockResolvedValue(null);
-        mockPrisma.supplierEntry.update.mockResolvedValue({});
+        mockPrisma.supplierEntry.update.mockResolvedValue({}); 
+        mockPrisma.projectQuota.findMany.mockResolvedValue([]);
+        mockPrisma.projectQuota.update.mockResolvedValue({});
+        mockPrisma.prescreenOption.findFirst.mockResolvedValue(null);
+        mockPrisma.prescreenOption.findMany.mockResolvedValue([]);
+        mockPrisma.prescreenAnswer.findMany.mockResolvedValue([]);
+        mockPrisma.respondent.findMany.mockResolvedValue([]);
+        mockPrisma.supplier.findUnique.mockResolvedValue(null);
     });
 
     it("fails when required text answer is empty", async () => {

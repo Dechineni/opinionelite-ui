@@ -92,11 +92,6 @@ function buildEntryKey(
   return `${supplierCode}\u0000${externalId}`;
 }
 
-/**
- * Build the Supplier Mapping URL that OP Panel will show
- * and persist in the database.
- */
-
 /* ---------------------------------- GET ---------------------------------- */
 
 /**
