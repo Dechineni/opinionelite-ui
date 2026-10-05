@@ -250,6 +250,8 @@ window.location.assign(launchUrl.toString());
   } else {
     window.location.assign(overQuotaDestination());
   }
+} else {
+  window.location.assign(terminateDestination());
 }
     } catch (e: any) {
       setError(e?.message || "Failed to submit prescreen.");
