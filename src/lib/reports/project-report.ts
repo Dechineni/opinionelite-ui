@@ -34,6 +34,14 @@ export async function generateProjectReport(
       projectCpi: true,
       managerEmail: true,
 
+      SurveyRedirect :{
+        select:{
+          id : true,
+          supplierId : true,
+          externalId : true
+        }
+      },
+      
       supplierEntries:{
         orderBy: {
           firstEnteredAt: "asc",
@@ -251,6 +259,12 @@ export async function generateProjectReport(
 
       const supplierCpi = supplierCpiLookup.get(entry.supplierCode);
 
+      const surveyRedirect = project.SurveyRedirect.find(
+        (redirect) =>
+          redirect.supplierId === entry.supplierCode &&
+          redirect.externalId === entry.externalId
+      );
+
        // Calculate LOI (Length of Interview) in minutes
         const loi =
           entry.firstEnteredAt &&
@@ -274,6 +288,8 @@ export async function generateProjectReport(
 
           supplierIdentifier:
             entry.externalId,
+
+          hashIdentifier : surveyRedirect?.id ?? "",
 
           projectCpi:
             Number(project.projectCpi),
