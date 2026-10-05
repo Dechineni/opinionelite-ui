@@ -3,6 +3,7 @@ export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { isUsableExternalId } from "@/lib/identifiers";
 
 function buildTerminateUrl(origin: string) {
   return new URL("/Thanks?status=TERMINATE", origin);
@@ -145,7 +146,7 @@ export async function GET(
   const finalizeSupplierEntryAsTerminate = async (
     callbackReason: string
   ): Promise<void> => {
-    if (!supplierCode || !externalId) {
+    if (!supplierCode || !externalId || !isUsableExternalId(externalId)) {
       console.warn(
         `SupplierEntry was not finalized for ${callbackReason}: missing supplierCode or externalId`,
         {

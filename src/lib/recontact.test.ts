@@ -39,4 +39,22 @@ describe("resolveEffectiveRecid", () => {
 
     expect(first).not.toBe(second);
   });
+
+  it("trims incoming recid", () => {
+    expect(
+      resolveEffectiveRecid("  REC123  ", "")
+    ).toBe("REC123");
+  });
+
+  it("prefers incoming recid over stored recid", () => {
+    expect(
+      resolveEffectiveRecid("NEWREC", "OLDREC")
+    ).toBe("NEWREC");
+  });
+
+  it("preserves same recid value", () => {
+    expect(
+      resolveEffectiveRecid("REC123", "REC123")
+    ).toBe("REC123");
+  });
 });
