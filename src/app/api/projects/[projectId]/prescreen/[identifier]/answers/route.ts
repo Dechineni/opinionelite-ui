@@ -106,6 +106,10 @@ async function finalizePrescreenFailure(
 ): Promise<void> {
   const { projectId, supplierCode, externalId } = params;
 
+  if (!isUsableExternalId(externalId)) {
+    return;
+  }
+  
   try {
     let matchedEntry:
       | {
