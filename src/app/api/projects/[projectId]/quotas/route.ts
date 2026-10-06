@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { recalculateProjectQuotas } from "@/lib/quotas/recalculateProjectQuotas";
 
 const NO_STORE_HEADERS = {
     "Cache-Control": "no-store, max-age=0",
@@ -32,18 +33,39 @@ export async function GET(
         const projId = await resolveProjectId(projectId);
 
         if (!projId) {
-            return NextResponse.json(
-                [],
+            return NextResponse.json({
+                items: [],
+                summary: {
+                    totalTargetCompletes: 0,
+                    totalCompletes: 0,
+                    percentage: 0
+                }
+            },
                 { headers: NO_STORE_HEADERS }
             );
         }
+
+        await recalculateProjectQuotas(projId);
 
         const quotas = await prisma.projectQuota.findMany({
             where: { projectId: projId },
             orderBy: { sortOrder: "asc" },
         });
 
-        return NextResponse.json({ items: quotas }, { headers: NO_STORE_HEADERS });
+        const totalTargetCompletes = quotas.reduce((sum, quota) => sum + quota.targetCompletes, 0);
+        const totalCompletes = quotas.reduce((sum, quota) => sum + quota.completes, 0);
+        const percentage = totalTargetCompletes > 0 ? (totalCompletes / totalTargetCompletes) * 100 : 0;
+
+
+        return NextResponse.json({
+            items: quotas,
+            summary: {
+                totalTargetCompletes,
+                totalCompletes,
+                percentage: Number(percentage.toFixed(2))
+            }
+        },
+            { headers: NO_STORE_HEADERS });
     } catch (e: any) {
         return NextResponse.json(
             {
