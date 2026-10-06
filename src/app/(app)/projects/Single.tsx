@@ -120,6 +120,7 @@ export default function SingleProject() {
     tablet: false,
     desktop: false,
     sentryEnabled: false,
+    quotasEnabled: false,
 
   });
 
@@ -222,6 +223,7 @@ export default function SingleProject() {
 
         preScreen: form.preScreen,
         sentryEnabled: form.sentryEnabled,
+        quotasEnabled: form.quotasEnabled,
         exclude: form.exclude,
         geoLocation: form.geoLocation,
         dynamicThanks: form.dynamicThanks,
@@ -487,6 +489,7 @@ export default function SingleProject() {
               [
                 "preScreen",
                 "sentryEnabled",
+                "quotasEnabled",
                 "exclude",
                 "geoLocation",
                 "dynamicThanks",
@@ -505,7 +508,9 @@ export default function SingleProject() {
                   onChange={(e) => update(k, e.target.checked)}
                 />
                 <span>
-  {k === "sentryEnabled" ? "Sentry" : k}
+  {k === "sentryEnabled" ? "Sentry" 
+  : k === "quotasEnabled" ? "Quotas"
+  : k}
 </span>
               </label>
             ))}

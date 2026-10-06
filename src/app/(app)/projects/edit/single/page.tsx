@@ -90,6 +90,7 @@ export default function EditSingleProject() {
 
     preScreen: false,
     sentryEnabled: false,
+    quotasEnabled: false,
     exclude: false,
     geoLocation: false,
     dynamicThanks: false,
@@ -160,6 +161,7 @@ export default function EditSingleProject() {
 
           preScreen: !!p.preScreen,
           sentryEnabled: !!p.sentryEnabled,
+          quotasEnabled: !!p.quotasEnabled,
           exclude: !!p.exclude,
           geoLocation: !!p.geoLocation,
           dynamicThanks: !!p.dynamicThanksUrl,
@@ -242,6 +244,7 @@ export default function EditSingleProject() {
 
         preScreen: form.preScreen,
         sentryEnabled: form.sentryEnabled,
+        quotasEnabled: form.quotasEnabled,
         exclude: form.exclude,
         geoLocation: form.geoLocation,
         dynamicThanksUrl: form.dynamicThanks,
@@ -515,6 +518,7 @@ export default function EditSingleProject() {
               [
                 "preScreen",
                 "sentryEnabled",
+                "quotasEnabled",
                 "exclude",
                 "geoLocation",
                 "dynamicThanks",
@@ -533,7 +537,9 @@ export default function EditSingleProject() {
                   onChange={(e) => update(k, e.target.checked)}
                 />
                 <span>
-                  {k === "sentryEnabled" ? "Sentry" : k.charAt(0).toUpperCase() + k.slice(1)}
+                  {k === "sentryEnabled" ? "Sentry"
+                  : k === "quotasEnabled" ? "Quotas"
+                  : k.charAt(0).toUpperCase() + k.slice(1)}
                 </span>
               </label>
             ))}
