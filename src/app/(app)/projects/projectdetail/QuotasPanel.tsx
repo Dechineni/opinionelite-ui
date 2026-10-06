@@ -1,0 +1,559 @@
+"use client"
+
+import React, {useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { RefreshCw, Plus, Info, Search, Trash2, Grip, MoreVertical, GripVertical, Copy, Network } from "lucide-react";
+
+/* ------------------------------ confirm dialog ----------------------------- */
+function ConfirmDialog({
+  open,
+  message = "Do you want to Delete?",
+  yesText = "Yes",
+  noText = "No",
+  onYes,
+  onNo,
+}: {
+  open: boolean;
+  message?: string;
+  yesText?: string;
+  noText?: string;
+  onYes: () => void | Promise<void>;
+  onNo: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/30 p-4">
+      <div className="w-[min(420px,92vw)] rounded-xl bg-white p-6 text-center shadow-2xl">
+        <div className="mb-6 text-xl font-semibold text-slate-900">
+          {message}
+        </div>
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={onYes}
+            className="min-w-[88px] rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
+          >
+            {yesText}
+          </button>
+          <button
+            onClick={onNo}
+            className="min-w-[88px] rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50"
+          >
+            {noText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------ success dialog ----------------------------- */
+function SuccessDialog({
+  open,
+  onClose,
+  message = "Created Successfully!",
+}: {
+  open: boolean;
+  onClose: () => void;
+  message?: string;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30 p-4">
+      <div className="w-[min(360px,92vw)] rounded-xl bg-white p-6 text-center shadow-2xl">
+        <div className="mb-5 text-lg font-semibold text-slate-900">
+          {message}
+        </div>
+        <button
+          onClick={onClose}
+          className="rounded-md bg-teal-600 px-6 py-2 text-sm font-medium text-white hover:bg-teal-700"
+        >
+          OK
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------- validation dialog --------------------------- */
+function ValidationDialog({
+    open,
+    message,
+    onClose,
+}: {
+    open: boolean;
+    message: string;
+    onClose: () => void;
+}) {
+    if (!open) return null;
+
+    return (
+        <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/30 p-4">
+            <div className="w-[min(420px,92vw)] rounded-xl bg-white p-6 text-center shadow-2xl">
+                <div className="mb-5 text-base font-medium text-slate-900">
+                    {message}
+                </div>
+
+                <button
+                    onClick={onClose}
+                    className="rounded-md bg-teal-600 px-6 py-2 text-sm font-medium text-white hover:bg-teal-700"
+                >
+                    OK
+                </button>
+            </div>
+        </div>
+    );
+}
+
+export default function QuotasPanel({ projectId }: { projectId: string }) {
+    const [activeTab, setActiveTab] = useState("quotas");
+
+    const [quotas, setQuotas] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const [summary, setSummary] = useState({
+        totalTargetCompletes: 0,
+        totalCompletes: 0,
+        percentage: 0,
+    });
+
+    const router = useRouter();
+
+    const [ selectedQuotaIds, setSelectedQuotaIds ] = useState<string[]>([]);
+    const [ confirmDeleteOpen, setConfirmDeleteOpen ] = useState(false);
+    const [ successMessage, setSuccessMessage] = useState("");
+    const [ successOpen, setSuccessOpen] = useState(false);
+    const [ validationMessage, setValidationMessage] = useState("");
+    const [ validationOpen, setValidationOpen] = useState(false);
+
+    const toggleQuotaSelection = (quotaId: string) => {
+        setSelectedQuotaIds((prev) =>
+            prev.includes(quotaId)
+                ? prev.filter((id) => id !== quotaId)
+                : [...prev, quotaId]
+        );
+    };
+
+    const loadQuotas = async () => {
+        try {
+            setLoading(true);
+            const response = await fetch(`/api/projects/${projectId}/quotas`,
+                {
+                    cache: "no-store",
+                }
+            );
+            const data = await response.json();
+            setQuotas(
+                Array.isArray(data?.items) ? data.items : []
+            );
+            setSummary({
+                totalTargetCompletes: data?.summary?.totalTargetCompletes ?? 0,
+                totalCompletes: data?.summary?.totalCompletes ?? 0,
+                percentage: data?.summary?.percentage ?? 0,
+            });
+        } catch (error) {
+            console.error("Error loading quotas:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const deleteSelectedQuotas = async () => {
+        try {
+            const response = await fetch(`/api/projects/${projectId}/quotas`, {
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ quotaIds: selectedQuotaIds })
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(
+                    data?.message ||
+                    data?.error ||
+                    "Failed to delete selected quotas");
+            }
+
+            setSelectedQuotaIds([]);
+            setConfirmDeleteOpen(false);
+            setSuccessMessage("Selected quotas deleted successfully.");
+            setSuccessOpen(true);
+            await loadQuotas();
+        } catch (e: any) {
+            window.alert(e?.message || "Failed to delete selected quotas");
+            setConfirmDeleteOpen(false);
+        }
+    };
+
+    const updateTargetCompletes = async (quotaId: string, value: number) => {
+        try {
+            const response = await fetch(`/api/projects/${projectId}/quotas/${quotaId}`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ targetCompletes: value })
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(
+                    data?.message ||
+                    data?.error ||
+                    "Failed to update target completes"
+                );
+            }
+
+            await loadQuotas();
+        } catch (e: any) {
+            window.alert(e?.message || "Failed to update target completes");
+        }
+    };
+
+    useEffect(() => {
+        loadQuotas();
+    }, [projectId]);
+
+    return(
+        <div className="quotas-main-container rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+           
+           {/* Quotas Heading Section */}
+            <div className="quotas-heading-container flex items-center justify-between">
+                <div>
+                    <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                        Project Quotas <Info size={16} />
+                    </h1>
+                    <p className="mt-1 text-sm text-gray-500">
+                        Create and manage quotas for your project
+                    </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={loadQuotas}
+                        className="flex items-center justify-center gap-1.5 w-[100px] h-[35px] rounded-md border border-gray-300 bg-white text-sm font-medium cursor-pointer"
+                    >
+                        <RefreshCw size={15} />
+                        Refresh
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => router.push(`/projects/projectdetail?id=${projectId}&tab=prescreen`)}
+                        className="flex items-center gap-1.5 h-[35px] px-4 rounded-md bg-blue-600 text-white text-sm font-medium cursor-pointer"
+                    >
+                        <Plus size={16} />
+                        Add Quota
+                    </button>
+                </div>
+            </div>
+           
+            {/* Quotas Count Section */}
+            <div className="quotas-count-container flex rounded-xl border border-slate-200 bg-white p-3 shadow-sm mt-3 w-full">
+
+                <div className="flex-1 border-r border-slate-300 mr-3">
+                    <h1 className="font-medium text-gray-500 text-sm">Total Quota Count</h1>
+                    <h1 className="font-bold text-black mt-1.5 text-xl">{summary.totalTargetCompletes.toLocaleString()}</h1>
+                    <h1 className="font-medium text-gray-500 text-sm mt-1.5">{summary.totalTargetCompletes > 0 ? "100.00%" : "0.00%"}</h1>
+                </div>
+                <div className="flex-1">
+                    <h1 className="font-medium text-gray-500 text-sm">Total Completes</h1>
+                    <h1 className="font-bold text-black mt-1.5 text-xl">{summary.totalCompletes.toLocaleString()}</h1>
+                    <h1 className="font-medium text-gray-500 text-sm mt-1.5">{Number(summary.percentage ?? 0).toFixed(2)}%</h1>
+                </div>
+                
+            </div>
+            
+            {/* Quotas Button Section */}
+            <div className="quotas-buttons-container w-full mt-5">
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => setActiveTab("quotas")}
+                        className={`px-4 py-2 ${
+                            activeTab === "quotas"
+                                ? "text-blue-600 border-b-2 border-blue-600 font-medium"
+                                : "text-gray-500"
+                        }`}
+                    >
+                        Quotas
+                    </button>
+                </div>
+                <hr className="border border-gray-200 mt-[-1]"/>
+            </div>
+            
+            {/* Quotas Filters Section */}
+            <div className="quotas-filters-container mt-2 p-3 flex w-full">
+                <div className="flex items-center gap-3 w-full">
+                    <div className="flex items-center h-[35px] w-[220px] rounded-md border border-gray-300 px-3 gap-2">
+                        <Search size={16} className="text-gray-500" />
+                        <input
+                            type="text"
+                            className="flex-1 text-sm outline-none"
+                            placeholder="Search quotas..."
+                        />
+                    </div>
+
+                    <select className="flex items-center h-[35px] w-[120px] rounded-md border border-gray-300 px-3">
+                        <option className="text-sm">All Status</option>
+                        <option className="text-sm">Clone</option>
+                        <option className="text-sm">Demographics</option>
+                        <option className="text-sm">Delete</option>
+                    </select>
+
+                    <div className="ml-5 flex gap-1.5">
+                        <button
+                            type="button"
+                            className="flex items-center gap-1 h-[35px] px-3 rounded-md bg-white text-blue-500 border text-sm font-medium cursor-pointer"
+                            >
+                            <Copy size={14} />
+                            Clone
+                        </button>
+
+                        <button
+                            type="button"
+                            className="flex items-center gap-1 h-[35px] px-3 rounded-md bg-white text-blue-500 border text-sm font-medium cursor-pointer"
+                        >
+                            <Network size={14} />
+                            Demographics
+                        </button>
+
+                        <button
+                            type="button"
+                            disabled={selectedQuotaIds.length === 0}
+                            onClick={() => {
+                                if (selectedQuotaIds.length > 0) {
+                                    setConfirmDeleteOpen(true);
+                                }
+                            }}
+                            className={`flex items-center gap-1 h-[35px] px-3 rounded-md border text-sm font-medium
+                                ${
+                                    selectedQuotaIds.length === 0
+                                        ? "cursor-not-allowed opacity-50 text-gray-400"
+                                        : "cursor-pointer text-red-500 border-red-300 bg-red-50"  
+                                }`}
+                        >
+                            <Trash2 size={14} />
+                            Delete
+                        </button>
+                    </div>
+
+                    <button
+                        type="button"
+                        className="ml-auto flex items-center gap-1 h-[35px] px-3 rounded-md bg-white text-blue-500 border text-sm font-medium cursor-pointer"
+                    >
+                        <Grip size={14} />
+                        Save Order
+                    </button>
+                </div>
+            </div>
+
+            {/* Quotas Table Section */}
+            <div className="quotas-filters-container">
+                <div className="mt-4 overflow-x-auto rounded-lg border border-slate-100">
+                    <table className="w-full text-sm border-collapse">
+                        <thead className="bg-gray-50 border-b border-gray-200">
+                            <tr className="text-left text-gray-700">
+                                <th className="px-3 py-3">
+                                    <input type="checkbox"
+                                        checked={quotas.length > 0 && selectedQuotaIds.length === quotas.length}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                setSelectedQuotaIds(quotas.map((quota) => quota.id));
+                                            } else {
+                                                setSelectedQuotaIds([]);
+                                            }
+                                        }}
+                                    />
+                                </th>
+                                <th className="px-2 py-3"></th>
+                                <th className="px-3 py-3">#</th>
+                                <th className="px-3 py-3">Quota Name</th>
+                                <th className="px-3 py-3">Status</th>
+                                <th className="px-3 py-3">Target Completes</th>
+                                <th className="px-3 py-3">Quota %</th>
+                                <th className="px-3 py-3">Total Accesses</th>
+                                <th className="px-3 py-3">Presc. Clicks</th>
+                                <th className="px-3 py-3">Completes</th>
+                                <th className="px-3 py-3">Terminates</th>
+                                <th className="px-3 py-3">Over Quotas</th>
+                                <th className="px-3 py-3">OE Over Quotas</th>
+                                <th className="px-3 py-3 text-center">Actions</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            {loading ? (
+                                <tr>
+                                    <td colSpan={14} className="text-center py-4">
+                                        Loading quotas...
+                                    </td>
+                                </tr>
+                            ) : quotas.length === 0 ? (
+                                <tr>
+                                    <td colSpan={14} className="text-center py-4">
+                                        No quotas synced yet. Use the Sync action from
+                                        the Prescreen tab to create quotas from mapped
+                                        options.
+                                    </td>
+                                </tr>
+                            ) : (
+                                 quotas.map((quota, index) => (
+                                    <tr
+                                        key={quota.id}
+                                        className="border-b border-gray-200"
+                                    >
+                                         <td className="px-3 py-4">
+                                             <input type="checkbox"
+                                                 checked={selectedQuotaIds.includes(quota.id)}
+                                                 onChange={() =>
+                                                     toggleQuotaSelection(quota.id)
+                                                 } />
+                                         </td>
+                                    <td className="px-2 py-4">
+                                        <GripVertical
+                                            size={16}
+                                            className="text-gray-400 cursor-move"
+                                        />
+                                    </td>
+
+                                    <td className="px-3 py-4">{index + 1}</td>
+
+                                    <td className="px-3 py-4">
+                                        <span className="font-medium text-blue-600 cursor-pointer">
+                                            {quota.quotaName}
+                                        </span>
+                                    </td>
+
+                                    <td className="px-3 py-4">
+                                        <span
+                                            className={`px-3 py-1 rounded-md text-xs font-medium ${quota.status === "Open"
+                                                    ? "bg-green-100 text-green-700"
+                                                    : "bg-red-100 text-red-700"
+                                                }`}
+                                        >
+                                            {quota.status}
+                                        </span>
+                                    </td>
+
+                                    <td className="px-3 py-4">
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            step={1}
+                                            defaultValue={quota.targetCompletes ?? 0}
+                                            onBlur={(e) => {
+                                                const value = Math.max(0, parseInt(e.target.value || "0", 10));
+                                                if (value < quota.completes) {
+                                                    setValidationMessage(`Target Completes cannot be less than the current Completes (${quota.completes})`);
+                                                    setValidationOpen(true);
+                                                    e.target.value = String(quota.targetCompletes ?? 0);
+                                                    return;
+                                                }
+                                                updateTargetCompletes(quota.id, value);
+                                            }}
+                                            className="w-24 rounded border border-slate-300 px-2 py-1 text-sm"
+                                        />
+                                    </td>
+
+                                    <td className="px-3 py-4">
+                                        {Number(quota.quotaPercent ?? 0).toFixed(2)}%
+                                    </td>
+
+                                    <td className="px-3 py-4">
+                                        {quota.totalAccesses.toLocaleString()}
+                                    </td>
+
+                                    <td className="px-3 py-4">
+                                        {quota.prescreenClicks?.toLocaleString()}
+                                    </td>
+
+                                    <td className="px-3 py-4">
+                                        <span className="text-blue-600 font-semibold cursor-pointer">
+                                            {quota.completes}
+                                        </span>
+                                    </td>
+
+                                    <td className="px-3 py-4">
+                                        {quota.terminates}
+                                    </td>
+
+                                    <td
+                                        className={`px-3 py-4 font-medium ${quota.overQuotas > 0
+                                                ? "text-red-500"
+                                                : "text-gray-700"
+                                            }`}
+                                    >
+                                        {quota.overQuotas}
+                                    </td>
+
+                                    <td
+                                        className={`px-3 py-4 font-medium ${quota.oeOverQuotas > 0
+                                                ? "text-red-500"
+                                                : "text-gray-700"
+                                            }`}
+                                    >
+                                        {quota.oeOverQuotas}
+                                    </td>
+
+                                    <td className="px-3 py-4 text-center">
+                                        <button>
+                                            <MoreVertical
+                                                size={18}
+                                                className="text-gray-500"
+                                            />
+                                        </button>
+                                    </td>
+                                </tr>
+                            )))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Pagination Section */}
+            <div className="flex items-center justify-between border border-t-0 border-slate-200 rounded-b-lg px-4 py-3 text-sm bg-white">
+                <div className="text-gray-500">
+                    Showing 1 to 7 of 7 quotas
+                </div>
+
+                <div className="flex items-center gap-3">
+                    <button className="w-8 h-8 border rounded text-gray-400">
+                        ‹
+                    </button>
+
+                    <button className="w-8 h-8 border rounded bg-blue-50 border-blue-600 text-blue-600 font-medium">
+                        1
+                    </button>
+
+                    <button className="w-8 h-8 border rounded text-gray-400">
+                        ›
+                    </button>
+
+                    <select className="h-8 border rounded px-2">
+                        <option>10 / page</option>
+                    </select>
+                </div>
+            </div>  
+            <ConfirmDialog
+                open={confirmDeleteOpen}
+                message="Do you want to Delete?"
+                yesText="Yes"
+                noText="No"
+                onYes={deleteSelectedQuotas}
+                onNo={() => setConfirmDeleteOpen(false)}
+            />
+            <SuccessDialog
+                open={successOpen}
+                onClose={() => setSuccessOpen(false)}
+                message={successMessage}
+            />
+            <ValidationDialog
+                open={validationOpen}
+                onClose={() => setValidationOpen(false)}
+                message={validationMessage}
+            />
+        </div>
+    )
+};
