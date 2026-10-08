@@ -208,6 +208,14 @@ export async function generateProjectReport(
     ])
   );
 
+  // SURVEY REDIRECT LOOKUP
+  const surveyRedirectLookup = new Map(
+    project.SurveyRedirect.map((redirect) => [
+      `${redirect.supplierId}::${redirect.externalId}`,
+      redirect.id,
+    ])
+  );
+
   // STATUS DESCRIPTION HELPER
   const getStatusDescription = (
     finalOutcome: string | null,
@@ -259,11 +267,10 @@ export async function generateProjectReport(
 
       const supplierCpi = supplierCpiLookup.get(entry.supplierCode);
 
-      const surveyRedirect = project.SurveyRedirect.find(
-        (redirect) =>
-          redirect.supplierId === entry.supplierCode &&
-          redirect.externalId === entry.externalId
-      );
+      const hashIdentifier =
+        surveyRedirectLookup.get(
+          `${entry.supplierCode}::${entry.externalId}`
+        ) ?? "";
 
        // Calculate LOI (Length of Interview) in minutes
         const loi =
@@ -289,7 +296,7 @@ export async function generateProjectReport(
           supplierIdentifier:
             entry.externalId,
 
-          hashIdentifier : surveyRedirect?.id ?? "",
+          hashIdentifier : hashIdentifier,
 
           projectCpi:
             Number(project.projectCpi),
