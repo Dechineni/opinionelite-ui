@@ -12,6 +12,7 @@ interface RespondentRow {
   supplierId: string;
   supplierName: string;
   supplierIdentifier: string;
+  hashIdentifier: string;
   projectCpi: number;
   supplierCpi: number | null;
   statusDescription: string;
@@ -320,6 +321,7 @@ export async function GET(
         "Supplier Id",
         "Supplier Name",
         "Supplier Identifier",
+        "Hash Identifier",
         "Project CPI",
         "Supplier CPI",
         "Status Description",
@@ -348,6 +350,7 @@ export async function GET(
         "H2",
         "I2",
         "J2",
+        "K2"
       ];
 
       headerRowCells.forEach((cell) => {
@@ -386,6 +389,7 @@ export async function GET(
         item.supplierId,
         item.supplierName,
         item.supplierIdentifier ?? "",
+        item.hashIdentifier ?? "",
         Number(item.projectCpi ?? 0),
         item.supplierCpi === null ? "" : Number(item.supplierCpi),
         item.statusDescription,
@@ -436,19 +440,24 @@ export async function GET(
           respondentSheet[`D${row}`].t = "s";
         }
 
-        // Project CPI
+        // Hash Identifier (Text)
         if (respondentSheet[`E${row}`]) {
-          respondentSheet[`E${row}`].z = "0.00";
+        respondentSheet[`E${row}`].t = "s";
         }
 
-        // Supplier CPI
+        // Project CPI
         if (respondentSheet[`F${row}`]) {
           respondentSheet[`F${row}`].z = "0.00";
         }
 
+        // Supplier CPI
+        if (respondentSheet[`G${row}`]) {
+          respondentSheet[`G${row}`].z = "0.00";
+        }
+
         // LOI
-        if (respondentSheet[`J${row}`]) {
-          respondentSheet[`J${row}`].z = "0.00";
+        if (respondentSheet[`K${row}`]) {
+          respondentSheet[`K${row}`].z = "0.00";
         }
       }
 
@@ -461,7 +470,7 @@ export async function GET(
 
       // FILTERS
       respondentSheet["!autofilter"] = {
-        ref: "A2:J2",
+        ref: "A2:K2",
       };
 
       // COLUMN WIDTHS
@@ -470,6 +479,7 @@ export async function GET(
         { wch: 15 }, // Supplier Id
         { wch: 25 }, // Supplier Name
         { wch: 45 }, // Supplier Identifier
+        { wch: 45 }, // Hash Identifier
         { wch: 15 }, // Project CPI
         { wch: 15 }, // Supplier CPI
         { wch: 25 }, // Status Description
