@@ -3,6 +3,7 @@ export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { isUsableExternalId } from "@/lib/identifiers";
 
 export async function POST(
   req: Request,
@@ -22,6 +23,15 @@ export async function POST(
       return NextResponse.json(
         {
           error: "Missing projectId, supplierId, or externalId",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!isUsableExternalId(externalId)) {
+      return NextResponse.json(
+        {
+          error: "Invalid externalId",
         },
         { status: 400 }
       );
