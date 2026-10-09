@@ -112,10 +112,12 @@ describe("survey live route", () => {
   });
 
   it.each([
-  "[identifier]",
-  "{identifier}",
-  "identifier",
-])(
+    "[identifier]",
+    "{identifier}",
+    "identifier",
+    "",
+    "   ",
+  ])(
   "does not create tracking records for placeholder externalId %s",
   async (externalId) => {
     mockPrisma.project.findFirst.mockResolvedValue({
@@ -158,4 +160,103 @@ describe("survey live route", () => {
     ).not.toHaveBeenCalled();
   }
 );
+
+  it("allows Adhoc project without recid", async () => {
+    mockPrisma.project.findFirst.mockResolvedValue({
+      id: "PRJADHOC",
+      code: "SRADHOC",
+      surveyLiveUrl: "https://client.com/survey",
+      projectType: "Adhocs",
+    });
+
+    mockPrisma.surveyRedirect.findFirst.mockResolvedValue(null);
+    mockPrisma.surveyRedirect.findMany.mockResolvedValue([]);
+
+    mockPrisma.respondent.findUnique.mockResolvedValue(null);
+    mockPrisma.respondent.findFirst.mockResolvedValue(null);
+
+    const req = new Request(
+      "https://test.com/api/projects/PRJADHOC/survey-live?supplierId=S1007&id=EXT001"
+    );
+
+    const res = await GET(req, {
+      params: Promise.resolve({
+        projectId: "PRJADHOC",
+      }),
+    });
+
+    expect(res.status).toBe(302);
+  });
+
+  it("blocks Recontact single-parameter flow when recid is missing", async () => {
+    mockPrisma.project.findFirst.mockResolvedValue({
+      id: "PRJREC",
+      code: "SRREC",
+      surveyLiveUrl: "https://client.com/survey?[identifier]",
+      projectType: "Recontact",
+    });
+
+    mockPrisma.surveyRedirect.findFirst.mockResolvedValue(null);
+    mockPrisma.supplierEntry.findFirst.mockResolvedValue(null);
+    mockPrisma.respondent.findFirst.mockResolvedValue(null);
+
+    const req = new Request(
+      "https://test.com/api/projects/PRJREC/survey-live?supplierId=S1007&id=EXT001"
+    );
+
+    const res = await GET(req, {
+      params: Promise.resolve({
+        projectId: "PRJREC",
+      }),
+    });
+
+    expect(res.status).toBe(400);
+
+    expect(
+      mockPrisma.respondent.create
+    ).not.toHaveBeenCalled();
+
+    expect(
+      mockPrisma.surveyRedirect.create
+    ).not.toHaveBeenCalled();
+  });
+
+  it("blocks reattempt when same recid is reused with a different externalId", async () => {
+    mockPrisma.project.findFirst.mockResolvedValue({
+      id: "PRJREC2",
+      code: "SRREC2",
+      surveyLiveUrl: "https://client.com/survey?[identifier]",
+      projectType: "Recontact",
+    });
+
+    mockPrisma.surveyRedirect.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: "RID1",
+        externalId: "OLD001",
+        result: "COMPLETE",
+      });
+
+    const req = new Request(
+      "https://test.com/api/projects/PRJREC2/survey-live?supplierId=S1007&id=NEW001&recid=REC001"
+    );
+
+    const res = await GET(req, {
+      params: Promise.resolve({
+        projectId: "PRJREC2",
+      }),
+    });
+
+    expect(res.status).toBe(409);
+
+    const body = await res.json();
+
+    expect(body.error).toContain("Survey already attempted");
+    expect(body.priorResult).toBe("COMPLETE");
+
+    expect(
+      mockPrisma.surveyRedirect.create
+    ).not.toHaveBeenCalled();
+  });
+
 });

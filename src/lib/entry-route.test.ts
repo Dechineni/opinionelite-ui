@@ -52,6 +52,16 @@ describe("entry route", () => {
     expect(
       mockPrisma.supplierEntry.upsert
     ).toHaveBeenCalled();
+
+    const upsertCall =
+  mockPrisma.supplierEntry.upsert.mock.calls[0][0];
+
+    expect(upsertCall.create.projectId).toBe("PRJ1");
+    expect(upsertCall.create.projectCode).toBe("SR1000");
+    expect(upsertCall.create.supplierCode).toBe("S1007");
+    expect(upsertCall.create.externalId).toBe("EXT001");
+    expect(upsertCall.create.entryCount).toBe(1);
+    expect(upsertCall.create.currentStage).toBe("ENTERED");
   });
 
   it("returns 400 when supplierId is missing", async () => {
@@ -157,15 +167,14 @@ describe("entry route", () => {
       }),
     });
 
-    expect(
-      mockPrisma.supplierEntry.upsert
-    ).toHaveBeenCalledWith(
-      expect.objectContaining({
-        create: expect.objectContaining({
-          recid: "REC001",
-        }),
-      })
-    );
+    const upsertCall =
+      mockPrisma.supplierEntry.upsert.mock.calls[0][0];
+
+    expect(upsertCall.create.projectId).toBe("PRJ1");
+    expect(upsertCall.create.projectCode).toBe("SR1000");
+    expect(upsertCall.create.supplierCode).toBe("S1007");
+    expect(upsertCall.create.externalId).toBe("EXT001");
+    expect(upsertCall.create.recid).toBe("REC001");
   });
 
   it("does not overwrite recid when blank recid is supplied", async () => {
