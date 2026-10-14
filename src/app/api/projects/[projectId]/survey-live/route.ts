@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { resolveEffectiveRecid } from "@/lib/recontact";
 import { replaceTokens } from "@/lib/survey-live-url";
+import { isUsableExternalId } from "@/lib/identifiers";
 
 const isUniqueViolation = (e: any) => {
   const msg = String(e?.message || "");
@@ -115,6 +116,7 @@ export async function GET(
   const supplierId = (url.searchParams.get("supplierId") || "").trim();
   const externalId = (url.searchParams.get("id") || "").trim();
   const recid = (url.searchParams.get("recid") || "").trim();
+  const usableExternalId = isUsableExternalId(externalId);
 
   const cached = memGet(`live:${projectId}`);
 
@@ -173,7 +175,7 @@ export async function GET(
 
   // If recid is not coming from URL, try to find an existing stored recid.
   // Priority: SurveyRedirect -> Respondent -> SupplierEntry.
-  if (!effectiveRecid && haveRealId && externalId) {
+  if (!effectiveRecid && haveRealId && usableExternalId) {
     const surveyRedirectRecid = await prisma.surveyRedirect.findFirst({
       where: {
         projectId: projectIdReal,
@@ -279,7 +281,7 @@ export async function GET(
   // Look for existing SurveyRedirect by natural key.
   let reusableRedirect: { id: string; result: string | null } | null = null;
 
-  if (haveRealId && externalId && supplierId) {
+  if (haveRealId && usableExternalId && supplierId) {
     const existingRedirect = await prisma.surveyRedirect.findFirst({
       where: {
         projectId: projectIdReal,
@@ -430,7 +432,7 @@ export async function GET(
   }
 
   // best-effort respondent ensure
-  if (haveRealId && externalId) {
+  if (haveRealId && usableExternalId) {
     try {
       if (supplierId) {
         const found = await prisma.respondent.findUnique({
@@ -529,7 +531,7 @@ export async function GET(
     }
   }
 
-  if (LOG_REDIRECT && haveRealId) {
+  if (LOG_REDIRECT && haveRealId && usableExternalId) {
     try {
       if (reusableRedirect) {
         await prisma.surveyRedirect.update({
