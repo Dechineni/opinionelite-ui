@@ -2,7 +2,7 @@
 
 import React, {useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw, Plus, Info, Search, Trash2, Grip, MoreVertical, GripVertical, Copy, Network } from "lucide-react";
+import { RefreshCw, Plus, Info, Search, Trash2, Grip, MoreVertical, GripVertical } from "lucide-react";
 
 /* ------------------------------ confirm dialog ----------------------------- */
 function ConfirmDialog({
@@ -119,6 +119,7 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
     const router = useRouter();
 
     const [ selectedQuotaIds, setSelectedQuotaIds ] = useState<string[]>([]);
+    const [statusFilter, setStatusFilter] = useState("ALL");
     const [ confirmDeleteOpen, setConfirmDeleteOpen ] = useState(false);
     const [ successMessage, setSuccessMessage] = useState("");
     const [ successOpen, setSuccessOpen] = useState(false);
@@ -211,6 +212,14 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
         }
     };
 
+    const filteredQuotas = quotas.filter((quota) => {
+        if (statusFilter === "ALL") {
+            return true;
+        }
+
+        return quota.status === statusFilter;
+    });
+
     useEffect(() => {
         loadQuotas();
     }, [projectId]);
@@ -295,30 +304,16 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
                         />
                     </div>
 
-                    <select className="flex items-center h-[35px] w-[120px] rounded-md border border-gray-300 px-3">
-                        <option className="text-sm">All Status</option>
-                        <option className="text-sm">Clone</option>
-                        <option className="text-sm">Demographics</option>
-                        <option className="text-sm">Delete</option>
+                    <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className="flex items-center h-[35px] w-[120px] rounded-md border border-gray-300 px-3">
+                        <option value="ALL" className="text-sm">All Status</option>
+                        <option value="Open" className="text-sm">Open</option>
+                        <option value="Close" className="text-sm">Close</option>
                     </select>
 
                     <div className="ml-5 flex gap-1.5">
-                        <button
-                            type="button"
-                            className="flex items-center gap-1 h-[35px] px-3 rounded-md bg-white text-blue-500 border text-sm font-medium cursor-pointer"
-                            >
-                            <Copy size={14} />
-                            Clone
-                        </button>
-
-                        <button
-                            type="button"
-                            className="flex items-center gap-1 h-[35px] px-3 rounded-md bg-white text-blue-500 border text-sm font-medium cursor-pointer"
-                        >
-                            <Network size={14} />
-                            Demographics
-                        </button>
-
                         <button
                             type="button"
                             disabled={selectedQuotaIds.length === 0}
@@ -390,7 +385,7 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
                                         Loading quotas...
                                     </td>
                                 </tr>
-                            ) : quotas.length === 0 ? (
+                            ) : filteredQuotas.length === 0 ? (
                                 <tr>
                                     <td colSpan={14} className="text-center py-4">
                                         No quotas synced yet. Use the Sync action from
@@ -399,7 +394,7 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
                                     </td>
                                 </tr>
                             ) : (
-                                 quotas.map((quota, index) => (
+                                 filteredQuotas.map((quota, index) => (
                                     <tr
                                         key={quota.id}
                                         className="border-b border-gray-200"
