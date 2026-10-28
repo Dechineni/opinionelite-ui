@@ -120,6 +120,9 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
 
     const [ selectedQuotaIds, setSelectedQuotaIds ] = useState<string[]>([]);
     const [statusFilter, setStatusFilter] = useState("ALL");
+    const [ searchTerm, setSearchTerm ] = useState("");
+    const [ currentPage, setCurrentPage ] = useState(1);
+    const [ pageSize, setPageSize ] = useState(10);
     const [ confirmDeleteOpen, setConfirmDeleteOpen ] = useState(false);
     const [ successMessage, setSuccessMessage] = useState("");
     const [ successOpen, setSuccessOpen] = useState(false);
@@ -213,12 +216,40 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
     };
 
     const filteredQuotas = quotas.filter((quota) => {
-        if (statusFilter === "ALL") {
-            return true;
-        }
+        const search = searchTerm.trim().toLowerCase();
 
-        return quota.status === statusFilter;
+        const matchesSearch =
+            search.length === 0 ||
+            String(quota.quotaName ?? "").toLowerCase().includes(search);
+
+        const matchesStatus =
+            statusFilter === "ALL" || quota.status === statusFilter;
+
+        return matchesSearch && matchesStatus;
     });
+
+    const totalRows = filteredQuotas.length;
+
+    const totalPages = Math.max(
+        1,
+        Math.ceil(totalRows / pageSize)
+    );
+
+    const startIndex = (currentPage - 1) * pageSize;
+
+    const paginatedQuotas = filteredQuotas.slice(
+        startIndex,
+        startIndex + pageSize
+    );
+
+    useEffect(() => {
+        setCurrentPage(1);
+        setSelectedQuotaIds([]);
+    }, [searchTerm, statusFilter, pageSize]);
+
+    useEffect(() => {
+        setSelectedQuotaIds([]);
+    }, [currentPage]);
 
     useEffect(() => {
         loadQuotas();
@@ -299,6 +330,8 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
                         <Search size={16} className="text-gray-500" />
                         <input
                             type="text"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
                             className="flex-1 text-sm outline-none"
                             placeholder="Search quotas..."
                         />
@@ -352,10 +385,10 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
                             <tr className="text-left text-gray-700">
                                 <th className="px-3 py-3">
                                     <input type="checkbox"
-                                        checked={quotas.length > 0 && selectedQuotaIds.length === quotas.length}
+                                        checked={paginatedQuotas.length > 0 && paginatedQuotas.every((quota) => selectedQuotaIds.includes(quota.id))}
                                         onChange={(e) => {
                                             if (e.target.checked) {
-                                                setSelectedQuotaIds(quotas.map((quota) => quota.id));
+                                                setSelectedQuotaIds(paginatedQuotas.map((quota) => quota.id));
                                             } else {
                                                 setSelectedQuotaIds([]);
                                             }
@@ -385,16 +418,14 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
                                         Loading quotas...
                                     </td>
                                 </tr>
-                            ) : filteredQuotas.length === 0 ? (
+                            ) : totalRows === 0 ? (
                                 <tr>
                                     <td colSpan={14} className="text-center py-4">
-                                        No quotas synced yet. Use the Sync action from
-                                        the Prescreen tab to create quotas from mapped
-                                        options.
+                                        No quotas found.
                                     </td>
                                 </tr>
                             ) : (
-                                 filteredQuotas.map((quota, index) => (
+                                 paginatedQuotas.map((quota, index) => (
                                     <tr
                                         key={quota.id}
                                         className="border-b border-gray-200"
@@ -413,7 +444,7 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
                                         />
                                     </td>
 
-                                    <td className="px-3 py-4">{index + 1}</td>
+                                    <td className="px-3 py-4">{startIndex + index + 1}</td>
 
                                     <td className="px-3 py-4">
                                         <span className="font-medium text-blue-600 cursor-pointer">
@@ -510,24 +541,39 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
             {/* Pagination Section */}
             <div className="flex items-center justify-between border border-t-0 border-slate-200 rounded-b-lg px-4 py-3 text-sm bg-white">
                 <div className="text-gray-500">
-                    Showing 1 to 7 of 7 quotas
+                    {`Showing ${totalRows === 0 ? 0 : startIndex + 1
+                        } to ${Math.min(
+                            startIndex + pageSize,
+                            totalRows
+                        )} of ${totalRows} quotas`}
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <button className="w-8 h-8 border rounded text-gray-400">
+                    <button
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                        className="w-8 h-8 border rounded text-gray-400">
                         ‹
                     </button>
 
                     <button className="w-8 h-8 border rounded bg-blue-50 border-blue-600 text-blue-600 font-medium">
-                        1
+                        {currentPage}
                     </button>
 
-                    <button className="w-8 h-8 border rounded text-gray-400">
+                    <button
+                        disabled={currentPage === totalPages}
+                        onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                        className="w-8 h-8 border rounded text-gray-400">
                         ›
                     </button>
 
-                    <select className="h-8 border rounded px-2">
-                        <option>10 / page</option>
+                    <select 
+                        value={pageSize}
+                        onChange={(e) => setPageSize(Number(e.target.value))}
+                        className="h-8 border rounded px-2">
+                        <option value={10}>10 / page</option>
+                        <option value={25}>25 / page</option>
+                        <option value={50}>50 / page</option>
                     </select>
                 </div>
             </div>  
