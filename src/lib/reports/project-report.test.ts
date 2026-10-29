@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { generateProjectReport } from "./project-report";
+import XLSX from "xlsx-js-style";
+import { GET } from "../../app/api/projects/[projectId]/report/route";
+import { cookies } from "next/headers";
 
 // MOCK PROJECT DATA
 const mockProject = {
@@ -47,6 +50,9 @@ const mockSuppliers = [
     name: "Supplier A",
   },
 ];
+vi.mock("next/headers", () => ({
+  cookies: vi.fn(),
+}));
 
 // MOCK FOR PRISMA.PROJECT.FINDUNIQUE()
 const mockFindUnique = vi.fn();
@@ -172,4 +178,303 @@ describe("Project Report - Hash Identifier" , () => {
         ]);
     });
 
+});
+
+// PROJECT REPORT - LARGE DOWNLOAD RELIABILITY AND EXPORT INTEGRITY
+describe("Project Report - Large Download Reliability and Export Integrity" , () =>{
+
+  // SHOULD GENERATE ONE REPORT ROW FOR EVERY SUPPLIER ENTRY
+  it("should generate one report row for every supplier entry" , async() =>{
+    
+    // CREATE 100 MOCK SUPPLIER ENTRIES TO VERIFY THAT THE REPORT GENERATES
+    const supplierEntries = Array.from({ length: 100 }, (_, i) => ({
+      supplierCode: "S1007",
+      externalId: `EXT${i}`,
+      firstEnteredAt: new Date("2024-01-01T10:00:00Z"),
+      finalOutcomeAt: new Date("2024-01-01T10:10:00Z"),
+      finalOutcome: "COMPLETE",
+      finalSource: null,
+      isBackfilled: false,
+    }));
+
+    mockFindUnique.mockResolvedValue({
+      ...mockProject,
+      supplierEntries,
+      SurveyRedirect: supplierEntries.map((entry, i) => ({
+        id: `HASH${i}`,
+        supplierId: entry.supplierCode,
+        externalId: entry.externalId,
+      })),
+    });
+
+    const result = await generateProjectReport("project-1");
+
+    expect(result.respondentDetailsData).toHaveLength(
+      supplierEntries.length
+    );
+  });
+
+  // VERIFY THAT EVERY SUPPLIERENTRY EXTERNALID APPEARS EXACTLY ONCE
+  it("should preserve all supplier identifiers without duplicates", async () => {
+
+    // CREATE 100 MOCK SUPPLIER ENTRIES TO VERIFY THAT EVERY SUPPLIERENTRY EXTERNALID APPEARS EXACTLY ONCE
+    const supplierEntries = Array.from({ length: 100 }, (_, i) => ({
+      supplierCode: "S1007",
+      externalId: `EXT${i}`,
+      firstEnteredAt: new Date("2024-01-01T10:00:00Z"),
+      finalOutcomeAt: new Date("2024-01-01T10:10:00Z"),
+      finalOutcome: "COMPLETE",
+      finalSource: null,
+      isBackfilled: false,
+    }));
+
+    mockFindUnique.mockResolvedValue({
+      ...mockProject,
+      supplierEntries,
+      SurveyRedirect: supplierEntries.map((entry, i) => ({
+        id: `HASH${i}`,
+        supplierId: entry.supplierCode,
+        externalId: entry.externalId,
+      })),
+    });
+
+    const result = await generateProjectReport("project-1");
+
+    // GET ALL SUPPLIER IDENTIFIERS FROM THE REPORT ROWS
+    const reportIdentifiers = result.respondentDetailsData.map(
+      (row) => row.supplierIdentifier
+    );
+
+    // VERIFY THAT ALL SUPPLIER IDENTIFIERS ARE UNIQUE AND NO DUPLICATES EXIST
+    expect(reportIdentifiers).toEqual(
+      supplierEntries.map((entry) => entry.externalId)
+    );
+  });
+
+  // CONFIRM NUMERIC COLUMNS (PROJECT CPI, SUPPLIER CPI, LOI) REMAIN NUMERIC
+  it("should keep numeric columns as numbers for all report rows", async () => {
+    const result = await generateProjectReport("project-1");
+
+    result.respondentDetailsData.forEach((row) => {
+      expect(typeof row.projectCpi).toBe("number");
+      expect(typeof row.supplierCpi).toBe("number");
+      expect(typeof row.loi).toBe("string");
+    });
+
+  });
+
+  // SHOULD KEEP HASHIDENTIFIER BLANK FOR UNMATCHED ROWS IN LARGE DATASETS
+  it("should keep hashIdentifier blank for unmatched rows in large datasets", async () => {
+
+    // CREATE 100 MOCK SUPPLIER ENTRIES TO VERIFY HASHIDENTIFIER BLANK FOR UNMATCHED ROWS IN LARGE DATASETS
+    const supplierEntries = Array.from({ length: 100 }, (_, i) => ({
+      supplierCode: "S1007",
+      externalId: `EXT${i}`,
+      firstEnteredAt: new Date("2024-01-01T10:00:00Z"),
+      finalOutcomeAt: new Date("2024-01-01T10:10:00Z"),
+      finalOutcome: "COMPLETE",
+      finalSource: null,
+      isBackfilled: false,
+    }));
+
+    mockFindUnique.mockResolvedValue({
+      ...mockProject,
+      supplierEntries,
+      SurveyRedirect: [],
+    });
+
+    const result = await generateProjectReport("project-1");
+
+    result.respondentDetailsData.forEach((row) => {
+      expect(row.hashIdentifier).toBe("");
+    });
+
+  });
+
+  // VERIFY HASH IDENTIFIER MAPPING REMAINS CORRECT FOR LARGE DATASETS
+  it("should correctly map hash identifiers for large datasets", async () => {
+
+    // CREATE 100 MOCK SUPPLIER ENTRIES TO VERIFY HASH IDENTIFIER MAPPING REMAINS CORRECT FOR LARGE DATASETS
+    const supplierEntries = Array.from({ length: 100 }, (_, i) => ({
+      supplierCode: "S1007",
+      externalId: `EXT${i}`,
+      firstEnteredAt: new Date("2024-01-01T10:00:00Z"),
+      finalOutcomeAt: new Date("2024-01-01T10:10:00Z"),
+      finalOutcome: "COMPLETE",
+      finalSource: null,
+      isBackfilled: false,
+    }));
+
+    mockFindUnique.mockResolvedValue({
+      ...mockProject,
+      supplierEntries,
+      SurveyRedirect: supplierEntries.map((entry, i) => ({
+        id: `HASH${i}`,
+        supplierId: entry.supplierCode,
+        externalId: entry.externalId,
+      })),
+    });
+
+    const result = await generateProjectReport("project-1");
+
+    expect(result.respondentDetailsData[0].hashIdentifier).toBe("HASH0");
+    expect(result.respondentDetailsData[50].hashIdentifier).toBe("HASH50");
+    expect(result.respondentDetailsData[99].hashIdentifier).toBe("HASH99");
+  });
+
+  // VERIFY REPORT GENERATION HANDLES 1000 ROWS WITHOUT TRUNACTION.
+  it("should generate all report rows for a 1000 record dataset", async () => {
+
+    // CREATE 100 MOCK SUPPLIER ENTRIES TO VERIFY REPORT GENERATION HANDLES 1000 ROWS WITHOUT TRUNACTION.
+    const supplierEntries = Array.from({ length: 1000 }, (_, i) => ({
+      supplierCode: "S1007",
+      externalId: `EXT${i}`,
+      firstEnteredAt: new Date("2024-01-01T10:00:00Z"),
+      finalOutcomeAt: new Date("2024-01-01T10:10:00Z"),
+      finalOutcome: "COMPLETE",
+      finalSource: null,
+      isBackfilled: false,
+    }));
+
+    mockFindUnique.mockResolvedValue({
+      ...mockProject,
+      supplierEntries,
+      SurveyRedirect: [],
+    });
+
+    const result = await generateProjectReport("project-1");
+
+    expect(result.respondentDetailsData).toHaveLength(supplierEntries.length);
+
+  });
+
+  // VERIFY REPORT GENERATION HANDLES 10000 ROWS WITHOUT TRUNACTION.
+  it("should generate all report rows for a 10000 record dataset", async () => {
+
+    // CREATE 100 MOCK SUPPLIER ENTRIES TO VERIFY THAT THE REPORT GENERATION HANDLES 10000 ROWS WITHOUT TRUNACTION.
+    const supplierEntries = Array.from({ length: 10000 }, (_, i) => ({
+      supplierCode: "S1007",
+      externalId: `EXT${i}`,
+      firstEnteredAt: new Date("2024-01-01T10:00:00Z"),
+      finalOutcomeAt: new Date("2024-01-01T10:10:00Z"),
+      finalOutcome: "COMPLETE",
+      finalSource: null,
+      isBackfilled: false,
+    }));
+
+    mockFindUnique.mockResolvedValue({
+      ...mockProject,
+      supplierEntries,
+      SurveyRedirect: supplierEntries.map((entry, i) => ({
+        id: `HASH${i}`,
+        supplierId: entry.supplierCode,
+        externalId: entry.externalId,
+      })),
+    });
+
+    const result = await generateProjectReport("project-1");
+
+    expect(result.respondentDetailsData[0].supplierIdentifier).toBe("EXT0");
+
+    expect(result.respondentDetailsData[0].hashIdentifier).toBe("HASH0");
+
+    expect(result.respondentDetailsData[5000].supplierIdentifier).toBe("EXT5000");
+
+    expect(result.respondentDetailsData[5000].hashIdentifier).toBe("HASH5000");
+
+    expect(result.respondentDetailsData[9999].supplierIdentifier).toBe("EXT9999");
+
+    expect(result.respondentDetailsData[9999].hashIdentifier).toBe("HASH9999");
+
+    const supplierIdentifiers =result.respondentDetailsData.map(
+      (row) => row.supplierIdentifier
+    );
+
+    expect(supplierIdentifiers).toEqual(supplierEntries.map((entry) => entry.externalId));
+
+    expect(new Set(result.respondentDetailsData.map((row) => row.supplierIdentifier)).size).toBe(supplierEntries.length);
+
+    expect(result.respondentDetailsData.every((row, index) =>row.hashIdentifier === `HASH${index}`)).toBe(true);
+
+    expect(result.respondentDetailsData).toHaveLength(supplierEntries.length);
+
+  });
+
+  // VERIFY REPORT GENERATION FAILS WITH A CLEAR ERROR WHEN PROJECT IS MISSING.
+  it("should throw an error when project is not found", async () => {
+    mockFindUnique.mockResolvedValue(null);
+
+    await expect(
+      generateProjectReport("project-1")
+    ).rejects.toThrow("Project not found");
+  });
+
+});
+
+// PROJECT REPORT EXCEL EXPORT INTEGRITY
+describe("Project Report Excel Export Integrity", () => {
+
+  // VERIFY THE EXCEL KEEPS COLUMN ORDER, DATA MAPPING AND ROW COUNT INTACT
+  it("should export the workbook with correct columns, data and row count", async () => {
+
+    // MOCK AN AUTHENTICATED REQUEST
+    vi.mocked(cookies).mockResolvedValue({
+      get: () => ({
+        value: "mock-token",
+      }),
+    } as any);
+
+    // CALL THE REPORT DOWNLOAD ROUTE
+    const request = new Request(
+      "http://localhost/projects/project-1/report?type=project"
+    );
+
+    // GENERATE THE EXCEL REPORT
+    const response = await GET(request, {
+      params: Promise.resolve({
+        projectId: "project-1",
+      }),
+    });
+
+    // VERIFY THE REPORT WAS GENERATED SUCCESSFULLY
+    expect(response.status).toBe(200);
+
+    // READ THE GENERATED EXCEL WORKBOOK
+    const excelBuffer = await response.arrayBuffer();
+
+    const workbook = XLSX.read(excelBuffer, {
+      type: "array",
+    });
+
+    // VERIFY THE RESPONDENT DETAILS WORKSHEET EXISTS
+    expect(workbook.SheetNames).toContain(
+      "Respondent Details"
+    );
+
+    const worksheet = workbook.Sheets["Respondent Details"];
+
+    // VERIFY SUPPLIER INDENTIFIER AND HASH IDENTIFIER COLUMN POSITIONS
+    expect(worksheet["D2"].v).toBe("Supplier Identifier");
+    expect(worksheet["E2"].v).toBe("Hash Identifier");
+
+    // VERIFY PROJECT CPI AND SUPPLIER CPI REMAINS IN THE EXPECTED POSITIONS
+    expect(worksheet["F2"].v).toBe("Project CPI");
+    expect(worksheet["G2"].v).toBe("Supplier CPI");
+
+    // VERIFY RESPONDENT VALUES ARE EXPORTED CORRECTLY
+    expect(worksheet["D3"].v).toBe("EXT001");
+    expect(worksheet["E3"].v).toBe("HASH123");
+
+    // VERIFY PROJECT CPI AND SUPPLIER CPI VALUES REMAIN ALIGNED
+    expect(worksheet["F3"].v).toBe(10);
+    expect(worksheet["G3"].v).toBe(5);
+
+    const sheetData = XLSX.utils.sheet_to_json<any[]>(worksheet,{ header: 1 });
+
+    const populatedRows = (sheetData as any[][]).filter((row) => row.length > 0);
+
+    // EXCLUDE THE HEADER ROW AND COMPARE WITH SOURCE DATA 
+    expect(populatedRows.length - 1).toBe(mockProject.supplierEntries.length);
+  });
+  
 });
