@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { generateProjectReport } from "./project-report";
+import XLSX from "xlsx-js-style";
+import { GET } from "../../app/api/projects/[projectId]/report/route";
+import { cookies } from "next/headers";
 
 // MOCK PROJECT DATA
 const mockProject = {
@@ -47,6 +50,9 @@ const mockSuppliers = [
     name: "Supplier A",
   },
 ];
+vi.mock("next/headers", () => ({
+  cookies: vi.fn(),
+}));
 
 // MOCK FOR PRISMA.PROJECT.FINDUNIQUE()
 const mockFindUnique = vi.fn();
@@ -359,10 +365,36 @@ describe("Project Report - Large Download Reliability and Export Integrity" , ()
     mockFindUnique.mockResolvedValue({
       ...mockProject,
       supplierEntries,
-      SurveyRedirect: [],
+      SurveyRedirect: supplierEntries.map((entry, i) => ({
+        id: `HASH${i}`,
+        supplierId: entry.supplierCode,
+        externalId: entry.externalId,
+      })),
     });
 
     const result = await generateProjectReport("project-1");
+
+    expect(result.respondentDetailsData[0].supplierIdentifier).toBe("EXT0");
+
+    expect(result.respondentDetailsData[0].hashIdentifier).toBe("HASH0");
+
+    expect(result.respondentDetailsData[5000].supplierIdentifier).toBe("EXT5000");
+
+    expect(result.respondentDetailsData[5000].hashIdentifier).toBe("HASH5000");
+
+    expect(result.respondentDetailsData[9999].supplierIdentifier).toBe("EXT9999");
+
+    expect(result.respondentDetailsData[9999].hashIdentifier).toBe("HASH9999");
+
+    const supplierIdentifiers =result.respondentDetailsData.map(
+      (row) => row.supplierIdentifier
+    );
+
+    expect(supplierIdentifiers).toEqual(supplierEntries.map((entry) => entry.externalId));
+
+    expect(new Set(result.respondentDetailsData.map((row) => row.supplierIdentifier)).size).toBe(supplierEntries.length);
+
+    expect(result.respondentDetailsData.every((row, index) =>row.hashIdentifier === `HASH${index}`)).toBe(true);
 
     expect(result.respondentDetailsData).toHaveLength(supplierEntries.length);
 
@@ -377,4 +409,72 @@ describe("Project Report - Large Download Reliability and Export Integrity" , ()
     ).rejects.toThrow("Project not found");
   });
 
+});
+
+// PROJECT REPORT EXCEL EXPORT INTEGRITY
+describe("Project Report Excel Export Integrity", () => {
+
+  // VERIFY THE EXCEL KEEPS COLUMN ORDER, DATA MAPPING AND ROW COUNT INTACT
+  it("should export the workbook with correct columns, data and row count", async () => {
+
+    // MOCK AN AUTHENTICATED REQUEST
+    vi.mocked(cookies).mockResolvedValue({
+      get: () => ({
+        value: "mock-token",
+      }),
+    } as any);
+
+    // CALL THE REPORT DOWNLOAD ROUTE
+    const request = new Request(
+      "http://localhost/projects/project-1/report?type=project"
+    );
+
+    // GENERATE THE EXCEL REPORT
+    const response = await GET(request, {
+      params: Promise.resolve({
+        projectId: "project-1",
+      }),
+    });
+
+    // VERIFY THE REPORT WAS GENERATED SUCCESSFULLY
+    expect(response.status).toBe(200);
+
+    // READ THE GENERATED EXCEL WORKBOOK
+    const excelBuffer = await response.arrayBuffer();
+
+    const workbook = XLSX.read(excelBuffer, {
+      type: "array",
+    });
+
+    // VERIFY THE RESPONDENT DETAILS WORKSHEET EXISTS
+    expect(workbook.SheetNames).toContain(
+      "Respondent Details"
+    );
+
+    const worksheet = workbook.Sheets["Respondent Details"];
+
+    // VERIFY SUPPLIER INDENTIFIER AND HASH IDENTIFIER COLUMN POSITIONS
+    expect(worksheet["D2"].v).toBe("Supplier Identifier");
+    expect(worksheet["E2"].v).toBe("Hash Identifier");
+
+    // VERIFY PROJECT CPI AND SUPPLIER CPI REMAINS IN THE EXPECTED POSITIONS
+    expect(worksheet["F2"].v).toBe("Project CPI");
+    expect(worksheet["G2"].v).toBe("Supplier CPI");
+
+    // VERIFY RESPONDENT VALUES ARE EXPORTED CORRECTLY
+    expect(worksheet["D3"].v).toBe("EXT001");
+    expect(worksheet["E3"].v).toBe("HASH123");
+
+    // VERIFY PROJECT CPI AND SUPPLIER CPI VALUES REMAIN ALIGNED
+    expect(worksheet["F3"].v).toBe(10);
+    expect(worksheet["G3"].v).toBe(5);
+
+    const sheetData = XLSX.utils.sheet_to_json<any[]>(worksheet,{ header: 1 });
+
+    const populatedRows = (sheetData as any[][]).filter((row) => row.length > 0);
+
+    // EXCLUDE THE HEADER ROW AND COMPARE WITH SOURCE DATA 
+    expect(populatedRows.length - 1).toBe(mockProject.supplierEntries.length);
+  });
+  
 });
