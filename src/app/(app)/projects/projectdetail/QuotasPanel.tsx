@@ -3,7 +3,6 @@
 import React, {useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw, Plus, Info, Search, Trash2, Grip, MoreVertical, GripVertical } from "lucide-react";
-import { set } from "zod";
 
 /* ------------------------------ confirm dialog ----------------------------- */
 function ConfirmDialog({
@@ -143,7 +142,7 @@ export default function QuotasPanel({ projectId }: { projectId: string }) {
             setLoading(true);
 
             setSelectedQuotaIds([]);
-            
+
             const response = await fetch(`/api/projects/${projectId}/quotas`,
                 {
                     cache: "no-store",
