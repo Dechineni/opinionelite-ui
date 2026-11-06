@@ -3,10 +3,9 @@
 export const runtime = "edge";
 
 import React, { useEffect, useMemo, useState } from "react";
-
-import Link from "next/link";
-
 import { Copy } from "lucide-react";
+import { isDrakoSupplier } from "@/lib/drako/drako";
+
 
 type SupplierLite = { id: string; code: string; name: string };
 
@@ -144,6 +143,19 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
     {
       url += "&recid=[recid]";
     }
+    // RETURN THE GENERATED SUPPLIER URL
+    return url;
+  }
+
+  function buildDrakoCampaignUrl(projectCodeVal: string | undefined, supplierCodeVal: string | undefined) {
+    const p = encodeURIComponent(projectCodeVal || "");
+    const s = encodeURIComponent(supplierCodeVal || "");
+    if (!p || !s) return "—";
+    const uiOrigin = getUiOrigin();
+
+    // GENERATE BASE SUPPLIER URL
+    let url = `${uiOrigin}/campaign/drako?projectId=${p}&supplierId=${s}`;
+
     // RETURN THE GENERATED SUPPLIER URL
     return url;
   }
@@ -424,6 +436,38 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
     );
   }
 
+  function DrakoUrlCell(r: MapRow) {
+    const url = buildDrakoCampaignUrl(
+      projectCode,
+      r.supplierCode
+    );
+
+    if (url === "—") {
+      return <span>—</span>;
+    }
+
+    return (
+      <div className="flex flex-col gap-1">
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-emerald-700 hover:underline break-all"
+          title={url}
+        >
+          {url}
+        </a>
+        <button
+          type="button"
+          onClick={() => copyToClipboard(url)}
+          className="w-fit rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
+        >
+          Copy Landing URL
+        </button>
+      </div>
+    );
+  }
+  
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="overflow-auto">
@@ -437,6 +481,7 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
               <th className="px-3 py-2">CPI</th>
               <th className="px-3 py-2">SupplierProjectId</th>
               <th className="px-3 py-2">SupplierUrl</th>
+              <th className="px-3 py-2">DRAKO Campaign Landing Url</th>
               <th className="px-3 py-2">TestLink</th>
               <th className="px-3 py-2">Action</th>
             </tr>
@@ -445,7 +490,7 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
           <tbody>
             {loading && (
               <tr>
-                <td className="px-3 py-6 text-center text-slate-500" colSpan={9}>
+                <td className="px-3 py-6 text-center text-slate-500" colSpan={10}>
                   Loading…
                 </td>
               </tr>
@@ -453,7 +498,7 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
 
             {!loading && rows.length === 0 && (
               <tr>
-                <td className="px-3 py-6 text-center text-slate-500" colSpan={9}>
+                <td className="px-3 py-6 text-center text-slate-500" colSpan={10}>
                   No Supplier Mapped
                 </td>
               </tr>
@@ -475,6 +520,13 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
                   <td className="px-3 py-2">{r.supplierProjectId ?? "—"}</td>
                   <td className="px-3 py-2">
                     <SupplierUrlCell {...r} />
+                  </td>
+                  <td className="px-3 py-2">
+                    {isDrakoSupplier(r.supplierCode) ? (
+                      <DrakoUrlCell {...r} />
+                    ) : (
+                      <span>—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2">—</td>
                   <td className="px-3 py-2">
