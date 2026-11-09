@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
-
-// READ THE CONFIGURED DRAKO SUPPLIER CODE FROM ENVIRONMENT SETTINGS
-const DRAKO_SUPPLIER_CODE = process.env.NEXT_PUBLIC_DRAKO_SUPPLIER_CODE;
+import { isDrakoSupplier } from "@/lib/drako/server";
 
 // GENERATE A UNIQUE RESPONDENT ID FOR EACH SURVEY RESPONSE
 function generateRespondentId(): string {
@@ -45,6 +43,71 @@ function isPlaceholder(value: string | null): boolean {
   );
 }
 
+// RETURN A SIMPLE USER-FRIENDLY ERROR PAGE
+function unavailableResponse(
+  message: string,
+  status: number
+) {
+  const response = new NextResponse(
+    `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Survey Unavailable</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <style>
+          body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f8fafc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+          }
+
+          .card {
+            background: white;
+            padding: 32px;
+            border-radius: 12px;
+            box-shadow: 0 1px 8px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 500px;
+          }
+
+          h1 {
+            margin-bottom: 12px;
+            color: #0f172a;
+          }
+
+          p {
+            color: #475569;
+            margin: 0;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h1>Survey Unavailable</h1>
+          <p>${message}</p>
+        </div>
+      </body>
+    </html>
+    `,
+    {
+      status,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+      },
+    }
+  );
+
+  return addNoStoreHeaders(response);
+}
+
+// RETURN A SIMPLE USER-FRIENDLY ERROR MESSAGE
+const UNAVAILABLE_MESSAGE = "This survey is currently unavailable. Thank you for your interest.";
+
 // VALIDATE REQUIRED QUERY PARAMETERS BEFORE PROCESSING THE REQUEST
 export async function GET(request: NextRequest) {
   try {
@@ -59,80 +122,71 @@ export async function GET(request: NextRequest) {
 
     // RETURN ERROR IF PROJECTID OR SUPPLIERID IS MISSING
     if (!projectCode || !supplierCode) {
-      return addNoStoreHeaders(
-        NextResponse.json(
-          {
-            error: "projectId and supplierId are required",
-          },
-          {
-            status: 400,
-          }
-        )
+      return unavailableResponse(
+        UNAVAILABLE_MESSAGE,
+        400
       );
     }
 
     // PREVENT PLACEHOLDER VALUES FROM BEING USED AS VALID PARAMETERS
     if (isPlaceholder(projectCode) || isPlaceholder(supplierCode)) {
-      return addNoStoreHeaders(
-        NextResponse.json(
-          {
-            error: "Invalid parameters",
-          },
-          {
-            status: 400,
-          }
-        )
+      return unavailableResponse(
+        UNAVAILABLE_MESSAGE,
+        400
       );
     }
 
     // FIND THE PROJECT USING THE PROVIDED PROJECT CODE
-    const project = await prisma.project.findUnique({
+    const project = await prisma.project.findFirst({
       where: {
-        code: projectCode,
+        OR: [
+          { id: projectCode },
+          { code: projectCode },
+        ],
       },
     });
 
     // RETURN AN ERROR IF THE PROJECT DOES NOT EXIST
     if (!project) {
-      return addNoStoreHeaders(
-        NextResponse.json(
-          {
-            error: "Project not found",
-          },
-          {
-            status: 404,
-          }
-        )
+      return unavailableResponse(
+        UNAVAILABLE_MESSAGE,
+        404
+      );
+    }
+
+    // RECONTACT PROJECTS ARE NOT SUPPORTED FOR THE INITIAL DRAKO INTEGRATION
+    if (project.projectType?.trim().toLowerCase() === "recontact") {
+      return unavailableResponse(
+        UNAVAILABLE_MESSAGE,
+        403
       );
     }
 
     // ALLOW REQUESTS ONLY FOR ACTIVE PROJECTS
     if (project.status !== "ACTIVE") {
-      return addNoStoreHeaders(
-        NextResponse.json(
-          {
-            error: "Project is not accepting traffic",
-          },
-          {
-            status: 403,
-          }
-        )
+      return unavailableResponse(
+        UNAVAILABLE_MESSAGE,
+        403
       );
     }
 
-    // FAIL THE REQUEST IF DRAKO SUPPLIER CODE IS NOT CONFIGURED
-    if (!DRAKO_SUPPLIER_CODE) {
-    return addNoStoreHeaders(
-      NextResponse.json(
-        {
-          error: "DRAKO supplier configuration is missing",
-        },
-        {
-          status: 500,
-        }
-      )
-    );
-  }
+    const now = new Date();
+
+    // BLOCK TRAFFIC BEFORE CAMPAIGN START
+    if (project.startDate && now < project.startDate) {
+      return unavailableResponse(
+        UNAVAILABLE_MESSAGE,
+        403
+      );
+    }
+
+    // BLOCK TRAFFIC AFTER CAMPAIGN END
+    if (project.endDate && now > project.endDate) {
+      return unavailableResponse(
+        UNAVAILABLE_MESSAGE,
+        403
+      );
+    }
 
     // FIND THE SUPPLIER USING THE PROVIDED SUPPLIER CODE
     const supplier = await prisma.supplier.findUnique({
@@ -143,29 +197,17 @@ export async function GET(request: NextRequest) {
 
     // RETURN AN ERROR IF THE SUPPLIER DOES NOT EXIST
     if (!supplier) {
-      return addNoStoreHeaders(
-        NextResponse.json(
-          {
-            error: "Supplier not found",
-          },
-          {
-            status: 404,
-          }
-        )
+      return unavailableResponse(
+        UNAVAILABLE_MESSAGE,
+        404
       );
     }
 
     // ENSURE THE SUPPLIER IS CONFIGURED AS DRAKO
-    if (supplier.code !== DRAKO_SUPPLIER_CODE) {
-      return addNoStoreHeaders(
-        NextResponse.json(
-          {
-            error: "Supplier is not configured as DRAKO",
-          },
-          {
-            status: 403,
-          }
-        )
+    if (!isDrakoSupplier(supplier.code)) {
+      return unavailableResponse(
+        UNAVAILABLE_MESSAGE,
+        403
       );
     }
 
@@ -182,29 +224,17 @@ export async function GET(request: NextRequest) {
 
     // RETURN AN ERROR IF NO PROJECT-SUPPLIER MAPPING EXISTS
     if (!mapping) {
-      return addNoStoreHeaders(
-        NextResponse.json(
-          {
-            error: "Project supplier mapping not found",
-          },
-          {
-            status: 403,
-          }
-        )
+      return unavailableResponse(
+        UNAVAILABLE_MESSAGE,
+        403
       );
-    }
+    };
 
     // BLOCK REQUESTS WHEN TRAFFIC IS DISABLED FOR THIS PROJECT-SUPPLIER MAPPING
     if (!mapping.allowTraffic) {
-      return addNoStoreHeaders(
-        NextResponse.json(
-          {
-            error: "Traffic is disabled for this mapping",
-          },
-          {
-            status: 403,
-          }
-        )
+      return unavailableResponse(
+        UNAVAILABLE_MESSAGE,
+        403
       );
     }
 
@@ -231,22 +261,16 @@ export async function GET(request: NextRequest) {
       NextResponse.redirect(
         surveyUrl.toString(),
         302
-      );
+      )
 
     // RETURN THE REDIRECT RESPONSE WITH NO-CACHE HEADERS
     return addNoStoreHeaders(response);
 
   } catch (error) {
     // RETURN A SERVER ERROR RESPONSE WHEN REQUEST PROCESSING FAILS
-    return addNoStoreHeaders(
-      NextResponse.json(
-        {
-          error: "Unable to process request",
-        },
-        {
-          status: 500,
-        }
-      )
+    return unavailableResponse(
+      UNAVAILABLE_MESSAGE,
+      500
     );
   }
 }

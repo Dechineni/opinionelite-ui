@@ -4,7 +4,7 @@ export const runtime = "edge";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Copy } from "lucide-react";
-import { isDrakoSupplier } from "@/lib/drako/drako";
+import { isDrakoSupplier } from "@/lib/drako/client";
 
 
 type SupplierLite = { id: string; code: string; name: string };
