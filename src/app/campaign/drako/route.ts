@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
-import { isDrakoSupplier } from "@/lib/drako/server";
+import { validateDrakoAccess } from "@/lib/drako/validation";
 
 // GENERATE A UNIQUE RESPONDENT ID FOR EACH SURVEY RESPONSE
 function generateRespondentId(): string {
@@ -136,107 +136,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // FIND THE PROJECT USING THE PROVIDED PROJECT CODE
-    const project = await prisma.project.findFirst({
-      where: {
-        OR: [
-          { id: projectCode },
-          { code: projectCode },
-        ],
-      },
-    });
+    const validation =
+      await validateDrakoAccess(
+        prisma,
+        projectCode,
+        supplierCode
+      );
 
-    // RETURN AN ERROR IF THE PROJECT DOES NOT EXIST
-    if (!project) {
+    if (!validation.valid) {
       return unavailableResponse(
         UNAVAILABLE_MESSAGE,
-        404
+        "status" in validation
+          ? validation.status
+          : 403
       );
     }
 
-    // RECONTACT PROJECTS ARE NOT SUPPORTED FOR THE INITIAL DRAKO INTEGRATION
-    if (project.projectType?.trim().toLowerCase() === "recontact") {
-      return unavailableResponse(
-        UNAVAILABLE_MESSAGE,
-        403
-      );
-    }
-
-    // ALLOW REQUESTS ONLY FOR ACTIVE PROJECTS
-    if (project.status !== "ACTIVE") {
-      return unavailableResponse(
-        UNAVAILABLE_MESSAGE,
-        403
-      );
-    }
-
-    const now = new Date();
-
-    // BLOCK TRAFFIC BEFORE CAMPAIGN START
-    if (project.startDate && now < project.startDate) {
-      return unavailableResponse(
-        UNAVAILABLE_MESSAGE,
-        403
-      );
-    }
-
-    // BLOCK TRAFFIC AFTER CAMPAIGN END
-    if (project.endDate && now > project.endDate) {
-      return unavailableResponse(
-        UNAVAILABLE_MESSAGE,
-        403
-      );
-    }
-
-    // FIND THE SUPPLIER USING THE PROVIDED SUPPLIER CODE
-    const supplier = await prisma.supplier.findUnique({
-      where: {
-        code: supplierCode,
-      },
-    });
-
-    // RETURN AN ERROR IF THE SUPPLIER DOES NOT EXIST
-    if (!supplier) {
-      return unavailableResponse(
-        UNAVAILABLE_MESSAGE,
-        404
-      );
-    }
-
-    // ENSURE THE SUPPLIER IS CONFIGURED AS DRAKO
-    if (!isDrakoSupplier(supplier.code)) {
-      return unavailableResponse(
-        UNAVAILABLE_MESSAGE,
-        403
-      );
-    }
-
-    // FIND THE MAPPING BETWEEN THE PROJECT AND SUPPLIER
-    const mapping =
-      await prisma.projectSupplierMap.findUnique({
-        where: {
-          projectId_supplierId: {
-            projectId: project.id,
-            supplierId: supplier.id,
-          },
-        },
-    });
-
-    // RETURN AN ERROR IF NO PROJECT-SUPPLIER MAPPING EXISTS
-    if (!mapping) {
-      return unavailableResponse(
-        UNAVAILABLE_MESSAGE,
-        403
-      );
-    };
-
-    // BLOCK REQUESTS WHEN TRAFFIC IS DISABLED FOR THIS PROJECT-SUPPLIER MAPPING
-    if (!mapping.allowTraffic) {
-      return unavailableResponse(
-        UNAVAILABLE_MESSAGE,
-        403
-      );
-    }
+    const project = validation.project;
+    const supplier = validation.supplier;
 
     // GENERATE A UNIQUE RESPONDENT ID FOR THE SURVEY USER
     const respondentId = generateRespondentId();
@@ -248,7 +165,7 @@ export async function GET(request: NextRequest) {
     const surveyUrl = new URL("/Survey",origin);
 
     // ADD THE PROJECT ID TO THE SURVEY URL
-    surveyUrl.searchParams.set("projectId", project.code);
+    surveyUrl.searchParams.set("projectId", project.code || project.id);
 
     // ADD THE SUPPLIER ID TO THE SURVEY URL
     surveyUrl.searchParams.set("supplierId", supplier.code);
