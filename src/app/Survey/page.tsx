@@ -7,6 +7,17 @@ import { useRouter, useSearchParams } from "next/navigation";
 // This page depends on URL params, don't prerender.
 export const dynamic = "force-dynamic";
 
+function isPlaceholder(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+
+  return (
+    !normalized ||
+    normalized === "[identifier]" ||
+    normalized === "{identifier}" ||
+    normalized === "identifier"
+  );
+}
+
 function SurveyLandingInner() {
   const sp = useSearchParams();
   const router = useRouter();
@@ -19,7 +30,7 @@ function SurveyLandingInner() {
     // CAPTURE FIXED RECONTACT PANELIST ID FROM SUPPLIER URL 
     const recid = sp.get("recid") || "";
 
-    if (!projectId || !id) return;
+    if (!projectId || isPlaceholder(id)) return;
 
     const buildParams = () =>{
       const params = new URLSearchParams({

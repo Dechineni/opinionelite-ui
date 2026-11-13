@@ -117,6 +117,23 @@ function isTestSupplier(
   );
 }
 
+function isDrakoSupplier(
+  supplier:
+    | {
+        code?: string | null;
+      }
+    | null
+    | undefined
+) {
+  const drakoCode =
+    process.env.DRAKO_SUPPLIER_CODE?.trim().toLowerCase() || "";
+
+  return (
+    drakoCode &&
+    supplier?.code?.trim().toLowerCase() === drakoCode
+  );
+}
+
 export async function GET(req: Request) {
   const prisma = getPrisma();
 
@@ -879,7 +896,7 @@ export async function GET(req: Request) {
       );
     }
 
-    if (supplierRecord) {
+    if (supplierRecord && !isDrakoSupplier(supplierRecord)) {
       const r = mapped.redirectResult;
 
       const tpl =
@@ -907,7 +924,8 @@ export async function GET(req: Request) {
     if (
       !nextUrl &&
       mapped.redirectResult === "COMPLETE" &&
-      isTestSupplier(supplierRecord)
+      isTestSupplier(supplierRecord) &&
+      !isDrakoSupplier(supplierRecord)
     ) {
       const opPanelBase =
         (process.env.OP_PANEL_API_BASE || "").trim() ||

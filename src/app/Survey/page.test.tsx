@@ -118,41 +118,62 @@ describe("Survey page", () => {
     });
   });
 
-  it.each([
-    "[identifier]",
-    "{identifier}",
-    "identifier",
-    "   ",
-  ])(
-    "forwards externalId value %s to entry tracking",
-    async (externalId) => {
-      params = new URLSearchParams({
-        projectId: "SR1000",
-        supplierId: "S1007",
-        id: externalId,
-      });
+it.each([
+  "[identifier]",
+  "{identifier}",
+  "identifier",
+  "   ",
+])(
+  "does not start survey flow when externalId is %s",
+  async (externalId: string) => {
+    params = new URLSearchParams({
+      projectId: "SR1000",
+      supplierId: "S1007",
+      id: externalId,
+    });
 
-      render(<SurveyLandingPage />);
+    render(<SurveyLandingPage />);
 
-      await waitFor(() => {
-        expect(fetch).toHaveBeenCalled();
-      });
+    await new Promise((resolve) =>
+      setTimeout(resolve, 25)
+    );
 
-      const firstCall = (fetch as any).mock.calls[0];
+    // Supplier Entry should not be called
+    expect(fetch).not.toHaveBeenCalled();
 
-      expect(firstCall[0]).toBe(
-        "/api/projects/SR1000/entry"
-      );
+    // Prescreen/Launch navigation should not start
+    expect(replaceMock).not.toHaveBeenCalled();
+  }
+);
+  it("continues normal flow for valid generated DRAKO identifier", async () => {
+    params = new URLSearchParams({
+      projectId: "SR1000",
+      supplierId: "S1010",
+      id: "DRK-a7f92c6e8b314d50f6a281e43bc905d2",
+    });
 
-      expect(
-        JSON.parse(firstCall[1].body)
-      ).toEqual({
-        supplierId: "S1007",
-        externalId,
-        recid: "",
-      });
-    }
-  );
+    render(<SurveyLandingPage />);
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalled();
+    });
+
+    const firstCall = (fetch as any).mock.calls[0];
+
+    expect(firstCall[0]).toBe(
+      "/api/projects/SR1000/entry"
+    );
+
+    expect(
+      JSON.parse(firstCall[1].body)
+    ).toEqual({
+      supplierId: "S1010",
+      externalId:
+        "DRK-a7f92c6e8b314d50f6a281e43bc905d2",
+      recid: "",
+    });
+  });
+
   it("does nothing when externalId is empty", async () => {
   params = new URLSearchParams({
     projectId: "SR1000",
