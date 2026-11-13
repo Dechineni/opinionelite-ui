@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { z } from "zod";
 import { buildSupplierUrl } from "@/lib/supplier-url";
+import { isDrakoSupplier } from "@/lib/drako/server";
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -442,9 +443,23 @@ export async function GET(
     );
   }
 
+  const appBaseUrl =
+  (process.env.APP_PUBLIC_BASE_URL || "").trim() ||
+  "https://opinion-elite.com";
+
+
   const items = maps.map((mapping) => {
     const supplierCode =
       mapping.supplier?.code ?? "";
+
+    const drakoCampaignUrl =
+    isDrakoSupplier(supplierCode)
+      ? `${appBaseUrl}/campaign/drako?projectId=${encodeURIComponent(
+          projectKey
+        )}&supplierId=${encodeURIComponent(
+          supplierCode
+        )}`
+      : null;
 
     const entryCounts =
       entryBySupplier[supplierCode] ??
@@ -466,6 +481,8 @@ export async function GET(
       supplierCode,
       supplierName:
         mapping.supplier?.name ?? "",
+      isDrako: isDrakoSupplier(supplierCode),
+      drakoCampaignUrl,
       supplierCountry:
         mapping.supplier?.countryCode ?? "",
       contactNumber:
@@ -726,6 +743,7 @@ export async function POST(
         data: createData,
       });
 
+
     return NextResponse.json(
       {
         item: {
@@ -738,7 +756,18 @@ export async function POST(
             supplier.code ?? "",
           supplierName:
             supplier.name ?? "",
-
+          isDrako: isDrakoSupplier(
+            supplier.code ?? ""
+          ),
+          drakoCampaignUrl: isDrakoSupplier(
+          supplier.code ?? ""
+        )
+          ? `${uiBase}/campaign/drako?projectId=${encodeURIComponent(
+              projectKey
+            )}&supplierId=${encodeURIComponent(
+              supplier.code ?? ""
+            )}`
+          : null,
           supplierQuota:
             created.quota,
           clickQuota:

@@ -4,8 +4,6 @@ export const runtime = "edge";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Copy } from "lucide-react";
-import { isDrakoSupplier } from "@/lib/drako/client";
-
 
 type SupplierLite = { id: string; code: string; name: string };
 
@@ -22,6 +20,9 @@ type MapRow = {
   // flattened for display (derived from include: { supplier: ... })
   supplierCode?: string;
   supplierName?: string;
+
+  isDrako?: boolean;
+  drakoCampaignUrl?: string | null;
 
   // server fields
   quota: number; // DB column for supplier quota
@@ -111,6 +112,7 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
       ...r,
       supplierCode: r.supplier?.code ?? r.supplierCode ?? "",
       supplierName: r.supplier?.name ?? r.supplierName ?? "",
+      isDrako: Boolean(r.isDrako),
       quota: r.quota ?? 0,
     }));
   }
@@ -143,19 +145,6 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
     {
       url += "&recid=[recid]";
     }
-    // RETURN THE GENERATED SUPPLIER URL
-    return url;
-  }
-
-  function buildDrakoCampaignUrl(projectCodeVal: string | undefined, supplierCodeVal: string | undefined) {
-    const p = encodeURIComponent(projectCodeVal || "");
-    const s = encodeURIComponent(supplierCodeVal || "");
-    if (!p || !s) return "—";
-    const uiOrigin = getUiOrigin();
-
-    // GENERATE BASE SUPPLIER URL
-    let url = `${uiOrigin}/campaign/drako?projectId=${p}&supplierId=${s}`;
-
     // RETURN THE GENERATED SUPPLIER URL
     return url;
   }
@@ -437,36 +426,34 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
   }
 
   function DrakoUrlCell(r: MapRow) {
-    const url = buildDrakoCampaignUrl(
-      projectCode,
-      r.supplierCode
-    );
+  const url = r.drakoCampaignUrl;
 
-    if (url === "—") {
-      return <span>—</span>;
-    }
-
-    return (
-      <div className="flex flex-col gap-1">
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-emerald-700 hover:underline break-all"
-          title={url}
-        >
-          {url}
-        </a>
-        <button
-          type="button"
-          onClick={() => copyToClipboard(url)}
-          className="w-fit rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
-        >
-          Copy Landing URL
-        </button>
-      </div>
-    );
+  if (!url) {
+    return <span>—</span>;
   }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-emerald-700 hover:underline break-all"
+        title={url}
+      >
+        {url}
+      </a>
+
+      <button
+        type="button"
+        onClick={() => copyToClipboard(url)}
+        className="w-fit rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
+      >
+        Copy Landing URL
+      </button>
+    </div>
+  );
+  } 
   
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -522,7 +509,7 @@ export default function SupplierMappingPanel({ projectId }: { projectId: string 
                     <SupplierUrlCell {...r} />
                   </td>
                   <td className="px-3 py-2">
-                    {isDrakoSupplier(r.supplierCode) ? (
+                    {r.isDrako ? (
                       <DrakoUrlCell {...r} />
                     ) : (
                       <span>—</span>
