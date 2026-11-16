@@ -10,8 +10,7 @@ import {
   generateTolunaInvite,
   type TolunaClientConfig,
 } from "@/lib/providers/toluna";
-import { isDrakoSupplier } from "@/lib/drako/server";
-import { validateDrakoAccess } from "@/lib/drako/validation";
+import { validateDrakoAccess, isDrakoExternalId } from "@/lib/drako/validation";
 
 function isValidDateOnly(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -56,8 +55,10 @@ export async function GET(
 
     const url = new URL(req.url);
     const supplierId = (url.searchParams.get("supplierId") || "").trim();
+    const externalId = (url.searchParams.get("id") || "").trim();
+    const isDrakoRequest = isDrakoExternalId(externalId);
 
-    if (supplierId && isDrakoSupplier(supplierId)) {
+    if (isDrakoRequest) {
       const validation =
         await validateDrakoAccess(
           prisma,
@@ -78,7 +79,6 @@ export async function GET(
       }
     }
 
-    const externalId = (url.searchParams.get("id") || "").trim();
     const recid = (url.searchParams.get("recid") || "").trim();
     const birthDateFromQuery = (url.searchParams.get("birthDate") || "").trim();
     const genderFromQuery = (url.searchParams.get("gender") || "").trim();

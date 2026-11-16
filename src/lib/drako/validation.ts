@@ -162,3 +162,12 @@ export async function validateDrakoAccess(
     };
 
 }
+
+export function isDrakoExternalId(
+  externalId: string | null | undefined
+): boolean {
+  return String(externalId || "")
+    .trim()
+    .toUpperCase()
+    .startsWith("DRK-");
+}

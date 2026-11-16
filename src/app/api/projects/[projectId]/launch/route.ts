@@ -4,8 +4,7 @@ export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
-import { isDrakoSupplier } from "@/lib/drako/server";
-import { validateDrakoAccess } from "@/lib/drako/validation";
+import { validateDrakoAccess, isDrakoExternalId } from "@/lib/drako/validation";
 
 function hasUsableGender(value: string | null | undefined): boolean {
   const v = (value || "").trim().toLowerCase();
@@ -34,7 +33,10 @@ export async function GET(
 
   const supplierId = (url.searchParams.get("supplierId") || "").trim();
 
-  if (supplierId && isDrakoSupplier(supplierId)) {
+  const externalId =
+    (url.searchParams.get("id") || "").trim();
+
+  if (isDrakoExternalId(externalId)) {
     const validation =
       await validateDrakoAccess(
         prisma,
@@ -54,8 +56,6 @@ export async function GET(
       );
     }
   }
-
-  const externalId = (url.searchParams.get("id") || "").trim();
 
   // GET THE RECID VALUE FROM THE URL QUERY PARAMETERS
   const recid = (url.searchParams.get("recid") || "").trim();

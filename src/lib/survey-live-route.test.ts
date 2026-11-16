@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "@/app/api/projects/[projectId]/survey-live/route";
+import { validateDrakoAccess, isDrakoExternalId } from "@/lib/drako/validation";
 
 const mockPrisma = {
   project: {
@@ -27,6 +28,17 @@ const mockPrisma = {
 vi.mock("@/lib/prisma", () => ({
   getPrisma: () => mockPrisma,
 }));
+
+vi.mock("@/lib/drako/validation", () => ({
+  validateDrakoAccess: vi.fn(),
+  isDrakoExternalId: vi.fn(),
+}));
+
+const mockedValidateDrakoAccess =
+  vi.mocked(validateDrakoAccess);
+
+const mockedIsDrakoExternalId =
+  vi.mocked(isDrakoExternalId);
 
 describe("survey live route", () => {
   beforeEach(() => {
@@ -258,5 +270,32 @@ describe("survey live route", () => {
       mockPrisma.surveyRedirect.create
     ).not.toHaveBeenCalled();
   });
+
+  it(
+    "blocks invalid drako survey-live access",
+    async () => {
+      mockedIsDrakoExternalId.mockReturnValue(
+        true
+      );
+
+      mockedValidateDrakoAccess.mockResolvedValue({
+        valid: false,
+        status: 403,
+        reason: "Traffic disabled",
+      } as any);
+
+      const req = new Request(
+        "https://test.com/api/projects/PRJ1/survey-live?supplierId=S1007&id=DRK-test123"
+      );
+
+      const res = await GET(req, {
+        params: Promise.resolve({
+          projectId: "PRJ1",
+        }),
+      });
+
+      expect(res.status).toBe(403);
+    }
+  );
 
 });

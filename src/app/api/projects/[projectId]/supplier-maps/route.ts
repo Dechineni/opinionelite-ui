@@ -70,16 +70,15 @@ function badJSON(msg: string, code = 400) {
 async function resolveProjectId(projectKey: string) {
   const prisma = getPrisma();
 
-  const project = await prisma.project.findFirst({
+  return await prisma.project.findFirst({
     where: {
       OR: [{ id: projectKey }, { code: projectKey }],
     },
     select: {
       id: true,
+      code: true,
     },
   });
-
-  return project?.id ?? null;
 }
 
 /**
@@ -128,9 +127,9 @@ export async function GET(
 ) {
   const prisma = getPrisma();
   const { projectId: projectKey } = await ctx.params;
-
-  const projId = await resolveProjectId(projectKey);
-
+  const project = await resolveProjectId(projectKey);
+  const projId = project?.id ?? null;
+  const projectCode = project?.code ?? null;
   if (!projId) {
     return badJSON("Project not found", 404);
   }
@@ -444,6 +443,7 @@ export async function GET(
   }
 
   const appBaseUrl =
+  (process.env.NEXT_PUBLIC_BASE_URL || "").trim() ||
   (process.env.APP_PUBLIC_BASE_URL || "").trim() ||
   "https://opinion-elite.com";
 
@@ -455,7 +455,7 @@ export async function GET(
     const drakoCampaignUrl =
     isDrakoSupplier(supplierCode)
       ? `${appBaseUrl}/campaign/drako?projectId=${encodeURIComponent(
-          projectKey
+          projectCode??""
         )}&supplierId=${encodeURIComponent(
           supplierCode
         )}`
@@ -588,16 +588,16 @@ export async function POST(
     await ctx.params;
 
   try {
-    const projId =
+    const projectInfo =
       await resolveProjectId(projectKey);
 
-    if (!projId) {
+    if (!projectInfo) {
       return badJSON(
         "Project not found",
         404
       );
     }
-
+    const resolvedProjectId = projectInfo.id;
     let body: unknown;
 
     try {
@@ -652,7 +652,7 @@ export async function POST(
     const project =
       await prisma.project.findUnique({
         where: {
-          id: projId,
+          id: resolvedProjectId,
         },
         select: {
           code: true,
@@ -693,7 +693,7 @@ export async function POST(
       });
 
     const createData: any = {
-      projectId: projId,
+      projectId: resolvedProjectId,
       supplierId: data.supplierId,
       quota: data.supplierQuota,
       clickQuota: data.clickQuota,

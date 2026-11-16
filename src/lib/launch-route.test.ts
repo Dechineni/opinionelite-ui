@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { GET } from "@/app/api/projects/[projectId]/launch/route";
+import { validateDrakoAccess, isDrakoExternalId } from "@/lib/drako/validation";
 
 const mockPrisma = {
     project: {
@@ -13,6 +14,17 @@ const mockPrisma = {
 vi.mock("@/lib/prisma", () => ({
     getPrisma: () => mockPrisma,
 }));
+
+vi.mock("@/lib/drako/validation", () => ({
+    validateDrakoAccess: vi.fn(),
+    isDrakoExternalId: vi.fn(),
+}));
+
+const mockedValidateDrakoAccess =
+    vi.mocked(validateDrakoAccess);
+
+const mockedIsDrakoExternalId =
+    vi.mocked(isDrakoExternalId);
 
 describe("launch route", () => {
     beforeEach(() => {
@@ -77,5 +89,29 @@ describe("launch route", () => {
         expect(location).toContain("supplierId=S1");
         expect(location).toContain("id=EXT1");
         expect(location).toContain("recid=REC1");
+    });
+
+    it("blocks invalid drako traffic", async () => {
+        mockedIsDrakoExternalId.mockReturnValue(
+            true
+        );
+
+        mockedValidateDrakoAccess.mockResolvedValue({
+            valid: false,
+            status: 403,
+            reason: "Traffic disabled",
+        } as any);
+
+        const req = new Request(
+            "https://test.com/api/projects/PRJ1/launch?supplierId=S1007&id=DRK-test"
+        );
+
+        const res = await GET(req, {
+            params: Promise.resolve({
+                projectId: "PRJ1",
+            }),
+        });
+
+        expect(res.status).toBe(403);
     });
 });
