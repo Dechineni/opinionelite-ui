@@ -1,6 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { validateDrakoAccess } from "./validation";
 import { isDrakoSupplier } from "@/lib/drako/server";
+
+import {
+  requiresDrakoValidation,
+  validateDrakoAccess,
+} from "./validation";
+
+
+const mockedIsDrakoSupplier =
+  vi.mocked(isDrakoSupplier);
 
 vi.mock("@/lib/drako/server", () => ({
   isDrakoSupplier: vi.fn(),
@@ -353,5 +361,82 @@ describe("validateDrakoAccess", () => {
         supplier,
         });
     });
+});
 
+describe("requiresDrakoValidation", () => {
+  let prisma: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    prisma = {
+      supplier: {
+        findUnique: vi.fn(),
+      },
+    };
+  });
+
+  it("returns false when supplier code is empty", async () => {
+    const result =
+      await requiresDrakoValidation(
+        prisma,
+        ""
+      );
+
+    expect(result).toBe(false);
+
+    expect(
+      prisma.supplier.findUnique
+    ).not.toHaveBeenCalled();
+  });
+
+  it("returns false when supplier is not found", async () => {
+    prisma.supplier.findUnique.mockResolvedValue(
+      null
+    );
+
+    const result =
+      await requiresDrakoValidation(
+        prisma,
+        "S1010"
+      );
+
+    expect(result).toBe(false);
+  });
+
+  it("returns false for non drako supplier", async () => {
+    prisma.supplier.findUnique.mockResolvedValue({
+      code: "S1007",
+    });
+
+    mockedIsDrakoSupplier.mockReturnValue(
+      false
+    );
+
+    const result =
+      await requiresDrakoValidation(
+        prisma,
+        "S1007"
+      );
+
+    expect(result).toBe(false);
+  });
+
+  it("returns true for drako supplier", async () => {
+    prisma.supplier.findUnique.mockResolvedValue({
+      code: "S1010",
+    });
+
+    mockedIsDrakoSupplier.mockReturnValue(
+      true
+    );
+
+    const result =
+      await requiresDrakoValidation(
+        prisma,
+        "S1010"
+      );
+
+    expect(result).toBe(true);
+  });
 });

@@ -10,7 +10,7 @@ import {
   generateTolunaInvite,
   type TolunaClientConfig,
 } from "@/lib/providers/toluna";
-import { validateDrakoAccess, isDrakoExternalId } from "@/lib/drako/validation";
+import { validateDrakoAccess, requiresDrakoValidation } from "@/lib/drako/validation";
 
 function isValidDateOnly(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -56,9 +56,9 @@ export async function GET(
     const url = new URL(req.url);
     const supplierId = (url.searchParams.get("supplierId") || "").trim();
     const externalId = (url.searchParams.get("id") || "").trim();
-    const isDrakoRequest = isDrakoExternalId(externalId);
+    const requiresValidation = await requiresDrakoValidation(prisma, supplierId);
 
-    if (isDrakoRequest) {
+    if (requiresValidation) {
       const validation =
         await validateDrakoAccess(
           prisma,

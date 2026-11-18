@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "@/app/api/projects/[projectId]/survey-live/route";
-import { validateDrakoAccess, isDrakoExternalId } from "@/lib/drako/validation";
+import { validateDrakoAccess, requiresDrakoValidation } from "@/lib/drako/validation";
 
 const mockPrisma = {
   project: {
@@ -31,18 +31,20 @@ vi.mock("@/lib/prisma", () => ({
 
 vi.mock("@/lib/drako/validation", () => ({
   validateDrakoAccess: vi.fn(),
-  isDrakoExternalId: vi.fn(),
+  requiresDrakoValidation: vi.fn(),
 }));
 
 const mockedValidateDrakoAccess =
   vi.mocked(validateDrakoAccess);
 
-const mockedIsDrakoExternalId =
-  vi.mocked(isDrakoExternalId);
+const mockedRequiresDrakoValidation =
+  vi.mocked(requiresDrakoValidation);
 
 describe("survey live route", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+
+    mockedRequiresDrakoValidation.mockResolvedValue(false);
   });
 
   it("returns 409 when finalized SurveyRedirect already exists", async () => {
@@ -274,9 +276,7 @@ describe("survey live route", () => {
   it(
     "blocks invalid drako survey-live access",
     async () => {
-      mockedIsDrakoExternalId.mockReturnValue(
-        true
-      );
+      mockedRequiresDrakoValidation.mockResolvedValue(true);
 
       mockedValidateDrakoAccess.mockResolvedValue({
         valid: false,
@@ -285,7 +285,7 @@ describe("survey live route", () => {
       } as any);
 
       const req = new Request(
-        "https://test.com/api/projects/PRJ1/survey-live?supplierId=S1007&id=DRK-test123"
+        "https://test.com/api/projects/PRJ1/survey-live?supplierId=S1010&id=ABC123"
       );
 
       const res = await GET(req, {
@@ -295,7 +295,15 @@ describe("survey live route", () => {
       });
 
       expect(res.status).toBe(403);
+
+      expect(
+        mockedValidateDrakoAccess
+      ).toHaveBeenCalledWith(
+        mockPrisma,
+        "PRJ1",
+        "S1010"
+      );
     }
   );
-
+  
 });

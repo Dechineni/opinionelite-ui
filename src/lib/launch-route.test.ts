@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { GET } from "@/app/api/projects/[projectId]/launch/route";
-import { validateDrakoAccess, isDrakoExternalId } from "@/lib/drako/validation";
+import { validateDrakoAccess, requiresDrakoValidation } from "@/lib/drako/validation";
 
 const mockPrisma = {
     project: {
@@ -17,18 +17,20 @@ vi.mock("@/lib/prisma", () => ({
 
 vi.mock("@/lib/drako/validation", () => ({
     validateDrakoAccess: vi.fn(),
-    isDrakoExternalId: vi.fn(),
+    requiresDrakoValidation: vi.fn(),
 }));
 
 const mockedValidateDrakoAccess =
     vi.mocked(validateDrakoAccess);
 
-const mockedIsDrakoExternalId =
-    vi.mocked(isDrakoExternalId);
+const mockedRequiresDrakoValidation =
+    vi.mocked(requiresDrakoValidation);
 
 describe("launch route", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+
+        mockedRequiresDrakoValidation.mockResolvedValue(false);
     });
 
     it("preserves supplierId id and recid during prescreen redirect", async () => {
@@ -92,7 +94,7 @@ describe("launch route", () => {
     });
 
     it("blocks invalid drako traffic", async () => {
-        mockedIsDrakoExternalId.mockReturnValue(
+        mockedRequiresDrakoValidation.mockResolvedValue(
             true
         );
 
@@ -103,7 +105,7 @@ describe("launch route", () => {
         } as any);
 
         const req = new Request(
-            "https://test.com/api/projects/PRJ1/launch?supplierId=S1007&id=DRK-test"
+            "https://test.com/api/projects/PRJ1/launch?supplierId=S1010&id=ABC123"
         );
 
         const res = await GET(req, {
@@ -113,5 +115,13 @@ describe("launch route", () => {
         });
 
         expect(res.status).toBe(403);
+
+        expect(
+            mockedValidateDrakoAccess
+        ).toHaveBeenCalledWith(
+            mockPrisma,
+            "PRJ1",
+            "S1010"
+        );
     });
 });

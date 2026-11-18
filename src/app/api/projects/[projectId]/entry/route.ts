@@ -4,6 +4,7 @@ export const preferredRegion = "auto";
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { isUsableExternalId } from "@/lib/identifiers";
+import { validateDrakoAccess, requiresDrakoValidation } from "@/lib/drako/validation";
 
 export async function POST(
   req: Request,
@@ -52,6 +53,28 @@ export async function POST(
         { error: "Project not found" },
         { status: 404 }
       );
+    }
+    
+    const requiresValidation = await requiresDrakoValidation(prisma, supplierCode);
+
+    if (requiresValidation) {
+      const validation = await validateDrakoAccess(
+        prisma,
+        projectId,
+        supplierCode
+      );
+
+      if (!validation.valid) {
+        return NextResponse.json(
+          {
+            error:
+              "This survey is currently unavailable.",
+          },
+          {
+            status: validation.status,
+          }
+        );
+      }
     }
 
     const entry = await prisma.supplierEntry.upsert({
