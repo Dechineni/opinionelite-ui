@@ -3,6 +3,7 @@ export const runtime = "edge";
 import { NextRequest, NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { validateDrakoAccess } from "@/lib/drako/validation";
+import { getDrakoBaseUrl } from "@/lib/drako/url-config";
 
 // GENERATE A UNIQUE RESPONDENT ID FOR EACH SURVEY RESPONSE
 function generateRespondentId(): string {
@@ -161,7 +162,7 @@ export async function GET(request: NextRequest) {
     const respondentId = generateRespondentId();
 
     // GET THE APPLICATION BASE URL FOR BUILDING THE SURVEY LINK
-    const origin = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
+    const origin = getDrakoBaseUrl();
 
     // CREATE THE SURVEY URL FOR REDIRECTING THE USER
     const surveyUrl = new URL("/Survey",origin);

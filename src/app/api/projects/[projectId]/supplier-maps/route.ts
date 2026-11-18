@@ -7,6 +7,7 @@ import { getPrisma } from "@/lib/prisma";
 import { z } from "zod";
 import { buildSupplierUrl } from "@/lib/supplier-url";
 import { isDrakoSupplier } from "@/lib/drako/server";
+import { getDrakoBaseUrl } from "@/lib/drako/url-config";
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -442,11 +443,7 @@ export async function GET(
     );
   }
 
-  const appBaseUrl =
-  (process.env.NEXT_PUBLIC_BASE_URL || "").trim() ||
-  (process.env.APP_PUBLIC_BASE_URL || "").trim() ||
-  "https://opinion-elite.com";
-
+  const appBaseUrl = getDrakoBaseUrl();
 
   const items = maps.map((mapping) => {
     const supplierCode =
@@ -671,16 +668,7 @@ export async function POST(
       );
     }
 
-    const uiBase =
-      (
-        process.env.APP_PUBLIC_BASE_URL ||
-        ""
-      ).trim() ||
-      (
-        process.env.NEXT_PUBLIC_UI_ORIGIN ||
-        ""
-      ).trim() ||
-      "https://opinion-elite.com";
+    const uiBase = getDrakoBaseUrl();
 
     const supplierUrl =
       buildSupplierUrl({
@@ -763,7 +751,7 @@ export async function POST(
           supplier.code ?? ""
         )
           ? `${uiBase}/campaign/drako?projectId=${encodeURIComponent(
-              projectKey
+              projectCode
             )}&supplierId=${encodeURIComponent(
               supplier.code ?? ""
             )}`
