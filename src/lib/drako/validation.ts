@@ -163,11 +163,33 @@ export async function validateDrakoAccess(
 
 }
 
-export function isDrakoExternalId(
-  externalId: string | null | undefined
-): boolean {
-  return String(externalId || "")
-    .trim()
-    .toUpperCase()
-    .startsWith("DRK-");
+export async function requiresDrakoValidation(
+    prisma: any,
+    supplierCode: string | null | undefined
+): Promise<boolean> {
+    const normalizedSupplierCode = String(
+        supplierCode || ""
+    ).trim();
+
+    if (!normalizedSupplierCode) {
+        return false;
+    }
+
+    const supplier =
+        await prisma.supplier.findUnique({
+            where: {
+                code: normalizedSupplierCode,
+            },
+            select: {
+                code: true,
+            },
+        });
+
+    if (!supplier) {
+        return false;
+    }
+
+    return isDrakoSupplier(
+        supplier.code
+    );
 }
