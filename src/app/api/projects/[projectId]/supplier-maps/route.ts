@@ -443,14 +443,23 @@ export async function GET(
     );
   }
 
-  const appBaseUrl = getDrakoBaseUrl();
+  let appBaseUrl: string | null = null;
+
+  try {
+    appBaseUrl = getDrakoBaseUrl();
+  } catch (error) {
+    console.warn(
+      "DRAKO URL configuration is missing or invalid:",
+      error
+    );
+  }
 
   const items = maps.map((mapping) => {
     const supplierCode =
       mapping.supplier?.code ?? "";
 
     const drakoCampaignUrl =
-    isDrakoSupplier(supplierCode)
+    isDrakoSupplier(supplierCode) && appBaseUrl
       ? `${appBaseUrl}/campaign/drako?projectId=${encodeURIComponent(
           projectCode??""
         )}&supplierId=${encodeURIComponent(
@@ -668,9 +677,18 @@ export async function POST(
       );
     }
 
-    const uiBase = getDrakoBaseUrl();
+    let uiBase: string | null = null;
 
-    const supplierUrl =
+    try {
+      uiBase = getDrakoBaseUrl();
+    } catch (error) {
+      console.warn(
+        "DRAKO URL configuration is missing or invalid:",
+        error
+      );
+    }
+
+    const supplierUrl = uiBase ?
       buildSupplierUrl({
         uiBase,
         projectCode,
@@ -678,7 +696,7 @@ export async function POST(
           supplier.code ?? ""
         ),
         projectType: project?.projectType ?? "",
-      });
+      }) : null;
 
     const createData: any = {
       projectId: resolvedProjectId,
@@ -749,7 +767,7 @@ export async function POST(
           ),
           drakoCampaignUrl: isDrakoSupplier(
           supplier.code ?? ""
-        )
+        ) && uiBase
           ? `${uiBase}/campaign/drako?projectId=${encodeURIComponent(
               projectCode
             )}&supplierId=${encodeURIComponent(
