@@ -677,6 +677,21 @@ export async function POST(
       );
     }
 
+    const supplierBaseUrl =
+    (process.env.APP_PUBLIC_BASE_URL || "").trim() ||
+    (process.env.NEXT_PUBLIC_UI_ORIGIN || "").trim() ||
+    "https://opinion-elite.com";
+
+    const supplierUrl = 
+      buildSupplierUrl({
+        uiBase : supplierBaseUrl,
+        projectCode,
+        supplierCode: String(
+          supplier.code ?? ""
+        ),
+        projectType: project?.projectType ?? "",
+      });
+
     let uiBase: string | null = null;
 
     try {
@@ -687,16 +702,6 @@ export async function POST(
         error
       );
     }
-
-    const supplierUrl = uiBase ?
-      buildSupplierUrl({
-        uiBase,
-        projectCode,
-        supplierCode: String(
-          supplier.code ?? ""
-        ),
-        projectType: project?.projectType ?? "",
-      }) : null;
 
     const createData: any = {
       projectId: resolvedProjectId,
