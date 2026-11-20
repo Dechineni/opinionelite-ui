@@ -197,10 +197,9 @@ export async function requiresDrakoValidation(
 export function isReservedDrakoId(
     externalId: string | null | undefined
 ): boolean {
-    return String(externalId || "")
-        .trim()
-        .toUpperCase()
-        .startsWith("DRK-");
+    return /^DRK-[0-9a-f]{32}$/i.test(
+    String(externalId || "").trim()
+    );    
 }
 
 export async function requiresDrakoProtection(

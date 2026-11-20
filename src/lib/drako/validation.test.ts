@@ -446,13 +446,19 @@ describe("requiresDrakoValidation", () => {
 describe("isReservedDrakoId", () => {
   it("returns true for drako generated identifiers", () => {
     expect(
-      isReservedDrakoId("DRK-test")
+      isReservedDrakoId("DRK-a1b2c3d4e5f678901234567890abcdef")
     ).toBe(true);
   });
 
   it("returns false for non drako identifiers", () => {
     expect(
       isReservedDrakoId("ABC123")
+    ).toBe(false);
+  });
+
+  it("returns false for invalid drako prefixes", () => {
+    expect(
+      isReservedDrakoId("DRK-test")
     ).toBe(false);
   });
 });
@@ -477,7 +483,7 @@ describe("requiresDrakoProtection", () => {
         await requiresDrakoProtection(
           prisma,
           "",
-          "DRK-test"
+          "DRK-a1b2c3d4e5f678901234567890abcdef"
         );
 
       expect(result).toBe(true);

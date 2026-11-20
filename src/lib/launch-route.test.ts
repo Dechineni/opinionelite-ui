@@ -139,7 +139,7 @@ describe("launch route", () => {
             } as any);
 
             const req = new Request(
-                "https://test.com/api/projects/PRJ1/launch?id=DRK-test"
+                "https://test.com/api/projects/PRJ1/launch?id=DRK-a1b2c3d4e5f678901234567890abcdef"
             );
 
             const res = await GET(req, {
