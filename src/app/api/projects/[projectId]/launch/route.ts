@@ -4,6 +4,7 @@ export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { validateDrakoAccess, requiresDrakoProtection } from "@/lib/drako/validation";
 
 function hasUsableGender(value: string | null | undefined): boolean {
   const v = (value || "").trim().toLowerCase();
@@ -31,7 +32,32 @@ export async function GET(
   const url = new URL(req.url);
 
   const supplierId = (url.searchParams.get("supplierId") || "").trim();
-  const externalId = (url.searchParams.get("id") || "").trim();
+
+  const externalId =
+    (url.searchParams.get("id") || "").trim();
+
+  const requiresProtection = await requiresDrakoProtection(prisma, supplierId, externalId);
+
+  if (requiresProtection) {
+    const validation =
+      await validateDrakoAccess(
+        prisma,
+        projectId,
+        supplierId
+      );
+
+    if (!validation.valid) {
+      return NextResponse.json(
+        {
+          error:
+            "This survey is currently unavailable.",
+        },
+        {
+          status: validation.status,
+        }
+      );
+    }
+  }
 
   // GET THE RECID VALUE FROM THE URL QUERY PARAMETERS
   const recid = (url.searchParams.get("recid") || "").trim();

@@ -1347,3 +1347,110 @@ describe("Thanks/Index - supplier final redirect", () => {
     });
 
 });
+
+// VERIFY DRAKO OUTCOMES STAY ON THE INTERNAL THANKS PAGE WITHOUT GENERATING EXTERNAL REDIRECTS.
+describe("Thanks/Index - DRAKO internal outcome handling", () => {
+const pid = "12345678901234567890";
+const projectId = "project-1";
+const supplierId = "supplier-1";
+const respondentId = "respondent-1";
+const externalId = "RESP001";
+
+beforeEach(() => {
+    vi.clearAllMocks();
+
+    process.env.DRAKO_SUPPLIER_CODE = "DRAKO";
+
+    mockPrisma.surveyRedirect.findUnique.mockResolvedValue({
+        id: pid,
+        projectId,
+        supplierId,
+        respondentId,
+        externalId,
+        destination: null,
+        result: null,
+        recid: null,
+    });
+
+    mockPrisma.surveyRedirect.update.mockResolvedValue({});
+
+    mockPrisma.supplier.findUnique.mockResolvedValue({
+        id: supplierId,
+        code: "DRAKO",
+        name: "DRAKO",
+        completeUrl:
+            "https://supplier.example.com/complete?id=[identifier]",
+        terminateUrl:
+            "https://supplier.example.com/terminate?id=[identifier]",
+        overQuotaUrl:
+            "https://supplier.example.com/overquota?id=[identifier]",
+        qualityTermUrl:
+            "https://supplier.example.com/quality?id=[identifier]",
+        surveyCloseUrl:
+            "https://supplier.example.com/close?id=[identifier]",
+    });
+
+    mockPrisma.supplierEntry.findUnique.mockResolvedValue(null);
+    mockPrisma.supplierEntry.findMany.mockResolvedValue([]);
+
+    mockPrisma.supplierRedirectEvent.create.mockResolvedValue({
+        id: "event-1",
+    });
+});
+
+it("should keep DRAKO respondent on internal Thanks page", async () => {
+    const request = new Request(
+        `http://localhost/Thanks/Index?auth=10&pid=${pid}`
+    );
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(302);
+
+    const location = response.headers.get("location");
+    expect(location).not.toBeNull();
+
+    const thanksUrl = new URL(location!);
+
+    expect(thanksUrl.pathname).toBe("/Thanks");
+    expect(thanksUrl.searchParams.get("status")).toBe(
+        "COMPLETE"
+    );
+    expect(thanksUrl.searchParams.get("pid")).toBe(pid);
+});
+
+it("should not generate a next destination for DRAKO", async () => {
+    const request = new Request(
+        `http://localhost/Thanks/Index?auth=10&pid=${pid}`
+    );
+
+    const response = await GET(request);
+
+    const location = response.headers.get("location");
+    const thanksUrl = new URL(location!);
+
+    expect(
+        thanksUrl.searchParams.has("next")
+    ).toBe(false);
+});
+
+it("should still record internal outcome events for DRAKO", async () => {
+    const request = new Request(
+        `http://localhost/Thanks/Index?auth=10&pid=${pid}`
+    );
+
+    await GET(request);
+
+    expect(
+        mockPrisma.supplierRedirectEvent.create
+    ).toHaveBeenCalledWith({
+        data: {
+            projectId,
+            supplierId,
+            respondentId,
+            pid,
+            outcome: "COMPLETE",
+        },
+    });
+});
+});

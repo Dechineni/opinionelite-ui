@@ -10,6 +10,7 @@ import {
   generateTolunaInvite,
   type TolunaClientConfig,
 } from "@/lib/providers/toluna";
+import { validateDrakoAccess, requiresDrakoProtection } from "@/lib/drako/validation";
 
 function isValidDateOnly(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -55,6 +56,29 @@ export async function GET(
     const url = new URL(req.url);
     const supplierId = (url.searchParams.get("supplierId") || "").trim();
     const externalId = (url.searchParams.get("id") || "").trim();
+    const requiresProtection = await requiresDrakoProtection(prisma, supplierId, externalId);
+
+    if (requiresProtection) {
+      const validation =
+        await validateDrakoAccess(
+          prisma,
+          projectId,
+          supplierId
+        );
+
+      if (!validation.valid) {
+        return NextResponse.json(
+          {
+            error:
+              "This survey is currently unavailable.",
+          },
+          {
+            status: validation.status,
+          }
+        );
+      }
+    }
+
     const recid = (url.searchParams.get("recid") || "").trim();
     const birthDateFromQuery = (url.searchParams.get("birthDate") || "").trim();
     const genderFromQuery = (url.searchParams.get("gender") || "").trim();
