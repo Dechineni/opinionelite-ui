@@ -4,7 +4,7 @@ export const preferredRegion = "auto";
 
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
-import { validateDrakoAccess, requiresDrakoValidation } from "@/lib/drako/validation";
+import { validateDrakoAccess, requiresDrakoProtection } from "@/lib/drako/validation";
 
 function hasUsableGender(value: string | null | undefined): boolean {
   const v = (value || "").trim().toLowerCase();
@@ -36,9 +36,9 @@ export async function GET(
   const externalId =
     (url.searchParams.get("id") || "").trim();
 
-  const requiresValidation = await requiresDrakoValidation(prisma, supplierId);
+  const requiresProtection = await requiresDrakoProtection(prisma, supplierId, externalId);
 
-  if (requiresValidation) {
+  if (requiresProtection) {
     const validation =
       await validateDrakoAccess(
         prisma,

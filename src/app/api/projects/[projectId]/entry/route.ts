@@ -4,7 +4,7 @@ export const preferredRegion = "auto";
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { isUsableExternalId } from "@/lib/identifiers";
-import { validateDrakoAccess, requiresDrakoValidation } from "@/lib/drako/validation";
+import { validateDrakoAccess, requiresDrakoProtection } from "@/lib/drako/validation";
 
 export async function POST(
   req: Request,
@@ -55,9 +55,9 @@ export async function POST(
       );
     }
     
-    const requiresValidation = await requiresDrakoValidation(prisma, supplierCode);
+    const requiresProtection = await requiresDrakoProtection(prisma, supplierCode, externalId);
 
-    if (requiresValidation) {
+    if (requiresProtection) {
       const validation = await validateDrakoAccess(
         prisma,
         projectId,

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "@/app/api/projects/[projectId]/survey-live/route";
-import { validateDrakoAccess, requiresDrakoValidation } from "@/lib/drako/validation";
+import { validateDrakoAccess, requiresDrakoProtection } from "@/lib/drako/validation";
 
 const mockPrisma = {
   project: {
@@ -31,20 +31,20 @@ vi.mock("@/lib/prisma", () => ({
 
 vi.mock("@/lib/drako/validation", () => ({
   validateDrakoAccess: vi.fn(),
-  requiresDrakoValidation: vi.fn(),
+  requiresDrakoProtection: vi.fn(),
 }));
 
 const mockedValidateDrakoAccess =
   vi.mocked(validateDrakoAccess);
 
-const mockedRequiresDrakoValidation =
-  vi.mocked(requiresDrakoValidation);
+const mockedRequiresDrakoProtection =
+  vi.mocked(requiresDrakoProtection);
 
 describe("survey live route", () => {
   beforeEach(() => {
     vi.resetAllMocks();
 
-    mockedRequiresDrakoValidation.mockResolvedValue(false);
+    mockedRequiresDrakoProtection.mockResolvedValue(false);
   });
 
   it("returns 409 when finalized SurveyRedirect already exists", async () => {
@@ -276,7 +276,7 @@ describe("survey live route", () => {
   it(
     "blocks invalid drako survey-live access",
     async () => {
-      mockedRequiresDrakoValidation.mockResolvedValue(true);
+      mockedRequiresDrakoProtection.mockResolvedValue(true);
 
       mockedValidateDrakoAccess.mockResolvedValue({
         valid: false,
@@ -305,5 +305,39 @@ describe("survey live route", () => {
       );
     }
   );
-  
+
+  it(
+    "blocks reserved drako identifiers when supplierId is missing",
+    async () => {
+      mockedRequiresDrakoProtection.mockResolvedValue(
+        true
+      );
+
+      mockedValidateDrakoAccess.mockResolvedValue({
+        valid: false,
+        status: 403,
+        reason: "Supplier not found",
+      } as any);
+
+      const req = new Request(
+        "https://test.com/api/projects/PRJ1/survey-live?id=DRK-test"
+      );
+
+      const res = await GET(req, {
+        params: Promise.resolve({
+          projectId: "PRJ1",
+        }),
+      });
+
+      expect(res.status).toBe(403);
+
+      expect(
+        mockedValidateDrakoAccess
+      ).toHaveBeenCalledWith(
+        mockPrisma,
+        "PRJ1",
+        ""
+      );
+    }
+  ); 
 });

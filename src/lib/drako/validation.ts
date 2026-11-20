@@ -193,3 +193,27 @@ export async function requiresDrakoValidation(
         supplier.code
     );
 }
+
+export function isReservedDrakoId(
+    externalId: string | null | undefined
+): boolean {
+    return String(externalId || "")
+        .trim()
+        .toUpperCase()
+        .startsWith("DRK-");
+}
+
+export async function requiresDrakoProtection(
+    prisma: any,
+    supplierCode: string | null | undefined,
+    externalId: string | null | undefined
+): Promise<boolean> {
+    if (isReservedDrakoId(externalId)) {
+        return true;
+    }
+
+    return requiresDrakoValidation(
+        prisma,
+        supplierCode
+    );
+}

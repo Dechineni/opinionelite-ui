@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { GET } from "@/app/api/projects/[projectId]/launch/route";
-import { validateDrakoAccess, requiresDrakoValidation } from "@/lib/drako/validation";
+import { validateDrakoAccess, requiresDrakoProtection } from "@/lib/drako/validation";
 
 const mockPrisma = {
     project: {
@@ -17,20 +17,20 @@ vi.mock("@/lib/prisma", () => ({
 
 vi.mock("@/lib/drako/validation", () => ({
     validateDrakoAccess: vi.fn(),
-    requiresDrakoValidation: vi.fn(),
+    requiresDrakoProtection: vi.fn(),
 }));
 
 const mockedValidateDrakoAccess =
     vi.mocked(validateDrakoAccess);
 
-const mockedRequiresDrakoValidation =
-    vi.mocked(requiresDrakoValidation);
+const mockedRequiresDrakoProtection =
+    vi.mocked(requiresDrakoProtection);
 
 describe("launch route", () => {
     beforeEach(() => {
         vi.clearAllMocks();
 
-        mockedRequiresDrakoValidation.mockResolvedValue(false);
+        mockedRequiresDrakoProtection.mockResolvedValue(false);
     });
 
     it("preserves supplierId id and recid during prescreen redirect", async () => {
@@ -94,7 +94,7 @@ describe("launch route", () => {
     });
 
     it("blocks invalid drako traffic", async () => {
-        mockedRequiresDrakoValidation.mockResolvedValue(
+        mockedRequiresDrakoProtection.mockResolvedValue(
             true
         );
 
@@ -124,4 +124,39 @@ describe("launch route", () => {
             "S1010"
         );
     });
+
+    it(
+        "blocks reserved drako identifiers when supplierId is missing",
+        async () => {
+            mockedRequiresDrakoProtection.mockResolvedValue(
+                true
+            );
+
+            mockedValidateDrakoAccess.mockResolvedValue({
+                valid: false,
+                status: 403,
+                reason: "Supplier not found",
+            } as any);
+
+            const req = new Request(
+                "https://test.com/api/projects/PRJ1/launch?id=DRK-test"
+            );
+
+            const res = await GET(req, {
+                params: Promise.resolve({
+                    projectId: "PRJ1",
+                }),
+            });
+
+            expect(res.status).toBe(403);
+
+            expect(
+                mockedValidateDrakoAccess
+            ).toHaveBeenCalledWith(
+                mockPrisma,
+                "PRJ1",
+                ""
+            );
+        }
+    );
 });

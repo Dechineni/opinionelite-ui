@@ -3,7 +3,9 @@ import { isDrakoSupplier } from "@/lib/drako/server";
 
 import {
   requiresDrakoValidation,
+  requiresDrakoProtection,
   validateDrakoAccess,
+  isReservedDrakoId,
 } from "./validation";
 
 
@@ -439,4 +441,90 @@ describe("requiresDrakoValidation", () => {
 
     expect(result).toBe(true);
   });
+});
+
+describe("isReservedDrakoId", () => {
+  it("returns true for drako generated identifiers", () => {
+    expect(
+      isReservedDrakoId("DRK-test")
+    ).toBe(true);
+  });
+
+  it("returns false for non drako identifiers", () => {
+    expect(
+      isReservedDrakoId("ABC123")
+    ).toBe(false);
+  });
+});
+
+describe("requiresDrakoProtection", () => {
+  let prisma: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    prisma = {
+      supplier: {
+        findUnique: vi.fn(),
+      },
+    };
+  });
+
+  it(
+    "returns true for reserved drako identifiers when supplier is missing",
+    async () => {
+      const result =
+        await requiresDrakoProtection(
+          prisma,
+          "",
+          "DRK-test"
+        );
+
+      expect(result).toBe(true);
+    }
+  );
+
+  it(
+    "returns false for normal supplier and identifier",
+    async () => {
+      prisma.supplier.findUnique.mockResolvedValue({
+        code: "S1007",
+      });
+
+      mockedIsDrakoSupplier.mockReturnValue(
+        false
+      );
+
+      const result =
+        await requiresDrakoProtection(
+          prisma,
+          "S1007",
+          "ABC123"
+        );
+
+      expect(result).toBe(false);
+    }
+  );
+
+  it(
+    "returns true for drako supplier",
+    async () => {
+      prisma.supplier.findUnique.mockResolvedValue({
+        code: "S1010",
+      });
+
+      mockedIsDrakoSupplier.mockReturnValue(
+        true
+      );
+
+      const result =
+        await requiresDrakoProtection(
+          prisma,
+          "S1010",
+          "ABC123"
+        );
+
+      expect(result).toBe(true);
+    }
+  );
 });

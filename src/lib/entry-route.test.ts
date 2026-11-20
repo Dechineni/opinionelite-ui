@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/projects/[projectId]/entry/route";
-import { requiresDrakoValidation, validateDrakoAccess } from "@/lib/drako/validation";
+import { requiresDrakoProtection, validateDrakoAccess } from "@/lib/drako/validation";
 
 const mockPrisma = {
   project: {
@@ -18,20 +18,20 @@ vi.mock("@/lib/prisma", () => ({
 
 vi.mock("@/lib/drako/validation", () => ({
   validateDrakoAccess: vi.fn(),
-  requiresDrakoValidation: vi.fn(),
+  requiresDrakoProtection: vi.fn(),
 }));
 
 const mockedValidateDrakoAccess =
   vi.mocked(validateDrakoAccess);
 
-const mockedRequiresDrakoValidation =
-  vi.mocked(requiresDrakoValidation);
+const mockedRequiresDrakoProtection =
+  vi.mocked(requiresDrakoProtection);
 
 describe("entry route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockedRequiresDrakoValidation.mockResolvedValue(false);
+    mockedRequiresDrakoProtection.mockResolvedValue(false);
 
   });
 
@@ -263,7 +263,7 @@ describe("entry route", () => {
   it(
     "blocks invalid drako entry access",
     async () => {
-      mockedRequiresDrakoValidation.mockResolvedValue(
+      mockedRequiresDrakoProtection.mockResolvedValue(
         true
       );
 
@@ -309,7 +309,4 @@ describe("entry route", () => {
       ).not.toHaveBeenCalled();
     }
   );
-
-
-
 });
