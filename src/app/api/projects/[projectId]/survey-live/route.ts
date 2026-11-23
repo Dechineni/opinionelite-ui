@@ -7,6 +7,7 @@ import { getPrisma } from "@/lib/prisma";
 import { resolveEffectiveRecid } from "@/lib/recontact";
 import { replaceTokens } from "@/lib/survey-live-url";
 import { isUsableExternalId } from "@/lib/identifiers";
+import { validateDrakoAccess, requiresDrakoProtection } from "@/lib/drako/validation";
 
 const isUniqueViolation = (e: any) => {
   const msg = String(e?.message || "");
@@ -115,6 +116,29 @@ export async function GET(
   const url = new URL(req.url);
   const supplierId = (url.searchParams.get("supplierId") || "").trim();
   const externalId = (url.searchParams.get("id") || "").trim();
+  const requiresProtection = await requiresDrakoProtection(prisma, supplierId, externalId);
+
+  if (requiresProtection) {
+    const validation =
+      await validateDrakoAccess(
+        prisma,
+        projectId,
+        supplierId
+      );
+
+    if (!validation.valid) {
+      return NextResponse.json(
+        {
+          error:
+            "This survey is currently unavailable.",
+        },
+        {
+          status: validation.status,
+        }
+      );
+    }
+  }
+
   const recid = (url.searchParams.get("recid") || "").trim();
   const usableExternalId = isUsableExternalId(externalId);
 

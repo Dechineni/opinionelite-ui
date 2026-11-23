@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/projects/[projectId]/entry/route";
+import { requiresDrakoProtection, validateDrakoAccess } from "@/lib/drako/validation";
 
 const mockPrisma = {
   project: {
@@ -15,9 +16,23 @@ vi.mock("@/lib/prisma", () => ({
   getPrisma: () => mockPrisma,
 }));
 
+vi.mock("@/lib/drako/validation", () => ({
+  validateDrakoAccess: vi.fn(),
+  requiresDrakoProtection: vi.fn(),
+}));
+
+const mockedValidateDrakoAccess =
+  vi.mocked(validateDrakoAccess);
+
+const mockedRequiresDrakoProtection =
+  vi.mocked(requiresDrakoProtection);
+
 describe("entry route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+
+    mockedRequiresDrakoProtection.mockResolvedValue(false);
+
   });
 
   it("creates supplier entry for valid supplier request", async () => {
@@ -245,5 +260,53 @@ describe("entry route", () => {
   }
 );
 
+  it(
+    "blocks invalid drako entry access",
+    async () => {
+      mockedRequiresDrakoProtection.mockResolvedValue(
+        true
+      );
 
+      mockedValidateDrakoAccess.mockResolvedValue({
+        valid: false,
+        status: 403,
+        reason: "Traffic disabled",
+      } as any);
+
+      const req = new Request(
+        "https://test.com/api/projects/PRJ1/entry",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            supplierId: "S1010",
+            externalId: "ABC123",
+          }),
+        }
+      );
+
+      const res = await POST(req, {
+        params: Promise.resolve({
+          projectId: "PRJ1",
+        }),
+      });
+
+      expect(res.status).toBe(403);
+
+      expect(
+        mockedValidateDrakoAccess
+      ).toHaveBeenCalledWith(
+        mockPrisma,
+        "PRJ1",
+        "S1010"
+      );
+
+
+      expect(
+        mockPrisma.supplierEntry.upsert
+      ).not.toHaveBeenCalled();
+    }
+  );
 });

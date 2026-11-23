@@ -6,6 +6,8 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import { z } from "zod";
 import { buildSupplierUrl } from "@/lib/supplier-url";
+import { isDrakoSupplier } from "@/lib/drako/server";
+import { getDrakoBaseUrl } from "@/lib/drako/url-config";
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -69,16 +71,15 @@ function badJSON(msg: string, code = 400) {
 async function resolveProjectId(projectKey: string) {
   const prisma = getPrisma();
 
-  const project = await prisma.project.findFirst({
+  return await prisma.project.findFirst({
     where: {
       OR: [{ id: projectKey }, { code: projectKey }],
     },
     select: {
       id: true,
+      code: true,
     },
   });
-
-  return project?.id ?? null;
 }
 
 /**
@@ -127,9 +128,9 @@ export async function GET(
 ) {
   const prisma = getPrisma();
   const { projectId: projectKey } = await ctx.params;
-
-  const projId = await resolveProjectId(projectKey);
-
+  const project = await resolveProjectId(projectKey);
+  const projId = project?.id ?? null;
+  const projectCode = project?.code ?? null;
   if (!projId) {
     return badJSON("Project not found", 404);
   }
@@ -442,9 +443,29 @@ export async function GET(
     );
   }
 
+  let appBaseUrl: string | null = null;
+
+  try {
+    appBaseUrl = getDrakoBaseUrl();
+  } catch (error) {
+    console.warn(
+      "DRAKO URL configuration is missing or invalid:",
+      error
+    );
+  }
+
   const items = maps.map((mapping) => {
     const supplierCode =
       mapping.supplier?.code ?? "";
+
+    const drakoCampaignUrl =
+    isDrakoSupplier(supplierCode) && appBaseUrl
+      ? `${appBaseUrl}/campaign/drako?projectId=${encodeURIComponent(
+          projectCode??""
+        )}&supplierId=${encodeURIComponent(
+          supplierCode
+        )}`
+      : null;
 
     const entryCounts =
       entryBySupplier[supplierCode] ??
@@ -466,6 +487,8 @@ export async function GET(
       supplierCode,
       supplierName:
         mapping.supplier?.name ?? "",
+      isDrako: isDrakoSupplier(supplierCode),
+      drakoCampaignUrl,
       supplierCountry:
         mapping.supplier?.countryCode ?? "",
       contactNumber:
@@ -571,16 +594,16 @@ export async function POST(
     await ctx.params;
 
   try {
-    const projId =
+    const projectInfo =
       await resolveProjectId(projectKey);
 
-    if (!projId) {
+    if (!projectInfo) {
       return badJSON(
         "Project not found",
         404
       );
     }
-
+    const resolvedProjectId = projectInfo.id;
     let body: unknown;
 
     try {
@@ -635,7 +658,7 @@ export async function POST(
     const project =
       await prisma.project.findUnique({
         where: {
-          id: projId,
+          id: resolvedProjectId,
         },
         select: {
           code: true,
@@ -654,20 +677,14 @@ export async function POST(
       );
     }
 
-    const uiBase =
-      (
-        process.env.APP_PUBLIC_BASE_URL ||
-        ""
-      ).trim() ||
-      (
-        process.env.NEXT_PUBLIC_UI_ORIGIN ||
-        ""
-      ).trim() ||
-      "https://opinion-elite.com";
+    const supplierBaseUrl =
+    (process.env.APP_PUBLIC_BASE_URL || "").trim() ||
+    (process.env.NEXT_PUBLIC_UI_ORIGIN || "").trim() ||
+    "https://opinion-elite.com";
 
-    const supplierUrl =
+    const supplierUrl = 
       buildSupplierUrl({
-        uiBase,
+        uiBase : supplierBaseUrl,
         projectCode,
         supplierCode: String(
           supplier.code ?? ""
@@ -675,8 +692,19 @@ export async function POST(
         projectType: project?.projectType ?? "",
       });
 
+    let uiBase: string | null = null;
+
+    try {
+      uiBase = getDrakoBaseUrl();
+    } catch (error) {
+      console.warn(
+        "DRAKO URL configuration is missing or invalid:",
+        error
+      );
+    }
+
     const createData: any = {
-      projectId: projId,
+      projectId: resolvedProjectId,
       supplierId: data.supplierId,
       quota: data.supplierQuota,
       clickQuota: data.clickQuota,
@@ -726,6 +754,7 @@ export async function POST(
         data: createData,
       });
 
+
     return NextResponse.json(
       {
         item: {
@@ -738,7 +767,18 @@ export async function POST(
             supplier.code ?? "",
           supplierName:
             supplier.name ?? "",
-
+          isDrako: isDrakoSupplier(
+            supplier.code ?? ""
+          ),
+          drakoCampaignUrl: isDrakoSupplier(
+          supplier.code ?? ""
+        ) && uiBase
+          ? `${uiBase}/campaign/drako?projectId=${encodeURIComponent(
+              projectCode
+            )}&supplierId=${encodeURIComponent(
+              supplier.code ?? ""
+            )}`
+          : null,
           supplierQuota:
             created.quota,
           clickQuota:

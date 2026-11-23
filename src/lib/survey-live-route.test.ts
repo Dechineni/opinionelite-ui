@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "@/app/api/projects/[projectId]/survey-live/route";
+import { validateDrakoAccess, requiresDrakoProtection } from "@/lib/drako/validation";
 
 const mockPrisma = {
   project: {
@@ -28,9 +29,22 @@ vi.mock("@/lib/prisma", () => ({
   getPrisma: () => mockPrisma,
 }));
 
+vi.mock("@/lib/drako/validation", () => ({
+  validateDrakoAccess: vi.fn(),
+  requiresDrakoProtection: vi.fn(),
+}));
+
+const mockedValidateDrakoAccess =
+  vi.mocked(validateDrakoAccess);
+
+const mockedRequiresDrakoProtection =
+  vi.mocked(requiresDrakoProtection);
+
 describe("survey live route", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+
+    mockedRequiresDrakoProtection.mockResolvedValue(false);
   });
 
   it("returns 409 when finalized SurveyRedirect already exists", async () => {
@@ -259,4 +273,71 @@ describe("survey live route", () => {
     ).not.toHaveBeenCalled();
   });
 
+  it(
+    "blocks invalid drako survey-live access",
+    async () => {
+      mockedRequiresDrakoProtection.mockResolvedValue(true);
+
+      mockedValidateDrakoAccess.mockResolvedValue({
+        valid: false,
+        status: 403,
+        reason: "Traffic disabled",
+      } as any);
+
+      const req = new Request(
+        "https://test.com/api/projects/PRJ1/survey-live?supplierId=S1010&id=ABC123"
+      );
+
+      const res = await GET(req, {
+        params: Promise.resolve({
+          projectId: "PRJ1",
+        }),
+      });
+
+      expect(res.status).toBe(403);
+
+      expect(
+        mockedValidateDrakoAccess
+      ).toHaveBeenCalledWith(
+        mockPrisma,
+        "PRJ1",
+        "S1010"
+      );
+    }
+  );
+
+  it(
+    "blocks reserved drako identifiers when supplierId is missing",
+    async () => {
+      mockedRequiresDrakoProtection.mockResolvedValue(
+        true
+      );
+
+      mockedValidateDrakoAccess.mockResolvedValue({
+        valid: false,
+        status: 403,
+        reason: "Supplier not found",
+      } as any);
+
+      const req = new Request(
+        "https://test.com/api/projects/PRJ1/survey-live?id=DRK-a1b2c3d4e5f678901234567890abcdef"
+      );
+
+      const res = await GET(req, {
+        params: Promise.resolve({
+          projectId: "PRJ1",
+        }),
+      });
+
+      expect(res.status).toBe(403);
+
+      expect(
+        mockedValidateDrakoAccess
+      ).toHaveBeenCalledWith(
+        mockPrisma,
+        "PRJ1",
+        ""
+      );
+    }
+  ); 
 });
